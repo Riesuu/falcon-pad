@@ -33,22 +33,32 @@ from typing import List, Optional, Dict
 import logging
 
 APP_NAME    = "Falcon-Pad"
-APP_VERSION = "1.0.0"
+APP_VERSION = "0.2"
 APP_AUTHOR  = "Riesu"
 APP_CONTACT = "contact@falcon-charts.com"
 APP_WEBSITE = "https://www.falcon-charts.com"
 
 # ── Dossiers de base ─────────────────────────────────────────
-# Structure :  ./logs/      → fichiers de log rotatifs
-#              ./briefing/  → PDF, images, Word importés
-#              ./config/    → configuration persistante
-_BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+# Structure cible : falcon-pad/ logs/ briefing/ config/ assets/
+def _resolve_base_dir() -> str:
+    if getattr(sys, "frozen", False):
+        candidate = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        candidate = os.path.dirname(os.path.abspath(__file__))
+    if os.path.basename(candidate).lower() == "falcon-pad":
+        return candidate
+    fp_dir = os.path.join(candidate, "falcon-pad")
+    os.makedirs(fp_dir, exist_ok=True)
+    return fp_dir
+
+_BASE_DIR    = _resolve_base_dir()
+ASSETS_DIR   = os.path.join(_BASE_DIR, "assets")
 LOG_DIR      = os.path.join(_BASE_DIR, "logs")
 BRIEFING_DIR = os.path.join(_BASE_DIR, "briefing")
 _CONFIG_DIR  = os.path.join(_BASE_DIR, "config")
 CONFIG_FILE  = os.path.join(_CONFIG_DIR, "falcon_pad_config.json")
 
-for _d in (LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
+for _d in (ASSETS_DIR, LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
     os.makedirs(_d, exist_ok=True)
 
 LOG_FILE = os.path.join(LOG_DIR, f"falcon_pad_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
@@ -435,7 +445,7 @@ def _trtt_client_loop():
             _acmi_connected = False
             with _acmi_lock:
                 _acmi_contacts.clear()
-            logger.warning(f"TRTT déconnecté: {ex} — retry dans 5s")
+            logger.debug(f"TRTT déconnecté: {ex} — retry dans 5s")
             try:
                 if sock is not None:
                     sock.close()
@@ -557,7 +567,7 @@ class BMSSharedMemory:
                 self.shm_ptrs = {}
                 self.ptr1 = self.ptr2 = None
                 self.connected = False
-                logger.warning("BMS non detecte — retry toutes les 5s")
+                logger.debug("BMS non détecté — retry dans 5s")
         except Exception as e:
             self.shm_ptrs = {}
             self.ptr1 = self.ptr2 = None
@@ -710,14 +720,19 @@ DRAWING_ENTITY_SIZE: int = 40   # bytes per OSBEntity
 DRAWING_ENTITY_MAX:  int = 150  # max entities in DrawingData array
 
 # ── Broadcast loop — pousse les données BMS à tous les WS ────────
+_bms_last_reconnect: float = 0.0
+_BMS_RECONNECT_INTERVAL = 5.0
+
 async def broadcast_loop() -> None:
-    """Tâche asyncio : lit BMS et diffuse position + radar (DrawingData uniquement) toutes les N ms.
-    PAS de contacts ACMI/TRTT — uniquement ce que le F-16 voit réellement (no god mode).
-    """
+    """Tâche asyncio : lit BMS et diffuse position + radar toutes les N ms."""
+    global _bms_last_reconnect
     while True:
         try:
             if not bms.connected:
-                bms.try_reconnect()
+                _now = _time.time()
+                if _now - _bms_last_reconnect >= _BMS_RECONNECT_INTERVAL:
+                    _bms_last_reconnect = _now
+                    bms.try_reconnect()
             pos = bms.get_position() if bms.connected else None
 
             if pos and ws_clients:
@@ -741,7 +756,15 @@ async def broadcast_loop() -> None:
                     try:    await ws.send_text(msg_r)
                     except: pass
 
-            # 3. Statut connexion
+                # 3. Contacts ACMI/TRTT coalition
+                acmi_c = get_acmi_contacts(own_lat=own_lat, own_lon=own_lon)
+                if acmi_c:
+                    msg_acmi = json.dumps({"type": "acmi", "data": acmi_c})
+                    for ws in list(ws_clients):
+                        try:    await ws.send_text(msg_acmi)
+                        except: pass
+
+            # 4. Statut connexion
             if ws_clients:
                 status_msg = json.dumps({"type": "status", "data": {"connected": bms.connected}})
                 for ws in list(ws_clients):
@@ -1096,9 +1119,8 @@ HTML = r"""<!DOCTYPE html>
 </style>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060a12}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;background:#060a12}
 #map{position:absolute;inset:0;bottom:72px}
 
 /* ═══ TOOLBAR ═════════════════════════════════════════════════════ */
@@ -1122,7 +1144,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   content:'FALCON-PAD';
   position:absolute;top:-9px;left:12px;
   background:rgba(4,8,16,1);padding:0 6px;
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   letter-spacing:2px;color:rgba(74,222,128,.75);text-transform:uppercase;
 }
 .tool-btn{
@@ -1167,11 +1189,11 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sys-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
 
 .sys-bms-tag{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(74,222,128,.45);letter-spacing:2px;text-transform:uppercase;
 }
 #statusText{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   letter-spacing:1.5px;text-transform:uppercase;color:rgba(148,163,184,.45);
   white-space:nowrap;
 }
@@ -1184,23 +1206,23 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sys-sig-line{width:18px;height:1px;background:linear-gradient(90deg,transparent,rgba(74,222,128,.25))}
 .sys-sig-line.r{background:linear-gradient(90deg,rgba(74,222,128,.25),transparent)}
 .sys-sig-text{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   color:rgba(255,255,255,.28);letter-spacing:2.5px;text-transform:uppercase;
 }
 .sys-sig-author{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(74,222,128,.55);letter-spacing:1px;
 }
 .sys-sig-dot{width:3px;height:3px;border-radius:50%;background:rgba(74,222,128,.2);flex-shrink:0}
 
 /* Zulu */
 .sys-zulu{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(74,222,128,.4);letter-spacing:1.5px;
 }
 /* Server IP */
 .sys-ip{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(96,165,250,.35);letter-spacing:1px;
   padding:1px 6px;border:1px solid rgba(96,165,250,.08);border-radius:1px;
   cursor:default;transition:color .25s;
@@ -1208,7 +1230,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sys-ip:hover{color:rgba(96,165,250,.75);border-color:rgba(96,165,250,.25)}
 /* Falcon Charts link */
 .sys-fc{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   color:rgba(74,222,128,.45);letter-spacing:2px;text-transform:uppercase;
   text-decoration:none;transition:color .25s;
   padding:1px 6px;border:1px solid rgba(74,222,128,.06);border-radius:1px;
@@ -1244,7 +1266,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(74,222,128,.08);
 }
 .sp-title{
-  font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:11px;font-weight:700;
   color:#4ade80;letter-spacing:2px;text-transform:uppercase;
 }
 .sp-close{
@@ -1256,22 +1278,22 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sp-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 .sp-row{display:flex;flex-direction:column;gap:4px}
 .sp-label{
-  font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
   color:#4a6e80;letter-spacing:1.5px;text-transform:uppercase;
 }
 .sp-input{
   background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
   border-radius:2px;padding:7px 10px;color:#e2e8f0;
-  font-family:'Share Tech Mono',monospace;font-size:13px;outline:none;width:100%;
+  font-family:'Consolas','Courier New',monospace;font-size:13px;outline:none;width:100%;
   transition:border-color .2s;
 }
 .sp-input:focus{border-color:rgba(74,222,128,.4)}
 .sp-hint{
-  font-family:'Rajdhani',sans-serif;font-size:10px;
+  font-family:system-ui,sans-serif;font-size:10px;
   color:rgba(148,163,184,.3);line-height:1.4;
 }
 .sp-warn{
-  font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
   color:#fbbf24;letter-spacing:.5px;display:none;
 }
 .sp-warn.show{display:block}
@@ -1280,27 +1302,27 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sp-save{
   flex:1;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);
   border-radius:2px;padding:7px;color:#4ade80;
-  font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:12px;font-weight:700;
   letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:all .2s;
 }
 .sp-save:hover{background:rgba(74,222,128,.2);border-color:rgba(74,222,128,.6)}
 .sp-cancel{
   background:transparent;border:1px solid rgba(255,255,255,.08);
   border-radius:2px;padding:7px 12px;color:#546e82;
-  font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:12px;font-weight:700;
   cursor:pointer;transition:all .2s;
 }
 .sp-cancel:hover{border-color:rgba(255,255,255,.2);color:#94a3b8}
 .sp-theme-row{display:flex;gap:6px}
 .sp-theme-btn{
   flex:1;padding:6px;border-radius:2px;cursor:pointer;
-  font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:11px;font-weight:700;
   letter-spacing:1px;text-transform:uppercase;transition:all .2s;
   border:1px solid rgba(255,255,255,.08);background:transparent;color:#546e82;
 }
 .sp-theme-btn.sel{border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.08);color:#4ade80}
 .sp-status{
-  font-family:'Share Tech Mono',monospace;font-size:10px;
+  font-family:'Consolas','Courier New',monospace;font-size:10px;
   color:#4ade80;letter-spacing:1px;display:none;padding:6px 14px;
   border-top:1px solid rgba(74,222,128,.08);text-align:center;
 }
@@ -1320,9 +1342,9 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   box-shadow:0 4px 20px rgba(0,0,0,.7);
   backdrop-filter:blur(10px);
 }
-.ruler-hdg{font-size:15px;font-weight:700;color:#4ade80;letter-spacing:2px;line-height:1.2;font-family:'Rajdhani',sans-serif}
-.ruler-nm{font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.3;margin-top:2px;font-family:'Share Tech Mono',monospace;letter-spacing:.5px}
-.ruler-km{font-size:9px;color:#475569;line-height:1.2;margin-top:1px;font-family:'Share Tech Mono',monospace}
+.ruler-hdg{font-size:15px;font-weight:700;color:#4ade80;letter-spacing:2px;line-height:1.2;font-family:system-ui,sans-serif}
+.ruler-nm{font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.3;margin-top:2px;font-family:'Consolas','Courier New',monospace;letter-spacing:.5px}
+.ruler-km{font-size:9px;color:#475569;line-height:1.2;margin-top:1px;font-family:'Consolas','Courier New',monospace}
 
 /* ═══ ARROW LABEL ══════════════════════════════════════════════════ */
 .arrow-label{
@@ -1330,7 +1352,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   background:rgba(2,6,14,.88);
   border:1px solid rgba(255,255,255,.12);
   border-radius:2px;padding:2px 8px;
-  font-family:'Share Tech Mono',monospace;font-size:10px;
+  font-family:'Consolas','Courier New',monospace;font-size:10px;
   color:#94a3b8;pointer-events:none;white-space:nowrap;
   box-shadow:0 2px 10px rgba(0,0,0,.5);
 }
@@ -1346,7 +1368,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   box-shadow:0 16px 48px rgba(0,0,0,.65)
 }
 #colorPanel.open{display:block}
-#colorPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:'Rajdhani',sans-serif}
+#colorPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:system-ui,sans-serif}
 .c-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .c-swatch{width:30px;height:30px;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:all .15s}
 .c-swatch:hover{transform:scale(1.18);border-color:rgba(255,255,255,.4)}
@@ -1363,11 +1385,11 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   box-shadow:0 16px 48px rgba(0,0,0,.65)
 }
 #layerPanel.open{display:block}
-#layerPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:'Rajdhani',sans-serif}
+#layerPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:system-ui,sans-serif}
 .layer-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer}
 .layer-row:last-child{margin-bottom:0}
 .layer-row input{accent-color:#4ade80;width:14px;height:14px;cursor:pointer}
-.layer-row label{color:#cbd5e1;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:600;cursor:pointer;letter-spacing:.5px}
+.layer-row label{color:#cbd5e1;font-size:13px;font-family:system-ui,sans-serif;font-weight:600;cursor:pointer;letter-spacing:.5px}
 
 /* ═══ NOTES / ANNOTATIONS ══════════════════════════════════════════ */
 .note-wrapper{
@@ -1389,7 +1411,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .note-mini-picker .swatch{position:absolute;inset:0;border-radius:2px;pointer-events:none}
 .note-close{width:18px;height:18px;border-radius:2px;background:rgba(239,68,68,.12);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#f87171;font-size:13px;line-height:1;transition:background .15s;flex-shrink:0}
 .note-close:hover{background:rgba(239,68,68,.3)}
-.note-body{flex:1;resize:none;border:none;outline:none;padding:8px 10px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:500;line-height:1.5;background:transparent}
+.note-body{flex:1;resize:none;border:none;outline:none;padding:8px 10px;font-size:13px;font-family:system-ui,sans-serif;font-weight:500;line-height:1.5;background:transparent}
 
 /* ═══ DATALINK CONTACTS ════════════════════════════════════════════ */
 /* Label principal contact */
@@ -1398,13 +1420,13 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   pointer-events:none;white-space:nowrap;
 }
 .dl-callsign{
-  font-family:'Rajdhani',sans-serif;font-weight:700;
+  font-family:system-ui,sans-serif;font-weight:700;
   font-size:12px;letter-spacing:.8px;line-height:1.2;
   text-shadow:0 1px 4px rgba(0,0,0,.9),0 0 8px rgba(0,0,0,.7);
   padding:1px 5px;border-radius:2px;
 }
 .dl-data{
-  font-family:'Share Tech Mono',monospace;
+  font-family:'Consolas','Courier New',monospace;
   font-size:10px;letter-spacing:.3px;line-height:1.2;
   text-shadow:0 1px 4px rgba(0,0,0,.9);
   padding:0 5px;opacity:.85;
@@ -1418,13 +1440,13 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 
 /* ═══ AIRPORT LABELS ════════════════════════════════════════════════ */
 .ap-label{
-  font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;
+  font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
   color:rgba(96,165,250,.9);letter-spacing:.8px;
   text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);
   white-space:nowrap;pointer-events:none;
 }
 .ap-name{
-  font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;
+  font-family:system-ui,sans-serif;font-size:11px;font-weight:600;
   color:rgba(148,163,184,.85);letter-spacing:.3px;
   text-shadow:0 1px 4px #000;
   white-space:nowrap;pointer-events:none;
@@ -1433,7 +1455,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .ap-popup{
   background:rgba(4,8,18,.97);border:1px solid rgba(96,165,250,.2);
   border-top:2px solid rgba(96,165,250,.45);border-radius:3px;
-  padding:8px 28px 8px 11px;min-width:200px;font-family:'Share Tech Mono',monospace;
+  padding:8px 28px 8px 11px;min-width:200px;font-family:'Consolas','Courier New',monospace;
   box-shadow:0 4px 20px rgba(0,0,0,.7);white-space:nowrap;
 }
 /* Ligne 1 : ICAO · TACAN · TOUR */
@@ -1457,7 +1479,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .bms-toast{
   position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
   background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);
-  color:#10b981;font-family:'Rajdhani',sans-serif;font-size:11px;
+  color:#10b981;font-family:system-ui,sans-serif;font-size:11px;
   font-weight:700;letter-spacing:1.5px;padding:7px 16px;border-radius:2px;
   z-index:9999;pointer-events:none;text-transform:uppercase;
 }
@@ -1491,7 +1513,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   transform:translate(-50%,-50%);
   background:rgba(2,5,12,.98);
   padding:2px 0;
-  font-family:'Share Tech Mono',monospace;font-size:7px;
+  font-family:'Consolas','Courier New',monospace;font-size:7px;
   color:rgba(74,222,128,.5);letter-spacing:1px;
   white-space:nowrap;writing-mode:vertical-rl;text-orientation:mixed;
 }
@@ -1518,14 +1540,14 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 /* Label de catégorie au-dessus des onglets */
 .tab-group-label{
   position:absolute;top:3px;left:0;right:0;text-align:center;
-  font-family:'Share Tech Mono',monospace;font-size:7px;
+  font-family:'Consolas','Courier New',monospace;font-size:7px;
   color:rgba(74,222,128,.38);letter-spacing:2px;text-transform:uppercase;
   pointer-events:none;
 }
 .tab-icon{width:20px;height:20px;display:flex;align-items:center;justify-content:center}
 .tab-icon svg{stroke:#5a8c70;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:all .2s}
 .tab-label{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   letter-spacing:1.5px;text-transform:uppercase;color:#4d7a62;
   transition:color .2s;white-space:nowrap;
 }
@@ -1560,11 +1582,11 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 }
 .gps-field:last-child{border-right:none}
 .gps-lbl{
-  font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:11px;font-weight:700;
   color:#4a6e80;letter-spacing:1.5px;text-transform:uppercase;line-height:1;
 }
 .gps-val{
-  font-family:'Share Tech Mono',monospace;font-size:17px;
+  font-family:'Consolas','Courier New',monospace;font-size:17px;
   color:#60a5fa;font-weight:400;line-height:1.4;letter-spacing:.5px;
 }
 .gps-val.green{color:#4ade80}
@@ -1583,8 +1605,8 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 }
 .steer-chip:hover{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.06)}
 .steer-chip.active{border-color:rgba(74,222,128,.5);background:rgba(74,222,128,.08);border-left:2px solid #4ade80}
-.steer-num{font-family:'Share Tech Mono',monospace;font-size:11px;color:#475569;letter-spacing:1px}
-.steer-fl{font-family:'Share Tech Mono',monospace;font-size:13px;color:#94a3b8;font-weight:700}
+.steer-num{font-family:'Consolas','Courier New',monospace;font-size:11px;color:#475569;letter-spacing:1px}
+.steer-fl{font-family:'Consolas','Courier New',monospace;font-size:13px;color:#94a3b8;font-weight:700}
 
 /* CHARTS panel — fullscreen iframe */
 #panel-charts{
@@ -1599,12 +1621,12 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(99,102,241,.15);
 }
 #panel-charts .charts-header span{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#6366f1;letter-spacing:2px;text-transform:uppercase;
 }
 #panel-charts iframe{flex:1;border:none;background:#000}
 .ext-badge{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(99,102,241,.5);letter-spacing:1px;
   background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.15);
   border-radius:2px;padding:1px 6px;margin-left:auto;
@@ -1623,13 +1645,13 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(251,191,36,.12);
 }
 .kb-header-title{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#fbbf24;letter-spacing:2px;text-transform:uppercase;
 }
 .kb-tabs{display:flex;height:100%;margin-left:auto}
 .kb-tab{
   height:100%;padding:0 16px;display:flex;align-items:center;
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   letter-spacing:1.5px;color:#546e82;text-transform:uppercase;cursor:pointer;
   border-bottom:2px solid transparent;transition:all .15s;border-left:1px solid rgba(255,255,255,.04);
 }
@@ -1644,17 +1666,17 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 /* Brevity */
 .brev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:9px}
 .brev-item{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.07);border-radius:2px;padding:10px 14px}
-.brev-word{font-family:'Share Tech Mono',monospace;font-size:15px;color:#fbbf24;font-weight:700;letter-spacing:.5px}
-.brev-def{font-family:'Rajdhani',sans-serif;font-size:14px;color:#64748b;margin-top:3px;line-height:1.45}
+.brev-word{font-family:'Consolas','Courier New',monospace;font-size:15px;color:#fbbf24;font-weight:700;letter-spacing:.5px}
+.brev-def{font-family:system-ui,sans-serif;font-size:14px;color:#64748b;margin-top:3px;line-height:1.45}
 /* Freq table */
-.freq-table{width:100%;border-collapse:collapse;font-family:'Rajdhani',sans-serif}
+.freq-table{width:100%;border-collapse:collapse;font-family:system-ui,sans-serif}
 .freq-table th{font-size:12px;font-weight:700;color:#546e82;letter-spacing:1.5px;text-transform:uppercase;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
 .freq-table td{font-size:15px;color:#94a3b8;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
 .freq-table td:first-child{color:#e2e8f0;font-weight:700}
-.freq-table td.hi{color:#4ade80;font-family:'Share Tech Mono',monospace}
+.freq-table td.hi{color:#4ade80;font-family:'Consolas','Courier New',monospace}
 /* Notes */
 .kb-notes{width:100%;height:100%;resize:none;background:transparent;border:none;outline:none;
-  font-family:'Share Tech Mono',monospace;font-size:14px;color:#94a3b8;line-height:1.8;padding:4px 0}
+  font-family:'Consolas','Courier New',monospace;font-size:14px;color:#94a3b8;line-height:1.8;padding:4px 0}
 
 /* ═══ BRIEFING PANEL ════════════════════════════════════════════ */
 #panel-briefing{
@@ -1668,14 +1690,14 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(251,191,36,.12);
 }
 .brief-header-title{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#fbbf24;letter-spacing:2px;text-transform:uppercase;
 }
 .brief-upload-btn{
   margin-left:auto;display:flex;align-items:center;gap:6px;
   background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);
   border-radius:2px;padding:5px 12px;cursor:pointer;
-  font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
   color:#fbbf24;letter-spacing:1.5px;text-transform:uppercase;transition:all .2s;
 }
 .brief-upload-btn:hover{background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.5)}
@@ -1686,7 +1708,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   display:flex;flex-direction:column;overflow:hidden;
 }
 .brief-sidebar-hdr{
-  padding:8px 12px;font-family:'Rajdhani',sans-serif;font-size:9px;
+  padding:8px 12px;font-family:system-ui,sans-serif;font-size:9px;
   font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase;
   border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;
 }
@@ -1702,25 +1724,25 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .brief-file-icon{
   width:26px;height:30px;border-radius:2px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-family:'Rajdhani',sans-serif;font-size:7px;font-weight:700;letter-spacing:.5px;
+  font-family:system-ui,sans-serif;font-size:7px;font-weight:700;letter-spacing:.5px;
 }
 .brief-file-icon.pdf{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2)}
 .brief-file-icon.img{background:rgba(74,222,128,.07);color:#4ade80;border:1px solid rgba(74,222,128,.15)}
 .brief-file-icon.docx{background:rgba(59,130,246,.08);color:#60a5fa;border:1px solid rgba(59,130,246,.18)}
 .brief-file-info{flex:1;min-width:0}
 .brief-file-name{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .brief-file-item.active .brief-file-name{color:#fbbf24}
-.brief-file-meta{font-family:'Share Tech Mono',monospace;font-size:10px;color:#3d6b52;margin-top:2px}
+.brief-file-meta{font-family:'Consolas','Courier New',monospace;font-size:10px;color:#3d6b52;margin-top:2px}
 .brief-file-del{
   opacity:0;font-size:13px;color:#546e82;cursor:pointer;
   transition:all .15s;padding:2px 4px;position:absolute;right:4px;top:50%;transform:translateY(-50%);
 }
 .brief-file-item:hover .brief-file-del{opacity:1}
 .brief-file-del:hover{color:#ef4444}
-.brief-empty{padding:28px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-size:11px;color:#3d6b52;line-height:1.8}
+.brief-empty{padding:28px 12px;text-align:center;font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;line-height:1.8}
 .brief-viewer{flex:1;overflow:hidden;position:relative;background:#04080f}
 .brief-viewer iframe{width:100%;height:100%;border:none}
 .brief-placeholder{
@@ -1728,7 +1750,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   align-items:center;justify-content:center;gap:10px;pointer-events:none;
 }
 .brief-placeholder svg{opacity:.06}
-.brief-placeholder-txt{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase}
+.brief-placeholder-txt{font-family:system-ui,sans-serif;font-size:11px;font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase}
 #briefingFileInput{display:none}
 
 /* ═══ MOBILE / TACTILE ══════════════════════════════════════════ */
@@ -1984,13 +2006,13 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 
 <!-- TRTT PANEL -->
 <div id="trttPanel" style="display:none;position:fixed;bottom:78px;left:20px;background:rgba(4,8,16,.97);border:1px solid rgba(74,222,128,.2);border-top:2px solid rgba(74,222,128,.35);border-radius:3px;padding:12px 16px;z-index:2000;min-width:280px;backdrop-filter:blur(16px)">
-  <div style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;color:#4ade80;letter-spacing:2px;margin-bottom:10px;text-transform:uppercase">⚙ Serveur TRTT</div>
+  <div style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;color:#4ade80;letter-spacing:2px;margin-bottom:10px;text-transform:uppercase">⚙ Serveur TRTT</div>
   <div style="display:flex;gap:8px;align-items:center">
-    <input id="trttHostInput" type="text" placeholder="127.0.0.1" style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:Share Tech Mono,monospace;font-size:11px;outline:none">
-    <input id="trttPortInput" type="text" placeholder="42674" style="width:58px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:Share Tech Mono,monospace;font-size:11px;outline:none">
-    <button onclick="applyTRTTConfig()" style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.3);border-radius:2px;padding:5px 12px;color:#4ade80;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">OK</button>
+    <input id="trttHostInput" type="text" placeholder="127.0.0.1" style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;outline:none">
+    <input id="trttPortInput" type="text" placeholder="42674" style="width:58px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;outline:none">
+    <button onclick="applyTRTTConfig()" style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.3);border-radius:2px;padding:5px 12px;color:#4ade80;font-family:system-ui,sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">OK</button>
   </div>
-  <div id="trttPanelStatus" style="font-family:Share Tech Mono,monospace;font-size:10px;color:#475569;margin-top:8px"></div>
+  <div id="trttPanelStatus" style="font-family:'Consolas','Courier New',monospace;font-size:10px;color:#475569;margin-top:8px"></div>
 </div>
 
 <input type="file" id="fileInput" accept=".ini" style="display:none">
@@ -1998,27 +2020,33 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 <script>
 const map = L.map('map',{preferCanvas:true,zoomControl:true}).setView([37.5,127.5],7);
 const layers = {
-  osm:       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:''}),
+  osm:       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:''}),
+  osmfr:     L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',{maxZoom:20,subdomains:'abc',attribution:''}),
+  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20,subdomains:'abcd',attribution:''}),
   satellite: L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:''}),
-  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:''}),
   terrain:   L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:''})
 };
 let _activeTileKey = 'dark';
 function switchLayer(key) {
   Object.values(layers).forEach(l => { try { map.removeLayer(l); } catch(e){} });
-  layers[key].addTo(map);
+  if(layers[key]) layers[key].addTo(map);
   _activeTileKey = key;
+  // Sync radio buttons
+  document.querySelectorAll('input[name="layer"]').forEach(r => r.checked = (r.value === key));
 }
+// Démarrer sur Dark, fallback OSM si inaccessible
 layers.dark.addTo(map);
-layers.dark.once('tileerror', () => {
-  console.warn('Dark tiles failed, falling back to OSM');
+let _darkFallbackDone = false;
+layers.dark.on('tileerror', function(){
+  if(_darkFallbackDone) return;
+  _darkFallbackDone = true;
+  console.warn('Dark tiles indisponibles, fallback OSM');
   map.removeLayer(layers.dark);
   layers.osm.addTo(map);
   _activeTileKey = 'osm';
   document.getElementById('lDark').checked = false;
-  document.getElementById('lOsm').checked = true;
+  document.getElementById('lOsm').checked  = true;
 });
-
 map.attributionControl.setPrefix('');
 
 L.polyline([[38.0,124.6],[38.1,125.0],[38.3,125.5],[38.2,126.0],[38.3,126.5],[38.4,127.0],
@@ -2052,7 +2080,7 @@ function makeAircraftIcon(hdg,alt,kias){
     position:absolute;left:50%;transform:translateX(-50%);top:36px;
     white-space:nowrap;background:rgba(3,8,20,.92);
     border:1px solid rgba(59,130,246,.5);border-radius:2px;
-    padding:2px 8px;font-family:Rajdhani,sans-serif;font-weight:700;
+    padding:2px 8px;font-family:system-ui,sans-serif;font-weight:700;
     font-size:13px;pointer-events:none;letter-spacing:.5px;
     box-shadow:0 2px 10px rgba(0,0,0,.7),0 0 12px rgba(59,130,246,.12);
   ">${parts}</div>`;
@@ -2093,7 +2121,7 @@ function _bullIcon() {
       <line x1="0"  y1="14" x2="7"  y2="14" stroke="${col}" stroke-width="1.4" opacity=".7"/>
       <line x1="21" y1="14" x2="28" y2="14" stroke="${col}" stroke-width="1.4" opacity=".7"/>
       <text x="14" y="-4" text-anchor="middle"
-        style="font-family:Share Tech Mono,monospace;font-size:9px;fill:${col};letter-spacing:1px;font-weight:700">BULL</text>
+        style="font-family:'Consolas','Courier New',monospace;font-size:9px;fill:${col};letter-spacing:1px;font-weight:700">BULL</text>
     </svg>`,
     className:'', iconSize:[28,28], iconAnchor:[14,14]
   });
@@ -2235,11 +2263,13 @@ document.getElementById('clearArrowsBtn').addEventListener('click',()=>{
   drawMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});drawMarkers=[];clearArrow();
 });
 
+let _noteCount=0;
 function createNote(){
   let bgColor='#0f172a',textColor='#94a3b8';
   const wrapper=document.createElement('div');
   wrapper.className='note-wrapper';
-  wrapper.style.left='300px';wrapper.style.top='200px';
+  const _no=_noteCount%8;_noteCount++;
+  wrapper.style.left=(300+_no*28)+'px';wrapper.style.top=(200+_no*28)+'px';
   wrapper.style.background=bgColor;wrapper.style.border='1px solid rgba(74,222,128,.2)';
   const header=document.createElement('div');header.className='note-header';
   const bgPicker=document.createElement('div');bgPicker.className='note-mini-picker';bgPicker.title='Fond';
@@ -2252,7 +2282,7 @@ function createNote(){
   const txInput=document.createElement('input');txInput.type='color';txInput.value='#94a3b8';
   txInput.addEventListener('input',()=>{textColor=txInput.value;txSwatch.style.background=textColor;body.style.color=textColor;});
   txPicker.appendChild(txSwatch);txPicker.appendChild(txInput);
-  const txLabel=document.createElement('span');txLabel.textContent='T';txLabel.style.cssText='font-size:9px;color:rgba(255,255,255,.3);margin-right:1px;font-family:Rajdhani,sans-serif';
+  const txLabel=document.createElement('span');txLabel.textContent='T';txLabel.style.cssText='font-size:9px;color:rgba(255,255,255,.3);margin-right:1px;font-family:system-ui,sans-serif';
   const colors=document.createElement('div');colors.className='note-header-colors';
   colors.appendChild(bgPicker);colors.appendChild(txLabel);colors.appendChild(txPicker);
   const closeBtn=document.createElement('button');closeBtn.className='note-close';closeBtn.innerHTML='×';closeBtn.title='Supprimer';
@@ -2338,7 +2368,7 @@ function loadMission(){
       d.flightplan.forEach((p,i)=>{
         missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:4,color:c,fillColor:c,fillOpacity:.85,weight:2}).addTo(map));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
-          html:`<div style="font-family:Share Tech Mono,monospace;color:${c};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
+          html:`<div style="font-family:'Consolas','Courier New',monospace;color:${c};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
         })}).addTo(map));
       });
@@ -2350,7 +2380,7 @@ function loadMission(){
       d.route.forEach((p,i)=>{
         missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:5,color:c,fillColor:c,fillOpacity:.9,weight:2}).addTo(map));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
-          html:`<div style="font-family:Share Tech Mono,monospace;color:#e2e8f0;font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
+          html:`<div style="font-family:'Consolas','Courier New',monospace;color:#e2e8f0;font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
         })}).addTo(map));
       });
@@ -2369,10 +2399,10 @@ function loadMission(){
         const parts2=[
           `<span style="color:#f87171;font-size:9px;letter-spacing:1px;font-weight:700">PPT\u00a0${pptNum}</span>`,
           nm?`<span style="color:#fca5a5;font-size:10px;font-weight:700;letter-spacing:.3px">${nm}</span>`:'',
-          rng?`<span style="color:#ef4444;font-size:9px;font-family:Share Tech Mono,monospace">${rng}</span>`:'',
+          rng?`<span style="color:#ef4444;font-size:9px;font-family:'Consolas','Courier New',monospace">${rng}</span>`:'',
         ].filter(Boolean).join('<span style="color:rgba(239,68,68,.25);margin:0 3px;font-size:7px">▸</span>');
         missionMarkers.push(L.marker([t.lat,t.lon],{icon:L.divIcon({
-          html:`<div style="background:rgba(8,2,2,.9);border:1px solid rgba(239,68,68,.22);border-left:2px solid rgba(239,68,68,.65);border-radius:2px;padding:2px 7px;white-space:nowrap;pointer-events:none;font-family:Rajdhani,sans-serif;display:inline-flex;align-items:center;gap:0;box-shadow:0 2px 8px rgba(0,0,0,.5)">${parts2}</div>`,
+          html:`<div style="background:rgba(8,2,2,.9);border:1px solid rgba(239,68,68,.22);border-left:2px solid rgba(239,68,68,.65);border-radius:2px;padding:2px 7px;white-space:nowrap;pointer-events:none;font-family:system-ui,sans-serif;display:inline-flex;align-items:center;gap:0;box-shadow:0 2px 8px rgba(0,0,0,.5)">${parts2}</div>`,
           className:'',iconSize:[110,16],iconAnchor:[-6,8]
         }),zIndexOffset:50}).addTo(map));
       });
@@ -2439,10 +2469,10 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     const apIcao = ap.icao.startsWith('KP-') ? ap.name : ap.icao;
     const tacanPart = ap.tacan ? `<span style="color:rgba(148,163,184,.7);font-size:9px;margin-left:4px">${ap.tacan}</span>` : '';
     const labelHtml = `<div style="pointer-events:none;line-height:1.2">
-      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;
+      <div style="font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
         color:${col};letter-spacing:.8px;text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);
         white-space:nowrap">${apIcao}${tacanPart}</div>
-      <div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:600;
+      <div style="font-family:system-ui,sans-serif;font-size:10px;font-weight:600;
         color:rgba(148,163,184,.75);letter-spacing:.2px;text-shadow:0 1px 3px #000;
         white-space:nowrap">${ap.name}</div>
     </div>`;
@@ -2643,6 +2673,7 @@ function connectWS(){
       }
     }
     if(msg.type==='radar')updateRadarContacts(msg.data);
+    if(msg.type==='acmi')updateAcmiContacts(msg.data);
     if(msg.type==='status'){
       const on=msg.data.connected;
       document.getElementById('dot').className='dot '+(on?'on':'off');
@@ -2709,7 +2740,7 @@ function updateRadarContacts(contacts){
   if(!contacts||!contacts.length)return;
   if(!dlVisible){dlVisible=true;document.getElementById('radarBtn').classList.add('active');}
   contacts.forEach(c=>{
-    if(!c.lat||!c.lon)return;
+    if(c.lat==null||c.lon==null)return;
     const camp=c.camp;
     const col=camp===1?'#4ade80':camp===2?'#f87171':'#fbbf24';
     const cls=camp===1?'friend':camp===2?'foe':'unknwn';
@@ -2741,6 +2772,35 @@ function updateRadarContacts(contacts){
       html:lH,className:'',iconSize:[120,36],iconAnchor:[-sz/2-2,18]
     }),zIndexOffset:camp===2?201:101});
     if(dlVisible)mL.addTo(map);dlMarkers.push(mL);
+  });
+}
+
+
+// ── Contacts ACMI coalition (god-mode) ──────────────────────────
+let acmiMarkers=[];
+function updateAcmiContacts(contacts){
+  acmiMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});acmiMarkers=[];
+  if(!contacts||!contacts.length)return;
+  contacts.forEach(c=>{
+    if(c.lat==null||c.lon==null)return;
+    const camp=c.camp;
+    const col=camp===1?'#4ade80':camp===2?'#f87171':'#fbbf24';
+    const cls=camp===1?'friend':camp===2?'foe':'unknwn';
+    const sz=20;
+    const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({html:dlSym(camp,col,sz),className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]}),zIndexOffset:camp===2?180:80});
+    mS.addTo(map);acmiMarkers.push(mS);
+    if(c.heading!=null){
+      const mV=L.marker([c.lat,c.lon],{icon:L.divIcon({html:dlVec(c.heading,col),className:'',iconSize:[60,60],iconAnchor:[30,30]}),zIndexOffset:40});
+      mV.addTo(map);acmiMarkers.push(mV);
+    }
+    const call=c.callsign||c.type_name||'';
+    const altFL=c.alt!=null&&c.alt>0?'FL'+String(Math.round(c.alt/100)).padStart(3,'0'):'';
+    const spdStr=c.speed!=null&&c.speed>10?Math.round(c.speed)+'kt':'';
+    const hdgStr=c.heading!=null?String(Math.round(c.heading)).padStart(3,'0')+'°':'';
+    const dataLine=[altFL,spdStr,hdgStr].filter(Boolean).join('\u00a0·\u00a0');
+    const lH=`<div class="dl-block">${call?`<div class="dl-callsign ${cls}" style="opacity:.85">${call}</div>`:''} ${dataLine?`<div class="dl-data ${cls}">${dataLine}</div>`:''}</div>`;
+    const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({html:lH,className:'',iconSize:[120,36],iconAnchor:[-sz/2-2,18]}),zIndexOffset:camp===2?181:81});
+    mL.addTo(map);acmiMarkers.push(mL);
   });
 }
 
@@ -2924,36 +2984,36 @@ document.addEventListener('click',e=>{
   background:rgba(4,8,18,.97);border:1px solid rgba(251,191,36,.25);
   border-top:2px solid rgba(251,191,36,.4);border-radius:3px;
   padding:12px 14px;z-index:2000;min-width:240px;backdrop-filter:blur(16px)">
-  <div style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;
+  <div style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
     color:#fbbf24;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">
     ✎ Calibration pistes</div>
-  <div style="font-family:Share Tech Mono,monospace;font-size:10px;color:#64748b;
+  <div style="font-family:'Consolas','Courier New',monospace;font-size:10px;color:#64748b;
     margin-bottom:8px;line-height:1.5">
     1. Sélectionner la base<br>
     2. Cliquer "Calibrer"<br>
     3. Cliquer sur le <span style="color:#fbbf24">seuil réel</span> de la piste</div>
   <select id="calIcaoSel" style="width:100%;background:rgba(255,255,255,.04);
     border:1px solid rgba(255,255,255,.1);border-radius:2px;padding:5px 8px;
-    color:#e2e8f0;font-family:Share Tech Mono,monospace;font-size:11px;
+    color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;
     margin-bottom:8px;outline:none"></select>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
     <button onclick="startCalibration()"
       style="flex:1;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);
-      border-radius:2px;padding:5px;color:#fbbf24;font-family:Rajdhani,sans-serif;
+      border-radius:2px;padding:5px;color:#fbbf24;font-family:system-ui,sans-serif;
       font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">CALIBRER</button>
     <button onclick="resetCalibration()"
       style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
-      border-radius:2px;padding:5px 8px;color:#f87171;font-family:Rajdhani,sans-serif;
+      border-radius:2px;padding:5px 8px;color:#f87171;font-family:system-ui,sans-serif;
       font-size:11px;cursor:pointer">RESET</button>
     <button onclick="document.getElementById('calPanel').style.display='none'"
       style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
-      border-radius:2px;padding:5px 8px;color:#64748b;font-family:Rajdhani,sans-serif;
+      border-radius:2px;padding:5px 8px;color:#64748b;font-family:system-ui,sans-serif;
       font-size:11px;cursor:pointer">✕</button>
   </div>
   <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.05)">
     <button onclick="resetAllCalibration()"
       style="width:100%;background:transparent;border:1px solid rgba(239,68,68,.15);
-      border-radius:2px;padding:3px;color:#64748b;font-family:Rajdhani,sans-serif;
+      border-radius:2px;padding:3px;color:#64748b;font-family:system-ui,sans-serif;
       font-size:10px;cursor:pointer">Reset toutes les bases</button>
   </div>
 </div>
@@ -2961,7 +3021,7 @@ document.addEventListener('click',e=>{
 <div id="calStatus" style="display:none;position:fixed;top:40px;left:50%;
   transform:translateX(-50%);background:rgba(251,191,36,.15);
   border:1px solid rgba(251,191,36,.4);border-radius:3px;
-  padding:6px 16px;z-index:3000;font-family:Rajdhani,sans-serif;
+  padding:6px 16px;z-index:3000;font-family:system-ui,sans-serif;
   font-size:13px;font-weight:700;color:#fbbf24;letter-spacing:1px;
   pointer-events:none"></div>
 
@@ -3002,11 +3062,11 @@ document.addEventListener('click',e=>{
     </div>
   </div>
   <div style="padding:4px 18px 4px;display:flex;align-items:center;gap:8px">
-    <span style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;color:#3d6b52;letter-spacing:1.5px;text-transform:uppercase">STEERPOINTS</span>
-    <span id="gps-steer-count" style="font-family:Share Tech Mono,monospace;font-size:9px;color:#3d6b52">0 WPT</span>
+    <span style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;color:#3d6b52;letter-spacing:1.5px;text-transform:uppercase">STEERPOINTS</span>
+    <span id="gps-steer-count" style="font-family:'Consolas','Courier New',monospace;font-size:9px;color:#3d6b52">0 WPT</span>
   </div>
   <div class="gps-steer-list" id="gps-steer-list">
-    <span style="font-family:Rajdhani,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>
+    <span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>
   </div>
 </div>
 
@@ -3168,7 +3228,7 @@ document.addEventListener('click',e=>{
       <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
     </svg>
     <span class="brief-header-title">BRIEFING</span>
-    <span id="briefFileCount" style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#3d6b52;letter-spacing:1px">0 DOC</span>
+    <span id="briefFileCount" style="font-family:'Consolas','Courier New',monospace;font-size:9px;color:#3d6b52;letter-spacing:1px">0 DOC</span>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
       <div class="brief-upload-btn" onclick="document.getElementById('briefingFileInput').click()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -3419,7 +3479,7 @@ function buildGpsSteers(route) {
   const count = document.getElementById('gps-steer-count');
   list.innerHTML = '';
   if (!route || !route.length) {
-    list.innerHTML = '<span style="font-family:Rajdhani,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>';
+    list.innerHTML = '<span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>';
     count.textContent = '0 WPT';
     return;
   }
@@ -3621,9 +3681,8 @@ async def _docx_to_html_response(fp: str):
         body = "\n".join(paras)
         html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body{{background:#060a12;color:#cbd5e1;font-family:'Rajdhani',sans-serif;
+  body{{background:#060a12;color:#cbd5e1;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
     max-width:860px;margin:0 auto;padding:32px 24px;font-size:15px;line-height:1.7}}
-  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap');
   h1{{font-size:22px;color:#fbbf24;letter-spacing:2px;text-transform:uppercase;
     border-bottom:1px solid rgba(251,191,36,.2);padding-bottom:8px;margin:24px 0 12px}}
   h2{{font-size:16px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin:20px 0 8px}}
@@ -3647,5 +3706,196 @@ async def _docx_to_html_response(fp: str):
 async def index(): return HTMLResponse(content=HTML)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="warning")
+    import threading as _th_main
+
+    def _run_server():
+        uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="warning")
+
+    _srv_thread = _th_main.Thread(target=_run_server, daemon=True)
+    _srv_thread.start()
+
+    try:
+        from PySide6.QtWidgets import QApplication, QWidget  # type: ignore[import-untyped]
+        from PySide6.QtCore    import Qt, QTimer             # type: ignore[import-untyped]
+        from PySide6.QtGui     import (QPainter, QColor, QPen, QFont,  # type: ignore[import-untyped]
+                                       QPixmap, QIcon, QBrush)
+    except ImportError:
+        logger.error("PySide6 absent — pip install PySide6")
+        _srv_thread.join()
+        raise SystemExit(0)
+
+    class FalconPadWindow(QWidget):
+        W, H = 420, 350
+        BG         = QColor("#060a12")
+        BG2        = QColor("#0b1220")
+        ACCENT     = QColor("#4ade80")
+        ACCENT_DIM = QColor("#1f4d35")
+        RED        = QColor("#ef4444")
+        RED_DIM    = QColor("#1a0808")
+        RED_HOV    = QColor("#3d1010")
+        RED_OUT    = QColor("#7f2222")
+        BLUE       = QColor("#60a5fa")
+        TXT_DIM    = QColor("#64748b")
+        TXT_MID    = QColor("#94a3b8")
+
+        def __init__(self):
+            super().__init__()
+            self.setFixedSize(self.W, self.H)
+            # Window + Frameless = barre des tâches OK + showMinimized() OK
+            self.setWindowFlags(
+                Qt.WindowType.Window |
+                Qt.WindowType.FramelessWindowHint
+            )
+            self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            self.setWindowTitle("Falcon-Pad")
+            _ico = os.path.join(ASSETS_DIR, "falcon_pad.ico")
+            if os.path.exists(_ico):
+                self.setWindowIcon(QIcon(_ico))
+            screen = QApplication.primaryScreen().availableGeometry()
+            self.move((screen.width()-self.W)//2, (screen.height()-self.H)//2)
+            self._logo = None
+            _lp = os.path.join(ASSETS_DIR, "logo_tk.png")
+            if os.path.exists(_lp):
+                px = QPixmap(_lp)
+                if not px.isNull():
+                    self._logo = px.scaled(64,64,Qt.AspectRatioMode.KeepAspectRatio,
+                                           Qt.TransformationMode.SmoothTransformation)
+            self._drag_pos  = None
+            self._btn_hover = False
+            self._min_hover = False
+            self._btn_rect  = None
+            self._min_rect  = None
+            self._bms_ok    = False
+            self._timer = QTimer(self)
+            self._timer.timeout.connect(self._poll_bms)
+            self._timer.start(3000)
+            QTimer.singleShot(600, self._poll_bms)
+            self.setMouseTracking(True)
+            self.show()
+
+        def _poll_bms(self):
+            try:
+                ok = bms.connected or bms.try_reconnect()
+                if ok != self._bms_ok:
+                    self._bms_ok = ok
+                    self.update()
+            except Exception:
+                pass
+
+        def paintEvent(self, _):
+            p = QPainter(self)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            W, H = self.W, self.H
+            p.fillRect(0, 0, W, H, self.BG)
+            p.fillRect(0, 0, W, 80, self.BG2)
+            p.fillRect(0, 0, W, 3, self.ACCENT)
+            p.setPen(QPen(self.ACCENT_DIM, 1))
+            p.drawRect(0, 0, W-1, H-1)
+            p.drawLine(20, 80, W-20, 80)
+            p.drawLine(20, H-66, W-20, H-66)
+            # Bouton réduire
+            rx,ry,rw,rh = W-36,10,24,18
+            self._min_rect=(rx,ry,rw,rh)
+            mc = self.TXT_MID if self._min_hover else self.TXT_DIM
+            p.setPen(QPen(mc,1)); p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(rx,ry,rw,rh)
+            p.setPen(QPen(mc,2))
+            p.drawLine(rx+5, ry+rh//2, rx+rw-5, ry+rh//2)
+            # Logo + titre
+            tx = 20
+            if self._logo:
+                p.drawPixmap(12, 8, self._logo); tx = 88
+            p.setPen(QPen(self.ACCENT))
+            p.setFont(QFont("Consolas",15,QFont.Weight.Bold))
+            p.drawText(tx,8,W-tx-44,40,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,"FALCON-PAD")
+            p.setPen(QPen(self.TXT_DIM))
+            p.setFont(QFont("Consolas",8))
+            p.drawText(tx,48,W-tx-44,20,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,
+                       f"v{APP_VERSION}  ·  by {APP_AUTHOR}")
+            # URLs
+            y=96
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22,y,"LOCAL"); y+=17
+            p.setFont(QFont("Consolas",11)); p.setPen(QPen(self.ACCENT))
+            p.drawText(22,y,f"http://localhost:{SERVER_PORT}"); y+=25
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22,y,"RÉSEAU  —  Tablette / Mobile"); y+=17
+            p.setFont(QFont("Consolas",11)); p.setPen(QPen(self.BLUE))
+            p.drawText(22,y,f"http://{SERVER_IP}:{SERVER_PORT}"); y+=25
+            # BMS
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22,y,"FALCON BMS 4.38"); y+=17
+            dc = self.ACCENT if self._bms_ok else self.RED
+            p.setBrush(QBrush(dc)); p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(22,y-9,10,10)
+            p.setPen(QPen(dc))
+            p.setFont(QFont("Consolas",10,QFont.Weight.Bold))
+            p.drawText(38,y,"CONNECTÉ" if self._bms_ok else "NON DÉTECTÉ"); y+=25
+            # Logs
+            p.setPen(QPen(self.TXT_DIM))
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold))
+            p.drawText(22,y,"LOGS"); y+=15
+            ls = LOG_DIR if len(LOG_DIR)<=54 else "…"+LOG_DIR[-52:]
+            p.setFont(QFont("Consolas",8)); p.drawText(22,y,ls)
+            # Bouton ARRÊT
+            bx,by_,bw_,bh_ = W//2-72,H-52,144,28
+            self._btn_rect=(bx,by_,bw_,bh_)
+            p.setBrush(QBrush(self.RED_HOV if self._btn_hover else self.RED_DIM))
+            p.setPen(QPen(self.RED if self._btn_hover else self.RED_OUT,1))
+            p.drawRect(bx,by_,bw_,bh_)
+            p.setPen(QPen(self.RED))
+            p.setFont(QFont("Consolas",11,QFont.Weight.Bold))
+            p.drawText(bx,by_,bw_,bh_,Qt.AlignmentFlag.AlignCenter,"■  ARRÊT")
+            p.setPen(QPen(self.TXT_DIM)); p.setFont(QFont("Consolas",7))
+            p.drawText(0,H-13,W,12,Qt.AlignmentFlag.AlignCenter,"Le serveur sera arrêté")
+            p.end()
+
+        def mousePressEvent(self, e):
+            if e.button() != Qt.MouseButton.LeftButton: return
+            mx,my = e.position().x(), e.position().y()
+            if self._btn_rect:
+                bx,by_,bw_,bh_ = self._btn_rect
+                if bx<=mx<=bx+bw_ and by_<=my<=by_+bh_:
+                    self._do_quit(); return
+            if self._min_rect:
+                rx,ry,rw,rh = self._min_rect
+                if rx<=mx<=rx+rw and ry<=my<=ry+rh:
+                    self.showMinimized(); return
+            if my < 80:
+                self._drag_pos = e.globalPosition().toPoint()
+
+        def mouseMoveEvent(self, e):
+            if self._drag_pos and e.buttons()==Qt.MouseButton.LeftButton:
+                delta = e.globalPosition().toPoint()-self._drag_pos
+                self.move(self.pos()+delta)
+                self._drag_pos = e.globalPosition().toPoint()
+            mx,my = e.position().x(), e.position().y()
+            if self._btn_rect:
+                bx,by_,bw_,bh_ = self._btn_rect
+                h = bx<=mx<=bx+bw_ and by_<=my<=by_+bh_
+                if h!=self._btn_hover: self._btn_hover=h; self.update()
+            if self._min_rect:
+                rx,ry,rw,rh = self._min_rect
+                h2 = rx<=mx<=rx+rw and ry<=my<=ry+rh
+                if h2!=self._min_hover: self._min_hover=h2; self.update()
+
+        def mouseReleaseEvent(self, _e): self._drag_pos = None
+
+        def leaveEvent(self, _e):
+            if self._btn_hover or self._min_hover:
+                self._btn_hover=False; self._min_hover=False; self.update()
+
+        def keyPressEvent(self, e):
+            if e.key()==Qt.Key.Key_F4 and e.modifiers()==Qt.KeyboardModifier.AltModifier:
+                self._do_quit()
+
+        def _do_quit(self):
+            self._timer.stop(); self.close()
+            os.kill(os.getpid(), 9)
+
+    _app = QApplication(sys.argv)
+    _app.setApplicationName("Falcon-Pad")
+    _app.setApplicationVersion(APP_VERSION)
+    _win = FalconPadWindow()
+    _app.exec()
 
