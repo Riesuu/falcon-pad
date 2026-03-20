@@ -22,7 +22,7 @@
 
 ### Présentation
 
-**Falcon-Pad** est une application web tactique conçue pour **Falcon BMS 4.38**, accessible depuis n'importe quel device sur votre réseau local — PC, tablette, smartphone. Elle lit directement la **Shared Memory BMS** pour afficher votre position, vos contacts radar/datalink, votre Bullseye, votre plan de vol et vos menaces PPT sur une carte Leaflet interactive.
+**Falcon-Pad** est une application web tactique conçue pour **Falcon BMS 4.38**, accessible depuis n'importe quel device sur votre réseau local  PC, tablette, smartphone. Elle lit directement la **Shared Memory BMS** pour afficher votre position, vos contacts radar/datalink, votre Bullseye, votre plan de vol et vos menaces PPT sur une carte  interactive.
 
 L'objectif est simple : avoir un **kneeboard numérique** complet sur une tablette posée à côté de votre HOTAS, sans dépendre d'une application Windows tierce.
 
@@ -61,15 +61,7 @@ L'objectif est simple : avoir un **kneeboard numérique** complet sur une tablet
 
 ### Installation
 
-```bash
-# Prérequis Python
-pip install -r requirements.txt
-
-# Lancer
-python falcon_pad.py
-```
-
-Ou télécharger directement `Falcon-PAD.exe` depuis les [Releases](../../releases).
+télécharger directement `Falcon-PAD.exe` depuis les [Releases](../../releases).
 
 ```
   Local    : http://localhost:8000       ← PC
@@ -84,74 +76,7 @@ Dans `User/config/Falcon BMS User.cfg` :
 set g_bTacviewRealTime 1
 ```
 
-### Structure des dossiers
 
-```
-falcon-pad/
-  ├── falcon_pad.py        ← script principal
-  ├── falcon_pad.spec      ← config PyInstaller (→ Falcon-PAD.exe)
-  ├── requirements.txt
-  ├── LICENSE              ← GNU GPL v3
-  ├── logo.png
-  ├── logs/                ← logs rotatifs (auto-créé)
-  ├── briefing/            ← PDF, images, Word importés (auto-créé)
-  └── config/
-        └── falcon_pad_config.json   ← settings persistants (auto-créé)
-```
-
-### Compiler en Falcon-PAD.exe
-
-```bash
-pip install pyinstaller
-pyinstaller falcon_pad.spec
-# → dist/Falcon-PAD.exe
-```
-
-### Architecture
-
-```
-BMS 4.38 — Shared Memory
-  ├── FalconSharedMemoryArea   → cap, vitesse, altitude, z
-  └── FalconSharedMemoryArea2  → lat/lon WGS84, currentTime,
-                                  bullseyeX/Y, DrawingData
-
-Falcon-Pad  (Python / FastAPI)
-  ├── broadcast_loop()    → WebSocket push toutes les N ms
-  │     ├── type: aircraft  → position + heure BMS + bullseye
-  │     └── type: radar     → contacts DrawingData (no god mode)
-  ├── /api/mission        → steerpoints & PPT depuis .ini
-  ├── /api/briefing/*     → upload PDF/image/docx, serve inline
-  ├── /api/settings       → lecture/écriture config JSON
-  └── HTML (Leaflet + JS) → carte + UI tactique complète
-
-Client (Navigateur — PC, tablette, téléphone)
-  ├── Leaflet map   → fond OSM, ownship, bullseye, contacts, PPT
-  ├── WebSocket     → position & contacts temps réel
-  └── Onglets       → GPS · Charts · Briefing · Kneeboard
-```
-
-### Shared Memory — Offsets utilisés
-
-| Zone | Offset | Type | Champ |
-|---|---|---|---|
-| FD  | `0x034` | float | KIAS (knots) |
-| FD  | `0x0BC` | float | Cap vrai HSI (°) |
-| FD2 | `0x014` | float | Altitude baro (ft) |
-| FD2 | `0x02C` | int   | `currentTime` (s depuis minuit) |
-| FD2 | `0x408` | float | Latitude WGS84 (°) |
-| FD2 | `0x40C` | float | Longitude WGS84 (°) |
-| FD2 | `0x4B0` | float | `bullseyeX` North (ft BMS) |
-| FD2 | `0x4B4` | float | `bullseyeY` East (ft BMS) |
-
-### Roadmap
-
-- [ ] Support multi-théâtre (Balkans, Israel, Irak…)
-- [ ] Détection automatique du théâtre actif via SharedMemory
-- [ ] QR code de l'URL réseau pour connexion tablette rapide
-- [ ] Mode offline (tuiles de carte en cache local)
-- [ ] Export briefing en PDF depuis l'onglet Briefing
-
----
 
 ## 🇬🇧 English
 
@@ -194,14 +119,7 @@ The goal: a complete **digital kneeboard** on a tablet next to your HOTAS, no th
 - Touch feedback on all interactive elements
 - `user-select: none` on map to prevent accidental text selection
 
-### Installation
-
-```bash
-pip install -r requirements.txt
-python falcon_pad.py
-```
-
-Or download `Falcon-PAD.exe` from [Releases](../../releases).
+download `Falcon-PAD.exe` from [Releases](../../releases).
 
 ```
   Local    : http://localhost:8000       ← PC
@@ -215,78 +133,6 @@ In `User/config/Falcon BMS User.cfg`:
 ```
 set g_bTacviewRealTime 1
 ```
-
-### Build executable
-
-```bash
-pip install pyinstaller
-pyinstaller falcon_pad.spec
-# → dist/Falcon-PAD.exe
-```
-
-### Architecture
-
-```
-BMS 4.38 — Shared Memory
-  ├── FalconSharedMemoryArea   → heading, speed, altitude, z
-  └── FalconSharedMemoryArea2  → lat/lon WGS84, currentTime,
-                                  bullseyeX/Y, DrawingData
-
-Falcon-Pad  (Python / FastAPI)
-  ├── broadcast_loop()    → WebSocket push every N ms
-  │     ├── type: aircraft  → position + BMS time + bullseye
-  │     └── type: radar     → DrawingData contacts (no god mode)
-  ├── /api/mission        → steerpoints & PPT from .ini
-  ├── /api/briefing/*     → upload PDF/image/docx, serve inline
-  ├── /api/settings       → read/write persistent JSON config
-  └── HTML (Leaflet + JS) → full tactical map & UI
-
-Client (Browser — PC, tablet, phone)
-  ├── Leaflet map   → OSM tiles, ownship, bullseye, contacts, PPT
-  ├── WebSocket     → real-time position & contacts
-  └── Tabs          → GPS · Charts · Briefing · Kneeboard
-```
-
-### Shared Memory — Offsets used
-
-| Area | Offset | Type | Field |
-|---|---|---|---|
-| FD  | `0x034` | float | KIAS (knots) |
-| FD  | `0x0BC` | float | True heading HSI (°) |
-| FD2 | `0x014` | float | Baro altitude (ft) |
-| FD2 | `0x02C` | int   | `currentTime` (s since midnight) |
-| FD2 | `0x408` | float | Latitude WGS84 (°) |
-| FD2 | `0x40C` | float | Longitude WGS84 (°) |
-| FD2 | `0x4B0` | float | `bullseyeX` North (ft BMS) |
-| FD2 | `0x4B4` | float | `bullseyeY` East (ft BMS) |
-
-### Roadmap
-
-- [ ] Multi-theater support (Balkans, Israel, Iraq…)
-- [ ] Automatic theater detection via SharedMemory
-- [ ] QR code for quick tablet connection
-- [ ] Offline map tile caching
-- [ ] Briefing PDF export
-
----
-
-## Falcon-Pad vs BMSNav
-
-| | **Falcon-Pad** | **BMSNav** |
-|---|---|---|
-| Access | Any browser, any device | Windows app only |
-| Map | OpenStreetMap | BMS terrain (exact) |
-| Datalink | DrawingData (what you see) | BMS native |
-| Bullseye | ✅ Real-time marker + bearing | Depends |
-| Briefing | PDF / Image / Word built-in | Not included |
-| Charts | falcon-charts.com embedded | No |
-| BMS time | ✅ SharedMemory currentTime | N/A |
-| Multi-device | ✅ Simultaneous | ❌ Single instance |
-| God mode | ❌ Disabled by design | Depends on config |
-| Mobile | ✅ Tablet optimized | ❌ |
-| Open source | ✅ GPL v3 | ❌ Closed |
-
----
 
 ## License
 
