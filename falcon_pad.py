@@ -27,13 +27,13 @@ BMS     : Falcon BMS 4.38 — Shared Memory SDK
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
-import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil
+import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys
 from datetime import datetime
 from typing import List, Optional, Dict
 import logging
 
 APP_NAME    = "Falcon-Pad"
-APP_VERSION = "0.2"
+APP_VERSION = "0.3"
 APP_AUTHOR  = "Riesu"
 APP_CONTACT = "contact@falcon-charts.com"
 APP_WEBSITE = "https://www.falcon-charts.com"
@@ -103,11 +103,11 @@ class _Fmt(logging.Formatter):
 
 from logging.handlers import RotatingFileHandler as _RFH
 _fh = _RFH(LOG_FILE, maxBytes=2*1024*1024, backupCount=3, encoding="utf-8")
-_fh.setLevel(logging.DEBUG)
+_fh.setLevel(logging.INFO)
 _ch = logging.StreamHandler(sys.stdout)
 _ch.setLevel(logging.INFO)
 _fh.setFormatter(_Fmt()); _ch.setFormatter(_Fmt())
-logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _ch])
+logging.basicConfig(level=logging.INFO, handlers=[_fh, _ch])
 logger = logging.getLogger(__name__)
 
 def log_sep(t=""):
@@ -141,6 +141,7 @@ FD2_CURRENT_TIME = 0x02C   # int,    heure BMS en secondes depuis minuit (0-8640
 FD2_LAT          = 0x408   # float,  latitude degrés WGS84
 FD2_LON          = 0x40C   # float,  longitude degrés WGS84
 FD2_BULLSEYE_X   = 0x4B0   # float,  bullseye North ft (coords BMS)
+FD2_PILOTS_ONLINE = 0x260  # char,   nombre de pilotes en MP (0 ou 1 = solo)
 FD2_BULLSEYE_Y   = 0x4B4   # float,  bullseye East  ft (coords BMS)
 
 #  CONVERSION TMERC KOREA → WGS84 (pour fichiers .ini)
@@ -163,7 +164,6 @@ def bms_to_latlon(north_ft: float, east_ft: float) -> tuple:
     lat=phi1-(N1r*math.tan(phi1)/R1)*(D**2/2-(5+3*T1+10*C1-4*C1**2-9*e2)*D**4/24)
     lon=lon0+(D-(1+2*T1+C1)*D**3/6)/math.cos(phi1)
     return math.degrees(lat), math.degrees(lon)
-PYPROJ_AVAILABLE = False
 
 #  AÉROPORTS KOREA (47)
 AIRPORTS = {
@@ -319,6 +319,11 @@ def _trtt_client_loop():
                 if not data:
                     raise ConnectionError("BMS a fermé la connexion TRTT")
                 buf += data.decode('utf-8', errors='replace')
+                # Sécurité: borne le buffer pour éviter OOM
+                if len(buf) > 2 * 1024 * 1024:
+                    logger.warning("TRTT: buffer > 2MB, truncature")
+                    nl = buf.rfind('\n')
+                    buf = buf[nl+1:] if nl >= 0 else ""
 
                 # Traiter lignes complètes
                 while '\n' in buf:
@@ -336,10 +341,10 @@ def _trtt_client_loop():
                                 k, v = part.split('=', 1)
                                 if k == 'ReferenceLongitude':
                                     try: ref_lon = float(v)
-                                    except: pass
+                                    except ValueError: pass
                                 elif k == 'ReferenceLatitude':
                                     try: ref_lat = float(v)
-                                    except: pass
+                                    except ValueError: pass
                         continue
 
                     # Suppression: -hexid
@@ -377,8 +382,12 @@ def _trtt_client_loop():
                                 start_i = i + 1
                             i += 1
 
-                        # Mémoriser propriétés permanentes
+                        # Mémoriser propriétés permanentes (borné à 1000 objets)
                         if obj_id not in obj_props:
+                            if len(obj_props) > 1000:
+                                # Purger les entrées sans contact récent
+                                stale = [k for k in obj_props if k not in _acmi_contacts]
+                                for k in stale[:200]: del obj_props[k]
                             obj_props[obj_id] = {'name':'','color':3,'acmi_type':'other','pilot':''}
                         p = obj_props[obj_id]
                         if 'Name'   in props: p['name']      = props['Name']
@@ -392,9 +401,13 @@ def _trtt_client_loop():
                         if 'Pilot'  in props: p['pilot']     = props['Pilot']
                         if 'Group'  in props and not p['name']: p['name'] = props['Group']
 
-                        # Filtrer: on veut uniquement l'air (pas weapons, navaid, sol)
+                        # Filtrer: air uniquement
+                        # 'other' = type pas encore reçu → on garde en attendant
                         at = p.get('acmi_type', 'other')
-                        if at in ('weapon', 'navaid', 'other'):
+                        if at in ('weapon', 'navaid', 'ground', 'sea'):
+                            continue
+                        # Si type connu et pas air → exclure
+                        if at not in ('air', 'other'):
                             continue
 
                         # Position T=lon|lat|alt|roll|pitch|yaw|...
@@ -438,18 +451,18 @@ def _trtt_client_loop():
                                 'speed':    round(float(props['IAS']) * 1.944) if props.get('IAS') else 0,
                                 '_ts':      _time.time(),
                             }
-                    except Exception as ex:
-                        logger.debug(f"TRTT parse: {ex} ({line[:80]!r})")
+                    except Exception:
+                        pass
 
         except Exception as ex:
             _acmi_connected = False
             with _acmi_lock:
                 _acmi_contacts.clear()
-            logger.debug(f"TRTT déconnecté: {ex} — retry dans 5s")
             try:
                 if sock is not None:
                     sock.close()
-            except: pass
+            except OSError:
+                pass
             _time.sleep(5)
 
     _acmi_connected = False
@@ -465,7 +478,13 @@ def start_acmi_reader():
     logger.info(f"TRTT client démarré → {TRTT_HOST}:{TRTT_PORT}")
     logger.info("  (BMS User.cfg requis: set g_bTacviewRealTime 1)")
 
-def get_acmi_contacts(own_lat=None, own_lon=None) -> list:
+def get_acmi_contacts(own_lat=None, own_lon=None,
+                      max_nm: float = 9999.0, allies_only: bool = False) -> list:
+    """
+    Retourne les contacts TRTT filtrés.
+    - max_nm     : rayon max en NM autour de l'ownship (solo=240, multi=ignoré)
+    - allies_only: si True, filtre uniquement camp=1 (bleu)
+    """
     now = _time.time()
     with _acmi_lock:
         contacts = list(_acmi_contacts.items())
@@ -474,7 +493,28 @@ def get_acmi_contacts(own_lat=None, own_lon=None) -> list:
         # Ignorer stale (>30s sans update — objet détruit)
         if now - c.get('_ts', 0) > 30.0:
             continue
-        if own_lat and own_lon:
+        # Filtrer par camp si allies_only
+        # En solo BMS envoie souvent camp=3 (unknown) car les couleurs
+        # ne sont pas injectées immédiatement via TRTT — on exclut seulement
+        # les ennemis confirmés (camp=2 = rouge)
+        if allies_only and c.get('camp', 3) == 2:
+            continue
+        # Filtrer : air uniquement (ground, sea, weapon exclus)
+        # 'other' gardé seulement si récent (<10s) en attendant le type BMS
+        ct = c.get('type_name', 'other')
+        if ct in ('ground', 'sea', 'weapon', 'navaid'):
+            continue
+        if ct == 'other' and (now - c.get('_ts', 0)) > 10.0:
+            continue
+        # Filtrer par rayon NM
+        if own_lat is not None and own_lon is not None and max_nm < 9999.0:
+            dlat = c['lat'] - own_lat
+            dlon = (c['lon'] - own_lon) * math.cos(math.radians(own_lat))
+            dist_nm = math.sqrt(dlat**2 + dlon**2) * 60.0
+            if dist_nm > max_nm:
+                continue
+        # Exclure ownship (même position)
+        if own_lat is not None and own_lon is not None:
             if abs(c['lat'] - own_lat) < 0.002 and abs(c['lon'] - own_lon) < 0.002:
                 continue
         result.append({k: v for k, v in c.items() if k != '_ts'})
@@ -495,7 +535,7 @@ def _init_safe_mem():
                          ctypes.POINTER(ctypes.c_size_t)]
         _rpm.restype  = ctypes.c_bool
         _hproc = _k32.GetCurrentProcess()
-        logger.info(f"SafeMemReader OK — hproc={_hproc}")
+        logger.info("SafeMemReader OK")
     except Exception as e:
         logger.error(f"SafeMemReader init FAILED: {e}")
 
@@ -554,7 +594,7 @@ class BMSSharedMemory:
                     p = MapView(h, FILE_MAP_READ, 0, 0, 0)
                     if p:
                         self.shm_ptrs[name] = p
-                        logger.info(f"  SHM {name} = 0x{p:X}")
+                        logger.info(f"  SHM {name} mapped")
             # ptr1/ptr2 compatibilité
             self.ptr1 = self.shm_ptrs.get("FalconSharedMemoryArea")
             self.ptr2 = self.shm_ptrs.get("FalconSharedMemoryArea2")
@@ -567,7 +607,6 @@ class BMSSharedMemory:
                 self.shm_ptrs = {}
                 self.ptr1 = self.ptr2 = None
                 self.connected = False
-                logger.debug("BMS non détecté — retry dans 5s")
         except Exception as e:
             self.shm_ptrs = {}
             self.ptr1 = self.ptr2 = None
@@ -577,9 +616,6 @@ class BMSSharedMemory:
     def try_reconnect(self):
         if not self.connected:
             self._connect()
-            if self.connected:
-                global _DD_CANDIDATES
-                _DD_CANDIDATES = None  # forcer re-scan DrawingData
         return self.connected
 
     def get_position(self) -> Optional[Dict]:
@@ -592,17 +628,12 @@ class BMSSharedMemory:
         if None in (hdg, kias, z, lat, lon):
             logger.warning("get_position: safe_read echoue")
             return None
-        # Assertions de type — Pylance ne narrowe pas via "None in tuple"
-        assert hdg  is not None
-        assert kias is not None
-        assert z    is not None
-        assert lat  is not None
-        assert lon  is not None
-        hdg_f  = float(hdg)
-        kias_f = float(kias)
-        z_f    = float(z)
-        lat_f  = float(lat)
-        lon_f  = float(lon)
+        # Cast explicite — les valeurs ne sont pas None ici (vérifié ci-dessus)
+        hdg_f  = float(hdg)   # type: ignore[arg-type]
+        kias_f = float(kias)  # type: ignore[arg-type]
+        z_f    = float(z)     # type: ignore[arg-type]
+        lat_f  = float(lat)   # type: ignore[arg-type]
+        lon_f  = float(lon)   # type: ignore[arg-type]
         alt    = abs(z_f)
         hdg_f  = hdg_f % 360.0
         # Heure BMS (secondes depuis minuit)
@@ -635,11 +666,20 @@ class BMSSharedMemory:
             except Exception:
                 pass
 
-        logger.debug(f"lat={lat_f:.4f} lon={lon_f:.4f} hdg={hdg_f:.1f} alt={alt:.0f}ft kias={kias_f:.0f}kt bms_t={bms_time} bull=({bull_lat},{bull_lon})")
+        # Nombre de pilotes (solo vs multi)
+        pilots_online: int = 1
+        raw_po = safe_read(self.ptr2 + FD2_PILOTS_ONLINE, 1)
+        if raw_po:
+            try:
+                pilots_online = max(1, int(struct.unpack('<B', raw_po)[0]))
+            except Exception:
+                pilots_online = 1
+
         if -90 <= lat_f <= 90 and -180 <= lon_f <= 180 and not (lat_f == 0.0 and lon_f == 0.0):
             return {"lat": lat_f, "lon": lon_f, "heading": round(hdg_f, 1),
                     "altitude": round(alt), "kias": round(kias_f),
                     "bms_time": bms_time,
+                    "pilots_online": pilots_online,
                     "bull_lat": round(bull_lat, 5) if bull_lat is not None else None,
                     "bull_lon": round(bull_lon, 5) if bull_lon is not None else None,
                     "connected": True}
@@ -672,7 +712,7 @@ SERVER_PORT = int(APP_CONFIG["port"])
 async def lifespan(_a):
     asyncio.create_task(broadcast_loop())
     asyncio.create_task(_ini_watcher_loop())
-    start_acmi_reader()
+    start_acmi_reader()  # TRTT — filtré alliés 240 NM solo / L16 multi
     log_sep(f"{APP_NAME} v{APP_VERSION} — by {APP_AUTHOR}")
     logger.info(f"  Contact  : {APP_CONTACT}")
     logger.info(f"  Website  : {APP_WEBSITE}")
@@ -712,12 +752,10 @@ class _LocalOnlyMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 app.add_middleware(_LocalOnlyMiddleware)
-ws_clients: List[WebSocket] = []
+ws_clients: List[WebSocket] = []  # snapshot avec list() à l'itération
 mission_data = {"route": [], "threats": [], "flightplan": []}
 
 # ── DrawingData constants (BMS 4.38 — FalconSharedMemoryArea) ───
-DRAWING_ENTITY_SIZE: int = 40   # bytes per OSBEntity
-DRAWING_ENTITY_MAX:  int = 150  # max entities in DrawingData array
 
 # ── Broadcast loop — pousse les données BMS à tous les WS ────────
 _bms_last_reconnect: float = 0.0
@@ -741,9 +779,10 @@ async def broadcast_loop() -> None:
                 msg_ac = json.dumps({"type": "aircraft", "data": pos})
                 for ws in list(ws_clients):
                     try:    await ws.send_text(msg_ac)
-                    except: dead.append(ws)
+                    except Exception: dead.append(ws)
                 for ws in dead:
-                    if ws in ws_clients: ws_clients.remove(ws)
+                    try: ws_clients.remove(ws)
+                    except ValueError: pass
 
                 # 2. Contacts radar/datalink BMS (DrawingData — no god mode)
                 own_lat = pos.get("lat"); own_lon = pos.get("lon")
@@ -754,127 +793,151 @@ async def broadcast_loop() -> None:
                 msg_r = json.dumps({"type": "radar", "data": radar_c})
                 for ws in list(ws_clients):
                     try:    await ws.send_text(msg_r)
-                    except: pass
+                    except Exception: pass
 
-                # 3. Contacts ACMI/TRTT coalition
-                acmi_c = get_acmi_contacts(own_lat=own_lat, own_lon=own_lon)
-                if acmi_c:
-                    msg_acmi = json.dumps({"type": "acmi", "data": acmi_c})
-                    for ws in list(ws_clients):
-                        try:    await ws.send_text(msg_acmi)
-                        except: pass
+                # 3. Contacts TRTT — alliés filtrés (solo=240NM / multi=L16)
+                pilots_online = pos.get("pilots_online", 1)
+                is_multi = pilots_online > 1
+                if not is_multi:
+                    # Solo : TRTT filtré 240 NM, alliés seulement
+                    acmi_c = get_acmi_contacts(
+                        own_lat=own_lat, own_lon=own_lon,
+                        max_nm=240.0, allies_only=True
+                    )
+                    if acmi_c:
+                        msg_acmi = json.dumps({"type": "acmi", "data": acmi_c})
+                        for ws in list(ws_clients):
+                            try:    await ws.send_text(msg_acmi)
+                            except Exception: pass
 
             # 4. Statut connexion
             if ws_clients:
                 status_msg = json.dumps({"type": "status", "data": {"connected": bms.connected}})
                 for ws in list(ws_clients):
                     try:    await ws.send_text(status_msg)
-                    except: pass
+                    except Exception: pass
 
-        except Exception as e:
-            logger.debug(f"broadcast_loop: {e}")
+        except Exception:
+            pass
         await asyncio.sleep(APP_CONFIG.get("broadcast_ms", 200) / 1000.0)
 
 
-#  RADAR — OSBEntity (FalconSharedMemoryArea, BMS 4.38)
-#  Offset 0x0C78 · 40 bytes/entité · max 150
-import math as _math
+#  DATALINK L16 — via StringData (FalconSharedMemoryAreaString, BMS 4.38)
+#
+#  Structure StringData (depuis FlightData.h) :
+#    uint32 VersionNum
+#    uint32 NoOfStrings
+#    uint32 dataSize
+#    Pour chaque string :
+#      uint32 strId      (index dans enum StringIdentifier)
+#      uint32 strLength  (longueur sans \0)
+#      char   strData[strLength+1]
+#
+#  StringIdentifier::NavPoint = 30
+#  Format NavPoint : "NP:<idx>,<type>,<x>,<y>,<z>,<grnd_elev>;"
+#  Types : WP=waypoint, DL=datalink L16, MK=markpoint, CB=bullseye, etc.
+#
+import math as _math  # alias local
 
-_ENT_NAMES={1:"F-16",2:"F-15",3:"F/A-18",4:"A-10",5:"F-117",
-            6:"MiG-29",7:"Su-27",8:"MiG-21",9:"MiG-23",10:"Su-25",
-            20:"SA-2",21:"SA-3",22:"SA-6",23:"SA-8",24:"SA-10",25:"SA-11",30:"Helo",40:"Transport"}
+STRING_ID_NAVPOINT = 30   # enum StringIdentifier::NavPoint
 
-def _find_drawing_data_base(ptr1: int, ptr2: int) -> tuple:
-    """Cherche l'offset DrawingData dans toutes les zones SHM connues."""
-    candidates = []
-    # Toutes les zones ouvertes par BMS
-    for name, ptr in bms.shm_ptrs.items():
-        if not ptr: continue
-        for off in [0x000, 0x100, 0x200, 0x300, 0x400, 0x500,
-                    0x600, 0x700, 0x800, 0x900, 0xA00, 0xB00,
-                    0xC00, 0xD00, 0xE00, 0xF00,
-                    0x1000, 0x1200, 0x1500, 0x1800, 0x1E00,
-                    0x2000, 0x2400, 0x2800, 0x2BD0]:
-            candidates.append((ptr, off, f"{name}+0x{off:X}"))
-    # Fallback ptr1/ptr2
-    for ptr, off, lbl in [(ptr1, 0x2BD0, "ptr1+0x2BD0"), (ptr2, 0x000, "ptr2+0x000"),
-                          (ptr2, 0x100, "ptr2+0x100"), (ptr2, 0x200, "ptr2+0x200")]:
-        if ptr and (ptr, off, lbl) not in candidates:
-            candidates.append((ptr, off, lbl))
-    for base, off, label in candidates:
-        if not base: continue
-        b = safe_read(base + off, 4)
-        if b is None: 
-            logger.debug(f"  scan {label}: inaccessible")
-            continue
-        nb = struct.unpack('<i', b)[0]
-        if 1 <= nb <= 50:  # nb entités plausible: entre 1 et 50
-            # Vérifier que les coordonnées de la 1ère entité sont en Corée
-            blob = safe_read(base + off + 4, 8)
-            if blob:
-                lr, lo = struct.unpack('<ff', blob)
-                import math as _m
-                if 0.4 < abs(lr) < 1.0 and 2.0 < abs(lo) < 2.5:
-                    logger.info(f"DrawingData TROUVE: {label} nb={nb} lat={_m.degrees(lr):.2f} lon={_m.degrees(lo):.2f}")
-                    return base, off
-                else:
-                    logger.debug(f"  scan {label}: nb={nb} mais coords hors Corée ({lr:.3f},{lo:.3f})")
-            logger.debug(f"  scan {label}: nb={nb} mais blob illisible")
-        else:
-            logger.debug(f"  scan {label}: nb={nb} invalide")
-    return None, None
+def _read_string_data(ptr_str: int) -> list:
+    """
+    Lit FalconSharedMemoryAreaString et retourne la liste des NavPoints DL.
+    Retourne [] si inaccessible ou vide.
+    """
+    if not ptr_str:
+        return []
+    # Lire l'en-tête : VersionNum(4) + NoOfStrings(4) + dataSize(4)
+    hdr = safe_read(ptr_str, 12)
+    if not hdr or len(hdr) < 12:
+        return []
+    try:
+        _ver, no_strings, data_size = struct.unpack_from('<III', hdr, 0)
+    except Exception:
+        return []
+    if no_strings == 0 or no_strings > 500 or data_size > 4 * 1024 * 1024:
+        return []
+    # Lire tout le blob StringData
+    blob = safe_read(ptr_str + 12, data_size)
+    if not blob or len(blob) < data_size:
+        return []
+    navpoints = []
+    off = 0
+    for _ in range(no_strings):
+        if off + 8 > len(blob):
+            break
+        try:
+            str_id, str_len = struct.unpack_from('<II', blob, off)
+            off += 8
+            if off + str_len + 1 > len(blob):
+                break
+            raw = blob[off:off + str_len].decode('utf-8', errors='replace')
+            off += str_len + 1  # +1 pour le \0
+            if str_id == STRING_ID_NAVPOINT:
+                navpoints.append(raw)
+        except Exception:
+            break
+    return navpoints
+
+
+def _parse_navpoint_dl(raw: str, own_lat=None, own_lon=None) -> Optional[dict]:
+    """
+    Parse une entrée NavPoint BMS et retourne un contact DL si type=DL.
+    Format : "NP:<idx>,<type>,<x>,<y>,<z>,<grnd_elev>;"
+    x,y = coordonnées BMS en pieds (North, East)
+    z   = altitude en dizaines de pieds
+    """
+    try:
+        # Extraire le bloc NP:...;
+        import re as _re
+        m = _re.search(r'NP:(\d+),([A-Z]+),([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+);', raw)
+        if not m:
+            return None
+        idx  = int(m.group(1))
+        typ  = m.group(2)
+        x    = float(m.group(3))   # North ft
+        y    = float(m.group(4))   # East ft
+        z    = float(m.group(5))   # alt × 10 ft
+        if typ != 'DL':
+            return None
+        lat, lon = bms_to_latlon(x, y)
+        if not (25 <= lat <= 50 and 110 <= lon <= 145):
+            return None
+        if own_lat is not None and own_lon is not None:
+            if abs(lat - own_lat) < 0.002 and abs(lon - own_lon) < 0.002:
+                return None
+        return {
+            "lat":      round(lat, 5),
+            "lon":      round(lon, 5),
+            "alt":      round(abs(z) * 10),   # dizaines → pieds
+            "camp":     1,                     # L16 = toujours alliés
+            "type_name": "L16",
+            "callsign": f"DL{idx:02d}",
+            "heading":  0,
+            "speed":    0,
+        }
+    except Exception:
+        return None
+
 
 def get_radar_contacts(ptr1: int, own_lat=None, own_lon=None, ptr2: int = 0) -> list:
-    """Lit DrawingData via safe_read — cherche l'offset automatiquement."""
-    global _DD_CANDIDATES
-    if not ptr1: return []
-    # Détermination automatique de l'offset au premier appel
-    if _DD_CANDIDATES is None:
-        logger.info("Scan DrawingData en cours...")
-        found_base, found_off = _find_drawing_data_base(ptr1, ptr2)
-        if found_base:
-            _DD_CANDIDATES = (found_base, found_off)
-            logger.info(f"DrawingData lock: base={hex(found_base)} off=0x{found_off:X}")
-        else:
-            _DD_CANDIDATES = False
-            logger.warning("DrawingData: offset introuvable par scan — datalink désactivé")
-    if not _DD_CANDIDATES:
+    """
+    Lit les contacts L16/Datalink depuis StringData (NavPoint type=DL).
+    Source officielle SDK BMS 4.38 : FalconSharedMemoryAreaString.
+    """
+    ptr_str = bms.shm_ptrs.get("FalconSharedMemoryAreaString") if bms.shm_ptrs else None
+    if not ptr_str:
         return []
-    dd_base, dd_off = _DD_CANDIDATES
-    b = safe_read(dd_base + dd_off, 4)
-    if b is None:
-        logger.warning(f"DrawingData nb inaccessible @ 0x{dd_base+dd_off:X} — reset scan")
-        _DD_CANDIDATES = None
+    navpoints = _read_string_data(ptr_str)
+    if not navpoints:
         return []
-    nb_raw = struct.unpack('<i', b)[0]
-    logger.debug(f"DrawingData nb_raw={nb_raw}")
-    if nb_raw <= 0 or nb_raw > DRAWING_ENTITY_MAX: return []
-    blob = safe_read(dd_base + dd_off + 4, nb_raw * DRAWING_ENTITY_SIZE)
-    if blob is None:
-        logger.warning("DrawingData blob: lecture impossible")
-        return []
-    assert isinstance(blob, (bytes, bytearray))  # narrow type for static analysis
-    res: list = []
-    for i in range(nb_raw):
-        try:
-            off = i * DRAWING_ENTITY_SIZE
-            lat_r, lon_r, z, et, ca, hr, sp = struct.unpack_from('<fffiiif', blob, off)
-            lb = blob[off+32:off+40].split(b'\x00')[0].decode('ascii', errors='replace').strip()
-            if lat_r == 0.0 and lon_r == 0.0: continue
-            if not 1 <= ca <= 4: continue
-            lat = _math.degrees(lat_r); lon = _math.degrees(lon_r)
-            if not (25 <= lat <= 50 and 110 <= lon <= 145): continue
-            if own_lat and own_lon and abs(lat-own_lat)<0.002 and abs(lon-own_lon)<0.002: continue
-            res.append({"lat": round(lat,5), "lon": round(lon,5),
-                        "alt": round(abs(z)/100)*100, "camp": int(ca),
-                        "type_name": _ENT_NAMES.get(int(et), f"T{et}"),
-                        "callsign": lb,
-                        "heading": round(_math.degrees(hr)%360, 1),
-                        "speed": round(sp)})
-        except Exception as ex:
-            logger.debug(f"DrawingData[{i}]: {ex}")
-    logger.debug(f"DrawingData: {len(res)}/{nb_raw} contacts valides")
-    return res
+    result = []
+    for raw in navpoints:
+        c = _parse_navpoint_dl(raw, own_lat=own_lat, own_lon=own_lon)
+        if c:
+            result.append(c)
+    return result
 
 
 @app.websocket("/ws")
@@ -883,9 +946,19 @@ async def ws_endpoint(websocket: WebSocket):
     ws_clients.append(websocket)
     try:
         await websocket.send_text(json.dumps({"type":"status","data":{"connected": bms.connected}}))
-        while True: await websocket.receive_text()
+        while True:
+            try:
+                # receive_text avec timeout — détecte les connexions mortes
+                msg = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+            except asyncio.TimeoutError:
+                # ping pour maintenir la connexion
+                try: await websocket.send_text('{"type":"ping"}')
+                except Exception: break
     except WebSocketDisconnect:
-        if websocket in ws_clients: ws_clients.remove(websocket)
+        pass
+    finally:
+        try: ws_clients.remove(websocket)
+        except ValueError: pass
 
 
 AP_EXTRA = {
@@ -971,7 +1044,10 @@ async def get_mission(): return mission_data
 async def upload_mission(file: UploadFile = File(...)):
     global mission_data
     try:
-        content = (await file.read()).decode("latin-1")
+        raw = await file.read()
+        if len(raw) > 1024 * 1024:  # 1 MB max
+            return {"status": "error", "message": "Fichier trop volumineux (max 1 MB)"}
+        content = raw.decode("latin-1")
         cfg = configparser.RawConfigParser(); cfg.optionxform = str  # type: ignore[assignment]
         cfg.read_string(content)
         route, threats, fplan = [], [], []
@@ -998,7 +1074,8 @@ async def upload_mission(file: UploadFile = File(...)):
                                 if 30.0 <= lat <= 44.0 and 120.0 <= lon <= 135.0:
                                     threats.append({"lat":lat,"lon":lon,"name":name_ppt,"range_nm":range_nm,"range_m":range_m,"num":ppt_num,"index":len(threats)})
                             else:                       route.append({"lat":lat,"lon":lon,"alt":z,"index":len(route)})
-                    except: pass
+                    except Exception:
+                        pass
         mission_data = {"route":route,"threats":threats,"flightplan":fplan}
         return {"status":"ok"}
     except Exception as e:
@@ -1034,7 +1111,7 @@ def _find_latest_ini() -> tuple[str, float]:
     files = []
     for pat in patterns:
         try: files.extend(_glob.glob(pat))
-        except: pass
+        except Exception: pass
     if not files:
         return "", 0.0
     best = max(files, key=os.path.getmtime)
@@ -1077,7 +1154,8 @@ def _parse_ini_file(path: str) -> dict:
                                                     "num": ppt_num, "index": len(threats)})
                             else:
                                 route.append({"lat": lat, "lon": lon, "alt": z, "index": len(route)})
-                    except: pass
+                    except Exception:
+                        pass
         result = {"route": route, "threats": threats, "flightplan": fplan}
         mission_data = result
         logger.info(f"INI auto-chargé: {os.path.basename(path)} — {len(route)} steerpoints, {len(threats)} PPT")
@@ -1089,15 +1167,22 @@ def _parse_ini_file(path: str) -> dict:
 async def _ini_watcher_loop():
     """Tâche asyncio: surveille et charge automatiquement le dernier .ini BMS."""
     global _ini_last_path, _ini_last_mtime
+    _ini_startup = _time.time()
     while True:
         try:
             path, mtime = _find_latest_ini()
+            # Ignorer les .ini trop anciens au premier démarrage (> 30 min)
+            _age = _time.time() - mtime
+            _is_first = _ini_last_path == ""
             if path and (path != _ini_last_path or mtime > _ini_last_mtime + 1):
-                _ini_last_path = path
-                _ini_last_mtime = mtime
-                _parse_ini_file(path)
-        except Exception as e:
-            logger.debug(f"INI watcher: {e}")
+                if _is_first and _age > 1800:
+                    pass  # INI trop ancien au premier démarrage — ignoré
+                else:
+                    _ini_last_path = path
+                    _ini_last_mtime = mtime
+                    _parse_ini_file(path)
+        except Exception:
+            pass
         await asyncio.sleep(3)  # vérifier toutes les 3s
 
 
@@ -1121,7 +1206,7 @@ HTML = r"""<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;background:#060a12}
-#map{position:absolute;inset:0;bottom:72px}
+#map{position:absolute;inset:0;bottom:72px;contain:layout;will-change:transform}
 
 /* ═══ TOOLBAR ═════════════════════════════════════════════════════ */
 #toolbar{
@@ -1134,6 +1219,7 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   padding:10px 7px;
   display:flex;flex-direction:column;gap:3px;
   box-shadow:0 24px 60px rgba(0,0,0,.8),inset 0 1px 0 rgba(74,222,128,.08);
+  will-change:transform;
 }
 #toolbar::before{
   content:'';position:absolute;left:0;top:10px;bottom:10px;width:2px;
@@ -1554,7 +1640,9 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 
 /* ═══ TAB PANELS ════════════════════════════════════════════════════ */
 .tab-panel{
-  position:fixed;left:0;right:0;bottom:72px;z-index:1990;
+  position:fixed;
+  will-change:transform;
+  contain:layout style;left:0;right:0;bottom:72px;z-index:1990;
   background:rgba(2,5,12,.99);
   backdrop-filter:blur(24px);
   border-top:1px solid rgba(74,222,128,.15);
@@ -1656,7 +1744,15 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   border-bottom:2px solid transparent;transition:all .15s;border-left:1px solid rgba(255,255,255,.04);
 }
 .kb-tab:hover{color:#94a3b8;background:rgba(255,255,255,.02)}
-.kb-tab.active{color:#fbbf24;border-bottom-color:#fbbf24}
+.kb-tab.active{color:var(--kt,#fbbf24);border-bottom-color:var(--kt,#fbbf24)}
+.kb-field-group{display:flex;flex-direction:column;gap:3px}
+.kb-field-lbl{font-size:9px;font-weight:700;color:#475569;letter-spacing:1.5px;text-transform:uppercase}
+.kb-input{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:2px;
+  padding:6px 10px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:12px;
+  outline:none;width:100%;transition:border-color .2s}
+.kb-input:focus{border-color:rgba(96,165,250,.4)}
+.kb-9l-num{font-family:'Consolas','Courier New',monospace;font-size:13px;font-weight:700;
+  color:#f97316;width:20px;text-align:right;align-self:flex-end;padding-bottom:6px}
 .kb-body{flex:1;overflow:hidden;position:relative}
 .kb-page{position:absolute;inset:0;overflow-y:auto;padding:16px 20px;display:none}
 .kb-page.active{display:block}
@@ -1753,52 +1849,120 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 .brief-placeholder-txt{font-family:system-ui,sans-serif;font-size:11px;font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase}
 #briefingFileInput{display:none}
 
-/* ═══ MOBILE / TACTILE ══════════════════════════════════════════ */
-/* Touch targets minimum 44px */
-.tab-btn, .tbtn2 { min-height:44px }
-.tool-btn        { min-height:44px; min-width:44px }
-#settingsBtn     { min-width:36px; min-height:22px }
+/* ═══ RESPONSIVE & TACTILE ══════════════════════════════════════ */
 
-/* Toolbar escamotable sur mobile (portrait étroit) */
+/* ── Cibles tactiles minimum (WCAG 2.5.5) ── */
+.tab-btn,.tbtn2   { min-height:48px }
+.tool-btn         { min-height:48px; min-width:48px }
+#settingsBtn      { min-width:40px; min-height:28px }
+.kb-tab           { min-height:40px; padding:0 12px }
+.layer-row        { min-height:36px }
+
+/* ── Tablet paysage (768px+) — layout optimisé ── */
+@media (min-width:768px) {
+  .tool-btn     { width:44px; height:44px }
+  .tab-label    { font-size:12px }
+  .gps-val      { font-size:16px }
+  .gps-lbl      { font-size:11px }
+  /* Briefing sidebar plus large */
+  .brief-sidebar{ width:240px }
+}
+
+/* ── Grand écran (1200px+) ── */
+@media (min-width:1200px) {
+  #toolbar      { top:100px }
+  .tab-label    { font-size:13px; letter-spacing:.5px }
+  .gps-val      { font-size:18px }
+  .brief-sidebar{ width:280px }
+  .brev-grid    { grid-template-columns:repeat(3,1fr) }
+}
+
+/* ── Mobile portrait (≤600px) ── */
 @media (max-width:600px) {
+  /* Toolbar horizontal en bas */
   #toolbar{
     top:auto;bottom:72px;left:50%;transform:translateX(-50%);
     flex-direction:row;padding:6px 8px;gap:3px;
-    border-top:none;border-left:2px solid rgba(74,222,128,.35);
     border-top:2px solid rgba(74,222,128,.35);
+    border-left:none;
   }
   .tbdiv{width:1px;height:24px;margin:0 2px;
     background:linear-gradient(180deg,transparent,rgba(74,222,128,.15),transparent)}
-  /* Panels full height sur mobile */
-  #panel-charts,#panel-briefing{height:calc(100vh - 72px)}
-  #panel-kneeboard{height:calc(100vh - 72px)}
+  /* Panels full height */
+  #panel-charts,#panel-briefing,#panel-kneeboard{height:calc(100vh - 72px)}
+  /* GPS responsive */
   #panel-gps .gps-row{flex-wrap:wrap}
   .gps-field{flex:0 0 50%;border-right:none;border-bottom:1px solid rgba(255,255,255,.04)}
-  /* Settings panel full width sur mobile */
+  /* Settings full width */
   #settingsPanel{left:8px;right:8px;width:auto}
-  /* Tab labels plus grands */
-  .tab-label{font-size:10px;letter-spacing:1px}
-  /* SysBar IP masqué sur très petit écran */
+  /* Tab labels */
+  .tab-label{font-size:11px;letter-spacing:.5px}
+  /* SysBar compressé */
   .sys-ip{display:none}
+  /* Police lisible sur petit écran */
+  .dl-callsign{font-size:11px}
+  .dl-data    {font-size:10px}
+  .ap-label   {font-size:10px}
+  /* Briefing sidebar réduite */
+  .brief-sidebar{width:160px}
+  .brief-file-name{font-size:11px}
 }
 
+/* ── Très petit (≤400px) ── */
 @media (max-width:400px) {
-  .sys-center{display:none}
-  .sys-fc{display:none}
+  .sys-center,.sys-fc{display:none}
+  .tab-label{font-size:10px}
+  .brief-sidebar{width:130px}
 }
 
-/* Touch feedback */
-.tab-btn:active,.tbtn2:active{background:rgba(74,222,128,.12)!important}
-.tool-btn:active{background:rgba(74,222,128,.15)!important;transform:translateX(3px)}
+/* ── Notch / safe-area (iPhone X+) ── */
+@supports (padding-bottom:env(safe-area-inset-bottom)){
+  #tabBar{padding-bottom:env(safe-area-inset-bottom)}
+  #sysBar{padding-bottom:env(safe-area-inset-bottom)}
+}
+
+/* ── Touch feedback (animation GPU) ── */
+.tab-btn:active,.tbtn2:active{
+  background:rgba(74,222,128,.12)!important;
+  transform:scale(.97);
+  transition:transform .05s;
+}
+.tool-btn:active{
+  background:rgba(74,222,128,.15)!important;
+  transform:translateX(3px) scale(.95);
+}
 .brief-file-item:active{background:rgba(74,222,128,.08)!important}
 .ap-ils-chip:active{background:rgba(251,191,36,.12)!important}
+.kb-tab:active{opacity:.7}
 
-/* Scrollbars plus larges sur tactile */
+/* ── Pointeur grossier (tactile) ── */
 @media (pointer:coarse){
-  .brief-file-list::-webkit-scrollbar{width:6px}
-  .kb-page::-webkit-scrollbar{width:6px}
-  /* Prevent accidental text selection on long press */
-  #map,#tabBar,#sysBar,#toolbar{user-select:none;-webkit-user-select:none}
+  /* Scrollbars plus larges */
+  .brief-file-list::-webkit-scrollbar{width:8px}
+  .kb-page::-webkit-scrollbar        {width:8px}
+  /* Pas de sélection accidentelle */
+  #map,#tabBar,#sysBar,#toolbar{
+    user-select:none;-webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  /* Hover désactivé (pas pertinent au tactile) */
+  .tool-btn:hover{transform:none}
+  /* Touch action optimisé */
+  #map{touch-action:pan-x pan-y pinch-zoom}
+  .tool-btn,.tab-btn,.kb-tab{touch-action:manipulation}
+}
+
+/* ── Paysage mobile (hauteur réduite) ── */
+@media (max-height:500px) and (orientation:landscape){
+  #toolbar{top:60px}
+  #sysBar{height:18px;font-size:8px}
+  .tab-btn{min-height:40px}
+  .gps-val{font-size:13px}
+}
+
+/* ── Réduction mouvement (accessibilité) ── */
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
 </style></head><body>
 <div id="map"></div>
@@ -1865,19 +2029,14 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
     </svg>
   </button>
   
-  <button class="tool-btn" id="radarBtn" title="Contacts datalink">
+  <button class="tool-btn" id="radarBtn" title="Contacts datalink L16">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/>
       <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
       <line x1="12" y1="2" x2="12" y2="6"/>
     </svg>
   </button>
-  
-  <button class="tool-btn" id="calBtn" title="Calibrer les pistes" onclick="openCalPanel()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
-    </svg>
-  </button>
+
   
   <button class="tool-btn active" id="followBtn" title="Centrer sur l'avion (actif)">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1998,9 +2157,8 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   <div class="layer-row"><input type="radio" name="layer" id="lTerrain" value="terrain"><label for="lTerrain">Terrain</label></div>
   <div class="tool-divider" style="margin:8px 0"></div>
   <h4 style="margin-top:4px">Affichage</h4>
-  <div class="layer-row"><input type="checkbox" id="chkPPT" checked><label for="chkPPT">Cercles PPT</label></div>
-  <div class="layer-row"><input type="checkbox" id="chkAirports" checked><label for="chkAirports">Aéroports</label></div>
-  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkApName"><label for="chkApName" style="font-size:10px;color:#94a3b8">Nom complet</label></div>
+  <div class="layer-row"><input type="checkbox" id="chkDMZ" checked><label for="chkDMZ">DMZ</label></div>
+  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkApName"><label for="chkApName" style="font-size:10px;color:#94a3b8">Nom base aérienne</label></div>
   <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkRunways" checked><label for="chkRunways" style="font-size:10px;color:#94a3b8">Pistes</label></div>
 </div>
 
@@ -2049,9 +2207,16 @@ layers.dark.on('tileerror', function(){
 });
 map.attributionControl.setPrefix('');
 
-L.polyline([[38.0,124.6],[38.1,125.0],[38.3,125.5],[38.2,126.0],[38.3,126.5],[38.4,127.0],
-            [38.5,127.5],[38.3,128.0],[38.4,128.5],[38.5,129.0],[38.6,129.5],[38.7,130.0]],
-  {color:'#dc2626',weight:1.8,opacity:.5,dashArray:'8 5'}).addTo(map);
+// DMZ — 38ème parallèle Corée (coordonnées corrigées)
+const _dmzLine = L.polyline([
+  [38.31,125.10],[38.27,125.40],[38.25,125.68],[38.27,126.00],
+  [38.25,126.35],[38.18,126.65],[38.12,126.95],[38.05,127.18],
+  [38.00,127.45],[37.97,127.75],[38.00,128.02],[38.10,128.30],
+  [38.20,128.55],[38.35,128.75],[38.45,129.00],[38.55,129.20]],
+  {color:'#dc2626',weight:2,opacity:.7,dashArray:'10 5'}).addTo(map);
+document.getElementById('chkDMZ').addEventListener('change',function(){
+  this.checked ? _dmzLine.addTo(map) : map.removeLayer(_dmzLine);
+});
 
 const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#1e293b'];
 let activeColor='#3b82f6';
@@ -2319,10 +2484,7 @@ document.getElementById('pptBtn').addEventListener('click',function(){
   pptCircles.forEach(c=>v?c.addTo(map):map.removeLayer(c));
   const chk=document.getElementById('chkPPT');if(chk)chk.checked=v;
 });
-document.getElementById('chkPPT').addEventListener('change',function(){
-  pptCircles.forEach(c=>this.checked?c.addTo(map):map.removeLayer(c));
-  document.getElementById('pptBtn').classList.toggle('active',this.checked);
-});
+// chkPPT: géré uniquement via le bouton toolbar pptBtn
 
 document.getElementById('airportBtn').addEventListener('click',function(){
   const v=this.classList.toggle('active');
@@ -2332,10 +2494,7 @@ document.getElementById('airportBtn').addEventListener('click',function(){
   runwayLayers.forEach(l=>{try{v?l.addTo(map):map.removeLayer(l);}catch(e){}});
   const chkR=document.getElementById('chkRunways');if(chkR)chkR.checked=v;
 });
-document.getElementById('chkAirports').addEventListener('change',function(){
-  airportMarkers.forEach(m=>this.checked?m.addTo(map):map.removeLayer(m));
-  document.getElementById('airportBtn').classList.toggle('active',this.checked);
-});
+// chkAirports: géré uniquement via le bouton toolbar airportBtn
 
 document.getElementById('uploadBtn').addEventListener('click',()=>document.getElementById('fileInput').click());
 document.getElementById('fileInput').addEventListener('change',async e=>{
@@ -2390,7 +2549,7 @@ function loadMission(){
       const c='#ef4444';
       d.threats.forEach(t=>{
         const circ=L.circle([t.lat,t.lon],{radius:(t.range_m||t.range_nm*1852),color:c,fillColor:c,fillOpacity:.05,weight:1.2,dashArray:'5 4'});
-        if(document.getElementById('chkPPT').checked)circ.addTo(map);
+        if(document.getElementById('pptBtn')?.classList.contains('active'))circ.addTo(map);
         pptCircles.push(circ);
         missionMarkers.push(L.circleMarker([t.lat,t.lon],{radius:5,color:'#fff',fillColor:c,fillOpacity:1,weight:2}).addTo(map));
         const nm=t.name?t.name.trim():'';
@@ -2467,20 +2626,33 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     apIconMarkers.push(mIcon);
 
     const apIcao = ap.icao.startsWith('KP-') ? ap.name : ap.icao;
-    const tacanPart = ap.tacan ? `<span style="color:rgba(148,163,184,.7);font-size:9px;margin-left:4px">${ap.tacan}</span>` : '';
     const labelHtml = `<div style="pointer-events:none;line-height:1.2">
       <div style="font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
         color:${col};letter-spacing:.8px;text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);
-        white-space:nowrap">${apIcao}${tacanPart}</div>
-      <div style="font-family:system-ui,sans-serif;font-size:10px;font-weight:600;
-        color:rgba(148,163,184,.75);letter-spacing:.2px;text-shadow:0 1px 3px #000;
-        white-space:nowrap">${ap.name}</div>
+        white-space:nowrap">${apIcao}</div>
     </div>`;
     const mLabel=L.marker([ap.lat,ap.lon],{
       icon:L.divIcon({html:labelHtml,className:'',iconSize:[160,26],iconAnchor:[-8,6]}),
       zIndexOffset:-100,interactive:true
     }).addTo(map);
-    mLabel.on('click',()=>mIcon.openPopup());
+    mLabel.on('click',e=>{
+      if(rulerActive){
+        L.DomEvent.stopPropagation(e);
+        if(!rStart){
+          rStart=L.latLng(ap.lat,ap.lon);
+          rDot=L.circleMarker(rStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
+        } else { clearRuler(); }
+      } else { mIcon.openPopup(); }
+    });
+    mIcon.on('click',e=>{
+      if(rulerActive){
+        L.DomEvent.stopPropagation(e);
+        if(!rStart){
+          rStart=L.latLng(ap.lat,ap.lon);
+          rDot=L.circleMarker(rStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
+        } else { clearRuler(); }
+      } else { mIcon.openPopup(); }
+    });
     apLabelMarkers.push(mLabel);
     airportMarkers.push(mIcon,mLabel);
     apNameMarkers.push(mLabel);
@@ -2490,6 +2662,17 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     runwaysVisible=this.checked;
     runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
   });
+
+  // chkApName — afficher/masquer les labels ICAO des aéroports
+  document.getElementById('chkApName').addEventListener('change',function(){
+    apLabelMarkers.forEach(m=>{
+      try{ this.checked ? m.addTo(map) : map.removeLayer(m); }catch(e){}
+    });
+  });
+  // Etat initial : labels visibles si coché
+  if(!document.getElementById('chkApName').checked){
+    apLabelMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
+  }
 });
 
 const RUNWAY_DATA = [
@@ -2673,7 +2856,7 @@ function connectWS(){
       }
     }
     if(msg.type==='radar')updateRadarContacts(msg.data);
-    if(msg.type==='acmi')updateAcmiContacts(msg.data);
+    if(msg.type==='acmi'){_lastAcmiContacts=msg.data;updateAcmiContacts(msg.data);}
     if(msg.type==='status'){
       const on=msg.data.connected;
       document.getElementById('dot').className='dot '+(on?'on':'off');
@@ -2684,6 +2867,20 @@ function connectWS(){
 }
 connectWS();
 
+// ── Touch listeners passifs — améliore le scroll sur mobile ──────
+try {
+  const _passiveTest = Object.defineProperty({}, 'passive', {get: function(){ return true; }});
+  window.addEventListener('testPassive', null, _passiveTest);
+  window.removeEventListener('testPassive', null, _passiveTest);
+  // Appliquer le passive aux events tactiles de la carte
+  const _mapEl = document.getElementById('map');
+  if (_mapEl) {
+    _mapEl.addEventListener('touchstart', function(){}, {passive:true});
+    _mapEl.addEventListener('touchmove',  function(){}, {passive:true});
+  }
+} catch(e) {}
+
+
 // Appliquer le thème sauvegardé au démarrage
 (async function applyThemeOnLoad(){
   try {
@@ -2692,12 +2889,15 @@ connectWS();
   } catch(e) {}
 })();
 
-let dlMarkers=[],dlVisible=false;
+let dlMarkers=[],dlVisible=true;
+// Datalink actif par défaut
+document.getElementById('radarBtn').classList.add('active');
 document.getElementById('radarBtn').addEventListener('click',()=>{
   dlVisible=!dlVisible;
   document.getElementById('radarBtn').classList.toggle('active',dlVisible);
   dlMarkers.forEach(m=>{try{if(dlVisible)m.addTo(map);else map.removeLayer(m);}catch(e){}});
 });
+
 
 function dlSym(camp,col,sz){
   sz=sz||22;
@@ -2736,71 +2936,100 @@ function dlVec(hdg,col){
 }
 
 function updateRadarContacts(contacts){
+  _lastDlContacts = contacts;
   dlMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});dlMarkers=[];
   if(!contacts||!contacts.length)return;
   if(!dlVisible){dlVisible=true;document.getElementById('radarBtn').classList.add('active');}
+  // Taille adaptée au zoom (petite à zoom faible, plus grande en rapproché)
+  const z = map.getZoom();
+  const sz = z >= 10 ? 16 : z >= 8 ? 12 : 9;
   contacts.forEach(c=>{
     if(c.lat==null||c.lon==null)return;
     const camp=c.camp;
     const col=camp===1?'#4ade80':camp===2?'#f87171':'#fbbf24';
     const cls=camp===1?'friend':camp===2?'foe':'unknwn';
-    const sz=22;
 
     const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({
       html:dlSym(camp,col,sz),className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
     }),zIndexOffset:camp===2?200:100});
     if(dlVisible)mS.addTo(map);dlMarkers.push(mS);
 
-    if(c.heading!=null){
+    // Vecteur cap uniquement si assez zoomé
+    if(c.heading!=null && z>=8){
       const mV=L.marker([c.lat,c.lon],{icon:L.divIcon({
-        html:dlVec(c.heading,col),className:'',iconSize:[60,60],iconAnchor:[30,30]
+        html:dlVec(c.heading,col),className:'',iconSize:[40,40],iconAnchor:[20,20]
       }),zIndexOffset:50});
       if(dlVisible)mV.addTo(map);dlMarkers.push(mV);
     }
 
-    const call=c.callsign||c.type_name||'';
-    const altFL=c.alt!=null&&c.alt>0?'FL'+String(Math.round(c.alt/100)).padStart(3,'0'):'';
-    const spdStr=c.speed!=null&&c.speed>10?Math.round(c.speed)+'kt':'';
-    const hdgStr=c.heading!=null?String(Math.round(c.heading)).padStart(3,'0')+'°':'';
-    const dataLine=[altFL,spdStr,hdgStr].filter(Boolean).join('\u00a0·\u00a0');
-
-    const lH=`<div class="dl-block">
-      ${call?`<div class="dl-callsign ${cls}">${call}</div>`:''}
-      ${dataLine?`<div class="dl-data ${cls}">${dataLine}</div>`:''}
-    </div>`;
-    const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({
-      html:lH,className:'',iconSize:[120,36],iconAnchor:[-sz/2-2,18]
-    }),zIndexOffset:camp===2?201:101});
-    if(dlVisible)mL.addTo(map);dlMarkers.push(mL);
+    // Label uniquement si assez zoomé
+    if(z >= 7){
+      const call=c.callsign||c.type_name||'';
+      const altFL=c.alt!=null&&c.alt>0?'FL'+String(Math.round(c.alt/100)).padStart(3,'0'):'';
+      const spdStr=c.speed!=null&&c.speed>10?Math.round(c.speed)+'kt':'';
+      const hdgStr=c.heading!=null&&z>=9?String(Math.round(c.heading)).padStart(3,'0')+'°':'';
+      const dataLine=[altFL,spdStr,hdgStr].filter(Boolean).join('\u00a0·\u00a0');
+      const lH=`<div class="dl-block">
+        ${call?`<div class="dl-callsign ${cls}" style="font-size:${z>=9?11:10}px">${call}</div>`:''}
+        ${dataLine&&z>=8?`<div class="dl-data ${cls}">${dataLine}</div>`:''}
+      </div>`;
+      const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({
+        html:lH,className:'',iconSize:[110,30],iconAnchor:[-(sz/2+2),14]
+      }),zIndexOffset:camp===2?201:101});
+      if(dlVisible)mL.addTo(map);dlMarkers.push(mL);
+    }
   });
 }
 
+// Redessiner les contacts quand le zoom change
+map.on('zoomend', ()=>{
+  if(_lastDlContacts) updateRadarContacts(_lastDlContacts);
+  if(_lastAcmiContacts) updateAcmiContacts(_lastAcmiContacts);
+});
+let _lastDlContacts=[];
+let _lastAcmiContacts=null;
 
-// ── Contacts ACMI coalition (god-mode) ──────────────────────────
-let acmiMarkers=[];
+// ── Contacts ACMI coalition (TRTT — mode dieu) ───────────────────
+// Séparé du datalink L16 : bouton propre, toggle indépendant
+let acmiMarkers=[], acmiVisible=true;
+
 function updateAcmiContacts(contacts){
+  _lastAcmiContacts = contacts;
   acmiMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});acmiMarkers=[];
-  if(!contacts||!contacts.length)return;
+  if(!contacts||!contacts.length||!acmiVisible)return;
+  const z = map.getZoom();
+  const sz = z >= 10 ? 14 : z >= 8 ? 10 : 7;
   contacts.forEach(c=>{
     if(c.lat==null||c.lon==null)return;
-    const camp=c.camp;
-    const col=camp===1?'#4ade80':camp===2?'#f87171':'#fbbf24';
-    const cls=camp===1?'friend':camp===2?'foe':'unknwn';
-    const sz=20;
-    const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({html:dlSym(camp,col,sz),className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]}),zIndexOffset:camp===2?180:80});
+    // camp=3 (unknown) traité comme allié en solo — BMS injecte les couleurs tardivement
+    const camp = c.camp === 2 ? 2 : 1;
+    const col = '#4ade80'; // vert allié (ennemis exclus côté serveur)
+    const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({
+      html:dlSym(1,col,sz),className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
+    }),zIndexOffset:80,interactive:false});
     mS.addTo(map);acmiMarkers.push(mS);
-    if(c.heading!=null){
-      const mV=L.marker([c.lat,c.lon],{icon:L.divIcon({html:dlVec(c.heading,col),className:'',iconSize:[60,60],iconAnchor:[30,30]}),zIndexOffset:40});
+    // Vecteur cap si assez zoomé
+    if(c.heading!=null && z>=9){
+      const mV=L.marker([c.lat,c.lon],{icon:L.divIcon({
+        html:dlVec(c.heading,col),className:'',iconSize:[36,36],iconAnchor:[18,18]
+      }),zIndexOffset:40,interactive:false});
       mV.addTo(map);acmiMarkers.push(mV);
     }
-    const call=c.callsign||c.type_name||'';
-    const altFL=c.alt!=null&&c.alt>0?'FL'+String(Math.round(c.alt/100)).padStart(3,'0'):'';
-    const spdStr=c.speed!=null&&c.speed>10?Math.round(c.speed)+'kt':'';
-    const hdgStr=c.heading!=null?String(Math.round(c.heading)).padStart(3,'0')+'°':'';
-    const dataLine=[altFL,spdStr,hdgStr].filter(Boolean).join('\u00a0·\u00a0');
-    const lH=`<div class="dl-block">${call?`<div class="dl-callsign ${cls}" style="opacity:.85">${call}</div>`:''} ${dataLine?`<div class="dl-data ${cls}">${dataLine}</div>`:''}</div>`;
-    const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({html:lH,className:'',iconSize:[120,36],iconAnchor:[-sz/2-2,18]}),zIndexOffset:camp===2?181:81});
-    mL.addTo(map);acmiMarkers.push(mL);
+    // Label : callsign court + altitude — seulement si zoom >= 9
+    if(z >= 9){
+      const raw = c.callsign || c.type_name || '';
+      // Garder le type avion : "F-16CM-52" → "F-16", "Su-27" → "Su-27"
+      const call = raw.replace(/-\d+$/, '').trim();
+      const altFL = c.alt!=null&&c.alt>0 ? 'FL'+String(Math.round(c.alt/100)).padStart(3,'0') : '';
+      const lH=`<div class="dl-block">
+        ${call?`<div class="dl-callsign friend" style="font-size:10px;opacity:.8">${call}</div>`:''}
+        ${altFL?`<div class="dl-data friend">${altFL}</div>`:''}
+      </div>`;
+      const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({
+        html:lH,className:'',iconSize:[80,24],iconAnchor:[-(sz/2+2),10]
+      }),zIndexOffset:81,interactive:false});
+      mL.addTo(map);acmiMarkers.push(mL);
+    }
   });
 }
 
@@ -2974,7 +3203,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#layerPanel')&&!e.target.closest('#layerBtn'))
     document.getElementById('layerPanel').classList.remove('open');
 
-  if(!e.target.closest('#calPanel')&&!e.target.closest('#calBtn')&&!_calMode)
+  if(!e.target.closest('#calPanel')&&!_calMode)
     document.getElementById('calPanel').style.display='none';
 });
 </script>
@@ -3092,65 +3321,125 @@ document.addEventListener('click',e=>{
     </svg>
     <span class="kb-header-title">KNEEBOARD</span>
     <div class="kb-tabs">
-      <div class="kb-tab active" data-kbtab="brevity" onclick="switchKbTab('brevity',this)">BREVITY</div>
-      <div class="kb-tab" data-kbtab="freqs" onclick="switchKbTab('freqs',this)">FRÉQUENCES</div>
-      <div class="kb-tab" data-kbtab="notes" onclick="switchKbTab('notes',this)">NOTES</div>
+      <div class="kb-tab active" data-kbtab="comms"    style="--kt:#4ade80" onclick="switchKbTab('comms',this)">COMMS</div>
+      <div class="kb-tab"        data-kbtab="fplan"    style="--kt:#60a5fa" onclick="switchKbTab('fplan',this)">PLAN DE VOL</div>
+      <div class="kb-tab"        data-kbtab="notes"    style="--kt:#fbbf24" onclick="switchKbTab('notes',this)">NOTES</div>
+      <div class="kb-tab"        data-kbtab="cas"      style="--kt:#f97316" onclick="switchKbTab('cas',this)">9-LINE</div>
+      <div class="kb-tab"        data-kbtab="brevity"  style="--kt:#94a3b8" onclick="switchKbTab('brevity',this)">BREVITY</div>
     </div>
   </div>
   <div class="kb-body">
-    <!-- BREVITY -->
-    <div class="kb-page active" id="kb-brevity">
+
+    <!-- ── COMMS LADDER ── -->
+    <div class="kb-page active" id="kb-comms">
+      <table class="freq-table">
+        <thead><tr><th>RÔLE</th><th>UHF (MHz)</th><th>VHF / REMARQUE</th></tr></thead>
+        <tbody>
+          <tr><td>GUARD</td><td class="hi" style="color:#ef4444">243.000</td><td style="color:#ef4444">Urgence UHF</td></tr>
+          <tr><td>GUARD VHF</td><td class="hi" style="color:#ef4444">121.500</td><td style="color:#ef4444">Urgence VHF</td></tr>
+          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS</b></td><td class="hi">268.800</td><td>Alpha — Corée BMS</td></tr>
+          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS Bravo</b></td><td class="hi">265.400</td><td>Secondary</td></tr>
+          <tr><td>Tanker CH11</td><td class="hi">317.175</td><td>A/R standard</td></tr>
+          <tr><td>Tanker CH12</td><td class="hi">340.200</td><td>Backup</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Osan Tower</td><td class="hi">126.200</td><td>RKSO</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Osan Appr.</td><td class="hi">119.300</td><td>RKSO</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Gunsan Tower</td><td class="hi">122.100</td><td>RKJK</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Daegu Tower</td><td class="hi">126.200</td><td>RKTN</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Seoul AB</td><td class="hi">126.200</td><td>RKSM</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Incheon Tower</td><td class="hi">119.100</td><td>RKSI</td></tr>
+          <tr><td>ATC Centre</td><td class="hi">127.900</td><td>Seoul Centre</td></tr>
+          <tr><td>SAR / CSAR</td><td class="hi">282.800</td><td>Combat SAR</td></tr>
+          <tr><td>JTAC (def.)</td><td class="hi">305.000</td><td>Interop CAS</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── PLAN DE VOL ── -->
+    <div class="kb-page" id="kb-fplan">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">CALLSIGN / FLIGHT</div>
+          <input class="kb-input" id="kb-callsign" placeholder="VIPER 1-1" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">PACKAGE</div>
+          <input class="kb-input" id="kb-package" placeholder="ALPHA BRAVO" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">TOT</div>
+          <input class="kb-input" id="kb-tot" placeholder="14:30Z" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">TANKER / FREQ</div>
+          <input class="kb-input" id="kb-tanker" placeholder="SHELL 1 / 317.175" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">BULLSEYE</div>
+          <input class="kb-input" id="kb-bull-val" placeholder="270/45 NM" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">BINGO FUEL</div>
+          <input class="kb-input" id="kb-bingo" placeholder="3500 lbs" autocomplete="off">
+        </div>
+      </div>
+      <div class="kb-field-lbl" style="margin-bottom:6px">NOTES DE MISSION</div>
+      <textarea class="kb-notes" id="kb-fplan-ta" placeholder="Objectif, menaces, règles d'engagement…" style="height:120px"></textarea>
+    </div>
+
+    <!-- ── NOTES LIBRES ── -->
+    <div class="kb-page" id="kb-notes">
+      <textarea class="kb-notes" id="kb-notes-ta" placeholder="Notes libres…"></textarea>
+    </div>
+
+    <!-- ── 9-LINE CAS ── -->
+    <div class="kb-page" id="kb-cas">
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center">
+        <span class="kb-9l-num">1</span><div class="kb-field-group"><div class="kb-field-lbl">IP / HEADING TO TARGET</div><input class="kb-input kb-9l" id="kb-9l-1" placeholder="IP ALPHA / HDG 090" autocomplete="off"></div>
+        <span class="kb-9l-num">2</span><div class="kb-field-group"><div class="kb-field-lbl">ELEVATION</div><input class="kb-input kb-9l" id="kb-9l-2" placeholder="1250 ft MSL" autocomplete="off"></div>
+        <span class="kb-9l-num">3</span><div class="kb-field-group"><div class="kb-field-lbl">DESCRIPTION TARGET</div><input class="kb-input kb-9l" id="kb-9l-3" placeholder="T-72 en position, 3 véhicules" autocomplete="off"></div>
+        <span class="kb-9l-num">4</span><div class="kb-field-group"><div class="kb-field-lbl">LOCALISATION TARGET</div><input class="kb-input kb-9l" id="kb-9l-4" placeholder="Grid / MGRS / BRAA" autocomplete="off"></div>
+        <span class="kb-9l-num">5</span><div class="kb-field-group"><div class="kb-field-lbl">MARQUAGE TARGET</div><input class="kb-input kb-9l" id="kb-9l-5" placeholder="Laze / Smoke / IR" autocomplete="off"></div>
+        <span class="kb-9l-num">6</span><div class="kb-field-group"><div class="kb-field-lbl">FRIENDLY LOCATION</div><input class="kb-input kb-9l" id="kb-9l-6" placeholder="500m North of target" autocomplete="off"></div>
+        <span class="kb-9l-num">7</span><div class="kb-field-group"><div class="kb-field-lbl">EGRESS</div><input class="kb-input kb-9l" id="kb-9l-7" placeholder="West / RTB RKSO" autocomplete="off"></div>
+        <span class="kb-9l-num">8</span><div class="kb-field-group"><div class="kb-field-lbl">REMARQUES / THREATS</div><input class="kb-input kb-9l" id="kb-9l-8" placeholder="SA-13 au Nord, MANPADS" autocomplete="off"></div>
+        <span class="kb-9l-num">9</span><div class="kb-field-group"><div class="kb-field-lbl">JTAC CALL / FREQ</div><input class="kb-input kb-9l" id="kb-9l-9" placeholder="DARKSTAR 1 / 305.000" autocomplete="off"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="clearNineLines()" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:2px;padding:5px 14px;color:#f87171;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">EFFACER</button>
+        <button onclick="copyNineLines()" style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:2px;padding:5px 14px;color:#60a5fa;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">COPIER</button>
+      </div>
+    </div>
+
+    <!-- ── BREVITY ── -->
+    <div class="kb-page" id="kb-brevity">
       <div class="brev-grid">
         <div class="brev-item"><div class="brev-word">BOGEY</div><div class="brev-def">Contact aérien non identifié</div></div>
         <div class="brev-item"><div class="brev-word">BANDIT</div><div class="brev-def">Contact aérien ennemi confirmé</div></div>
         <div class="brev-item"><div class="brev-word">FRIENDLY</div><div class="brev-def">Contact aérien ami confirmé</div></div>
         <div class="brev-item"><div class="brev-word">SPIKE</div><div class="brev-def">Missile SAM en vol / radar lock ennemi</div></div>
-        <div class="brev-item"><div class="brev-word">BLIND</div><div class="brev-def">Pas de contact visuel avec wingman/élément</div></div>
-        <div class="brev-item"><div class="brev-word">VISUAL</div><div class="brev-def">Contact visuel confirmé (ami ou ennemi)</div></div>
+        <div class="brev-item"><div class="brev-word">BLIND</div><div class="brev-def">Pas de contact visuel avec wingman</div></div>
+        <div class="brev-item"><div class="brev-word">VISUAL</div><div class="brev-def">Contact visuel confirmé</div></div>
         <div class="brev-item"><div class="brev-word">BINGO</div><div class="brev-def">Carburant minimum pour RTB</div></div>
         <div class="brev-item"><div class="brev-word">WINCHESTER</div><div class="brev-def">Toutes munitions épuisées</div></div>
         <div class="brev-item"><div class="brev-word">FOX 1</div><div class="brev-def">Tir missile semi-actif (AIM-7)</div></div>
-        <div class="brev-item"><div class="brev-word">FOX 2</div><div class="brev-def">Tir missile à guidage IR (AIM-9)</div></div>
-        <div class="brev-item"><div class="brev-word">FOX 3</div><div class="brev-def">Tir missile actif (AIM-120 AMRAAM)</div></div>
-        <div class="brev-item"><div class="brev-word">GUNS</div><div class="brev-def">Tir canon (engagement BVR → WVR)</div></div>
-        <div class="brev-item"><div class="brev-word">MERGE</div><div class="brev-def">Engagement WVR — contact passé BRAA 0</div></div>
-        <div class="brev-item"><div class="brev-word">DEFENSIVE</div><div class="brev-def">Sous attaque, besoin d'appui immédiat</div></div>
-        <div class="brev-item"><div class="brev-word">PITBULL</div><div class="brev-def">AMRAAM en mode actif (auto-guidage)</div></div>
-        <div class="brev-item"><div class="brev-word">SKOSH</div><div class="brev-def">AIM-120 en mode actif — portée limite</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 2</div><div class="brev-def">Tir missile IR (AIM-9)</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 3</div><div class="brev-def">Tir missile actif (AIM-120)</div></div>
+        <div class="brev-item"><div class="brev-word">GUNS</div><div class="brev-def">Tir canon</div></div>
+        <div class="brev-item"><div class="brev-word">MERGE</div><div class="brev-def">Engagement WVR</div></div>
+        <div class="brev-item"><div class="brev-word">DEFENSIVE</div><div class="brev-def">Sous attaque — appui immédiat</div></div>
+        <div class="brev-item"><div class="brev-word">PITBULL</div><div class="brev-def">AMRAAM auto-guidage actif</div></div>
+        <div class="brev-item"><div class="brev-word">SKOSH</div><div class="brev-def">AIM-120 portée limite</div></div>
         <div class="brev-item"><div class="brev-word">BRAA</div><div class="brev-def">Bearing / Range / Altitude / Aspect</div></div>
-        <div class="brev-item"><div class="brev-word">BULLSEYE</div><div class="brev-def">Référence de navigation radio partagée</div></div>
-        <div class="brev-item"><div class="brev-word">ANGELS</div><div class="brev-def">Altitude en milliers de pieds (Angels 15 = 15 000 ft)</div></div>
-        <div class="brev-item"><div class="brev-word">CHERUBS</div><div class="brev-def">Altitude en centaines de pieds (< 1 000 ft)</div></div>
-        <div class="brev-item"><div class="brev-word">DECLARE</div><div class="brev-def">Demande d'identification d'un contact au GCI</div></div>
-        <div class="brev-item"><div class="brev-word">TALLY</div><div class="brev-def">Contact visuel sur bogey/bandit confirmé</div></div>
-        <div class="brev-item"><div class="brev-word">NO JOY</div><div class="brev-def">Pas de contact visuel sur bogey/bandit</div></div>
-        <div class="brev-item"><div class="brev-word">SNAP</div><div class="brev-def">Vecteur d'interception immédiat demandé</div></div>
+        <div class="brev-item"><div class="brev-word">BULLSEYE</div><div class="brev-def">Référence navigation partagée</div></div>
+        <div class="brev-item"><div class="brev-word">ANGELS</div><div class="brev-def">Altitude × 1000 ft</div></div>
+        <div class="brev-item"><div class="brev-word">CHERUBS</div><div class="brev-def">Altitude × 100 ft (&lt;1000)</div></div>
+        <div class="brev-item"><div class="brev-word">DECLARE</div><div class="brev-def">Demande ID contact au GCI</div></div>
+        <div class="brev-item"><div class="brev-word">TALLY</div><div class="brev-def">Contact visuel bogey confirmé</div></div>
+        <div class="brev-item"><div class="brev-word">NO JOY</div><div class="brev-def">Pas de contact visuel bogey</div></div>
+        <div class="brev-item"><div class="brev-word">SNAP</div><div class="brev-def">Vecteur interception immédiat</div></div>
       </div>
     </div>
-    <!-- FREQUENCES -->
-    <div class="kb-page" id="kb-freqs">
-      <table class="freq-table">
-        <thead><tr><th>CANAL / USAGE</th><th>FRÉQ (MHz)</th><th>REMARQUE</th></tr></thead>
-        <tbody>
-          <tr><td>GUARD</td><td class="hi">243.000</td><td>Urgence UHF</td></tr>
-          <tr><td>GUARD VHF</td><td class="hi">121.500</td><td>Urgence VHF</td></tr>
-          <tr><td>AWACS Alpha</td><td class="hi">268.800</td><td>Corée BMS</td></tr>
-          <tr><td>Osan Tower</td><td class="hi">126.200</td><td>RKSO</td></tr>
-          <tr><td>Osan Approach</td><td class="hi">119.300</td><td>RKSO</td></tr>
-          <tr><td>Gunsan Tower</td><td class="hi">122.100</td><td>RKJK</td></tr>
-          <tr><td>Incheon Tower</td><td class="hi">119.100</td><td>RKSI</td></tr>
-          <tr><td>Gimpo Tower</td><td class="hi">118.100</td><td>RKSS</td></tr>
-          <tr><td>Daegu Tower</td><td class="hi">126.200</td><td>RKTN</td></tr>
-          <tr><td>Tanker (CH11)</td><td class="hi">317.175</td><td>A/R fréq standard</td></tr>
-          <tr><td>ATC Seoul</td><td class="hi">127.900</td><td>Centre</td></tr>
-          <tr><td>Rescue SAR</td><td class="hi">282.800</td><td>Combat SAR</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <!-- NOTES -->
-    <div class="kb-page" id="kb-notes">
-      <textarea class="kb-notes" id="kb-notes-ta" placeholder="Notes mission…&#10;&#10;Callsign:&#10;Package:&#10;TOT:&#10;Bullseye:&#10;Tanker:&#10;"></textarea>
-    </div>
+
   </div>
 </div>
 
@@ -3401,13 +3690,32 @@ function switchKbTab(name, el) {
   if (page) page.classList.add('active');
 }
 
-// Persister les notes kneeboard
-const _kbNotes = document.getElementById('kb-notes-ta');
-const _KB_KEY = 'bms_kb_notes';
-try { _kbNotes.value = localStorage.getItem(_KB_KEY) || ''; } catch(e) {}
-_kbNotes.addEventListener('input', () => {
-  try { localStorage.setItem(_KB_KEY, _kbNotes.value); } catch(e) {}
+// Persister kneeboard (notes, plan de vol, 9-line)
+const _kbPersist = {
+  'kb-notes-ta':'bms_kb_notes',
+  'kb-fplan-ta':'bms_kb_fplan',
+  'kb-callsign':'bms_kb_callsign','kb-package':'bms_kb_package',
+  'kb-tot':'bms_kb_tot','kb-tanker':'bms_kb_tanker',
+  'kb-bull-val':'bms_kb_bull','kb-bingo':'bms_kb_bingo',
+  'kb-9l-1':'bms_9l_1','kb-9l-2':'bms_9l_2','kb-9l-3':'bms_9l_3',
+  'kb-9l-4':'bms_9l_4','kb-9l-5':'bms_9l_5','kb-9l-6':'bms_9l_6',
+  'kb-9l-7':'bms_9l_7','kb-9l-8':'bms_9l_8','kb-9l-9':'bms_9l_9',
+};
+Object.entries(_kbPersist).forEach(([id,key])=>{
+  const el=document.getElementById(id);
+  if(!el)return;
+  try{el.value=localStorage.getItem(key)||'';}catch(e){}
+  el.addEventListener('input',()=>{try{localStorage.setItem(key,el.value);}catch(e){}});
 });
+function clearNineLines(){
+  for(let i=1;i<=9;i++){const el=document.getElementById('kb-9l-'+i);if(el){el.value='';try{localStorage.removeItem('bms_9l_'+i);}catch(e){}}}
+}
+function copyNineLines(){
+  const lines=[];
+  for(let i=1;i<=9;i++){const el=document.getElementById('kb-9l-'+i);if(el&&el.value)lines.push(i+'. '+el.value);}
+  if(lines.length){try{navigator.clipboard.writeText(lines.join('\n'));}catch(e){}}
+  showToast('9-LINE COPIÉ');
+}
 
 // ── GPS Panel data ───────────────────────────────────────────────
 let _lastAircraftData = null;
