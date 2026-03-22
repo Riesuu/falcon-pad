@@ -19,36 +19,46 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 ---
 Falcon-Pad by Riesu
 Contact : contact@falcon-charts.com
-Website : https://www.falcon-charts.com
+Website : https://pad.falcon-charts.com
 GitHub  : https://github.com/riesu/falcon-pad
-BMS     : Falcon BMS 4.38 — Shared Memory SDK
+BMS     : Falcon BMS 4.38
 """
 
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
-import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil
+import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys
 from datetime import datetime
 from typing import List, Optional, Dict
 import logging
 
 APP_NAME    = "Falcon-Pad"
-APP_VERSION = "1.0.0"
+APP_VERSION = "0.2"
 APP_AUTHOR  = "Riesu"
 APP_CONTACT = "contact@falcon-charts.com"
-APP_WEBSITE = "https://www.falcon-charts.com"
+APP_WEBSITE = "https://pad.falcon-charts.com"
 
 # ── Dossiers de base ─────────────────────────────────────────
-# Structure :  ./logs/      → fichiers de log rotatifs
-#              ./briefing/  → PDF, images, Word importés
-#              ./config/    → configuration persistante
-_BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+# Structure cible : falcon-pad/ logs/ briefing/ config/ assets/
+def _resolve_base_dir() -> str:
+    if getattr(sys, "frozen", False):
+        candidate = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        candidate = os.path.dirname(os.path.abspath(__file__))
+    if os.path.basename(candidate).lower() == "falcon-pad":
+        return candidate
+    fp_dir = os.path.join(candidate, "falcon-pad")
+    os.makedirs(fp_dir, exist_ok=True)
+    return fp_dir
+
+_BASE_DIR    = _resolve_base_dir()
+ASSETS_DIR   = os.path.join(_BASE_DIR, "assets")
 LOG_DIR      = os.path.join(_BASE_DIR, "logs")
 BRIEFING_DIR = os.path.join(_BASE_DIR, "briefing")
 _CONFIG_DIR  = os.path.join(_BASE_DIR, "config")
 CONFIG_FILE  = os.path.join(_CONFIG_DIR, "falcon_pad_config.json")
 
-for _d in (LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
+for _d in (ASSETS_DIR, LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
     os.makedirs(_d, exist_ok=True)
 
 LOG_FILE = os.path.join(LOG_DIR, f"falcon_pad_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
@@ -60,7 +70,6 @@ _DEFAULT_CONFIG = {
     "port":          8000,
     "briefing_dir":  BRIEFING_DIR,
     "broadcast_ms":  200,
-    "theme":         "dark",
 }
 
 def _load_config() -> dict:
@@ -131,6 +140,7 @@ FD2_CURRENT_TIME = 0x02C   # int,    heure BMS en secondes depuis minuit (0-8640
 FD2_LAT          = 0x408   # float,  latitude degrés WGS84
 FD2_LON          = 0x40C   # float,  longitude degrés WGS84
 FD2_BULLSEYE_X   = 0x4B0   # float,  bullseye North ft (coords BMS)
+FD2_PILOTS_ONLINE = 0x260  # char,   nombre de pilotes en MP (0 ou 1 = solo)
 FD2_BULLSEYE_Y   = 0x4B4   # float,  bullseye East  ft (coords BMS)
 
 #  CONVERSION TMERC KOREA → WGS84 (pour fichiers .ini)
@@ -153,7 +163,6 @@ def bms_to_latlon(north_ft: float, east_ft: float) -> tuple:
     lat=phi1-(N1r*math.tan(phi1)/R1)*(D**2/2-(5+3*T1+10*C1-4*C1**2-9*e2)*D**4/24)
     lon=lon0+(D-(1+2*T1+C1)*D**3/6)/math.cos(phi1)
     return math.degrees(lat), math.degrees(lon)
-PYPROJ_AVAILABLE = False
 
 #  AÉROPORTS KOREA (47)
 AIRPORTS = {
@@ -245,6 +254,7 @@ _acmi_lock = threading.Lock()
 _acmi_thread = None
 _acmi_running = False
 _acmi_connected = False  # pour le status UI
+_acmi_diag_last: float = 0.0  # timestamp dernier log diagnostic
 
 def _parse_trtt_color(color_str: str) -> int:
     c = color_str.lower()
@@ -309,6 +319,11 @@ def _trtt_client_loop():
                 if not data:
                     raise ConnectionError("BMS a fermé la connexion TRTT")
                 buf += data.decode('utf-8', errors='replace')
+                # Sécurité: borne le buffer pour éviter OOM
+                if len(buf) > 2 * 1024 * 1024:
+                    logger.warning("TRTT: buffer > 2MB, truncature")
+                    nl = buf.rfind('\n')
+                    buf = buf[nl+1:] if nl >= 0 else ""
 
                 # Traiter lignes complètes
                 while '\n' in buf:
@@ -326,10 +341,10 @@ def _trtt_client_loop():
                                 k, v = part.split('=', 1)
                                 if k == 'ReferenceLongitude':
                                     try: ref_lon = float(v)
-                                    except: pass
+                                    except ValueError: pass
                                 elif k == 'ReferenceLatitude':
                                     try: ref_lat = float(v)
-                                    except: pass
+                                    except ValueError: pass
                         continue
 
                     # Suppression: -hexid
@@ -367,8 +382,12 @@ def _trtt_client_loop():
                                 start_i = i + 1
                             i += 1
 
-                        # Mémoriser propriétés permanentes
+                        # Mémoriser propriétés permanentes (borné à 1000 objets)
                         if obj_id not in obj_props:
+                            if len(obj_props) > 1000:
+                                # Purger les entrées sans contact récent
+                                stale = [k for k in obj_props if k not in _acmi_contacts]
+                                for k in stale[:200]: del obj_props[k]
                             obj_props[obj_id] = {'name':'','color':3,'acmi_type':'other','pilot':''}
                         p = obj_props[obj_id]
                         if 'Name'   in props: p['name']      = props['Name']
@@ -382,9 +401,13 @@ def _trtt_client_loop():
                         if 'Pilot'  in props: p['pilot']     = props['Pilot']
                         if 'Group'  in props and not p['name']: p['name'] = props['Group']
 
-                        # Filtrer: on veut uniquement l'air (pas weapons, navaid, sol)
+                        # Filtrer: air uniquement
+                        # 'other' = type pas encore reçu → on garde en attendant
                         at = p.get('acmi_type', 'other')
-                        if at in ('weapon', 'navaid', 'other'):
+                        if at in ('weapon', 'navaid', 'ground', 'sea'):
+                            continue
+                        # Si type connu et pas air → exclure
+                        if at not in ('air', 'other'):
                             continue
 
                         # Position T=lon|lat|alt|roll|pitch|yaw|...
@@ -435,11 +458,12 @@ def _trtt_client_loop():
             _acmi_connected = False
             with _acmi_lock:
                 _acmi_contacts.clear()
-            logger.warning(f"TRTT déconnecté: {ex} — retry dans 5s")
+            logger.debug(f"TRTT déconnecté: {ex} — retry dans 5s")
             try:
                 if sock is not None:
                     sock.close()
-            except: pass
+            except OSError:
+                pass
             _time.sleep(5)
 
     _acmi_connected = False
@@ -455,7 +479,13 @@ def start_acmi_reader():
     logger.info(f"TRTT client démarré → {TRTT_HOST}:{TRTT_PORT}")
     logger.info("  (BMS User.cfg requis: set g_bTacviewRealTime 1)")
 
-def get_acmi_contacts(own_lat=None, own_lon=None) -> list:
+def get_acmi_contacts(own_lat=None, own_lon=None,
+                      max_nm: float = 9999.0, allies_only: bool = False) -> list:
+    """
+    Retourne les contacts TRTT filtrés.
+    - max_nm     : rayon max en NM autour de l'ownship (solo=240, multi=ignoré)
+    - allies_only: si True, filtre uniquement camp=1 (bleu)
+    """
     now = _time.time()
     with _acmi_lock:
         contacts = list(_acmi_contacts.items())
@@ -464,7 +494,28 @@ def get_acmi_contacts(own_lat=None, own_lon=None) -> list:
         # Ignorer stale (>30s sans update — objet détruit)
         if now - c.get('_ts', 0) > 30.0:
             continue
-        if own_lat and own_lon:
+        # Filtrer par camp si allies_only
+        # En solo BMS envoie souvent camp=3 (unknown) car les couleurs
+        # ne sont pas injectées immédiatement via TRTT — on exclut seulement
+        # les ennemis confirmés (camp=2 = rouge)
+        if allies_only and c.get('camp', 3) == 2:
+            continue
+        # Filtrer : air uniquement (ground, sea, weapon exclus)
+        # 'other' gardé seulement si récent (<10s) en attendant le type BMS
+        ct = c.get('type_name', 'other')
+        if ct in ('ground', 'sea', 'weapon', 'navaid'):
+            continue
+        if ct == 'other' and (now - c.get('_ts', 0)) > 10.0:
+            continue
+        # Filtrer par rayon NM
+        if own_lat is not None and own_lon is not None and max_nm < 9999.0:
+            dlat = c['lat'] - own_lat
+            dlon = (c['lon'] - own_lon) * math.cos(math.radians(own_lat))
+            dist_nm = math.sqrt(dlat**2 + dlon**2) * 60.0
+            if dist_nm > max_nm:
+                continue
+        # Exclure ownship (même position)
+        if own_lat is not None and own_lon is not None:
             if abs(c['lat'] - own_lat) < 0.002 and abs(c['lon'] - own_lon) < 0.002:
                 continue
         result.append({k: v for k, v in c.items() if k != '_ts'})
@@ -557,7 +608,7 @@ class BMSSharedMemory:
                 self.shm_ptrs = {}
                 self.ptr1 = self.ptr2 = None
                 self.connected = False
-                logger.warning("BMS non detecte — retry toutes les 5s")
+                logger.debug("BMS non détecté — retry dans 5s")
         except Exception as e:
             self.shm_ptrs = {}
             self.ptr1 = self.ptr2 = None
@@ -567,9 +618,6 @@ class BMSSharedMemory:
     def try_reconnect(self):
         if not self.connected:
             self._connect()
-            if self.connected:
-                global _DD_CANDIDATES
-                _DD_CANDIDATES = None  # forcer re-scan DrawingData
         return self.connected
 
     def get_position(self) -> Optional[Dict]:
@@ -582,17 +630,12 @@ class BMSSharedMemory:
         if None in (hdg, kias, z, lat, lon):
             logger.warning("get_position: safe_read echoue")
             return None
-        # Assertions de type — Pylance ne narrowe pas via "None in tuple"
-        assert hdg  is not None
-        assert kias is not None
-        assert z    is not None
-        assert lat  is not None
-        assert lon  is not None
-        hdg_f  = float(hdg)
-        kias_f = float(kias)
-        z_f    = float(z)
-        lat_f  = float(lat)
-        lon_f  = float(lon)
+        # Cast explicite — les valeurs ne sont pas None ici (vérifié ci-dessus)
+        hdg_f  = float(hdg)   # type: ignore[arg-type]
+        kias_f = float(kias)  # type: ignore[arg-type]
+        z_f    = float(z)     # type: ignore[arg-type]
+        lat_f  = float(lat)   # type: ignore[arg-type]
+        lon_f  = float(lon)   # type: ignore[arg-type]
         alt    = abs(z_f)
         hdg_f  = hdg_f % 360.0
         # Heure BMS (secondes depuis minuit)
@@ -625,11 +668,21 @@ class BMSSharedMemory:
             except Exception:
                 pass
 
-        logger.debug(f"lat={lat_f:.4f} lon={lon_f:.4f} hdg={hdg_f:.1f} alt={alt:.0f}ft kias={kias_f:.0f}kt bms_t={bms_time} bull=({bull_lat},{bull_lon})")
+        # Nombre de pilotes (solo vs multi)
+        pilots_online: int = 1
+        raw_po = safe_read(self.ptr2 + FD2_PILOTS_ONLINE, 1)
+        if raw_po:
+            try:
+                pilots_online = max(1, int(struct.unpack('<B', raw_po)[0]))
+            except Exception:
+                pilots_online = 1
+
+        logger.debug(f"lat={lat_f:.4f} lon={lon_f:.4f} hdg={hdg_f:.1f} alt={alt:.0f}ft kias={kias_f:.0f}kt bms_t={bms_time} pilots={pilots_online}")
         if -90 <= lat_f <= 90 and -180 <= lon_f <= 180 and not (lat_f == 0.0 and lon_f == 0.0):
             return {"lat": lat_f, "lon": lon_f, "heading": round(hdg_f, 1),
                     "altitude": round(alt), "kias": round(kias_f),
                     "bms_time": bms_time,
+                    "pilots_online": pilots_online,
                     "bull_lat": round(bull_lat, 5) if bull_lat is not None else None,
                     "bull_lon": round(bull_lon, 5) if bull_lon is not None else None,
                     "connected": True}
@@ -662,7 +715,7 @@ SERVER_PORT = int(APP_CONFIG["port"])
 async def lifespan(_a):
     asyncio.create_task(broadcast_loop())
     asyncio.create_task(_ini_watcher_loop())
-    start_acmi_reader()
+    start_acmi_reader()  # TRTT — filtré alliés 240 NM solo / L16 multi
     log_sep(f"{APP_NAME} v{APP_VERSION} — by {APP_AUTHOR}")
     logger.info(f"  Contact  : {APP_CONTACT}")
     logger.info(f"  Website  : {APP_WEBSITE}")
@@ -672,7 +725,7 @@ async def lifespan(_a):
     logger.info(f"  Config   : {CONFIG_FILE}")
     logger.info(f"  BMS      : {'CONNECTE' if bms.connected else 'NON DETECTE'}")
     logger.info(f"  Local    : http://localhost:{SERVER_PORT}       ← PC")
-    logger.info(f"  Réseau   : http://{SERVER_IP}:{SERVER_PORT}  ← Tablette/Mobile")
+    logger.info(f"  Network  : http://{SERVER_IP}:{SERVER_PORT}  ← Tablet/Mobile")
     logger.info(f"  Sécurité : LAN uniquement (RFC-1918 + localhost)")
     log_sep()
     yield
@@ -702,22 +755,25 @@ class _LocalOnlyMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 app.add_middleware(_LocalOnlyMiddleware)
-ws_clients: List[WebSocket] = []
+ws_clients: List[WebSocket] = []  # snapshot avec list() à l'itération
 mission_data = {"route": [], "threats": [], "flightplan": []}
 
 # ── DrawingData constants (BMS 4.38 — FalconSharedMemoryArea) ───
-DRAWING_ENTITY_SIZE: int = 40   # bytes per OSBEntity
-DRAWING_ENTITY_MAX:  int = 150  # max entities in DrawingData array
 
 # ── Broadcast loop — pousse les données BMS à tous les WS ────────
+_bms_last_reconnect: float = 0.0
+_BMS_RECONNECT_INTERVAL = 5.0
+
 async def broadcast_loop() -> None:
-    """Tâche asyncio : lit BMS et diffuse position + radar (DrawingData uniquement) toutes les N ms.
-    PAS de contacts ACMI/TRTT — uniquement ce que le F-16 voit réellement (no god mode).
-    """
+    """Tâche asyncio : lit BMS et diffuse position + radar toutes les N ms."""
+    global _bms_last_reconnect
     while True:
         try:
             if not bms.connected:
-                bms.try_reconnect()
+                _now = _time.time()
+                if _now - _bms_last_reconnect >= _BMS_RECONNECT_INTERVAL:
+                    _bms_last_reconnect = _now
+                    bms.try_reconnect()
             pos = bms.get_position() if bms.connected else None
 
             if pos and ws_clients:
@@ -726,9 +782,10 @@ async def broadcast_loop() -> None:
                 msg_ac = json.dumps({"type": "aircraft", "data": pos})
                 for ws in list(ws_clients):
                     try:    await ws.send_text(msg_ac)
-                    except: dead.append(ws)
+                    except Exception: dead.append(ws)
                 for ws in dead:
-                    if ws in ws_clients: ws_clients.remove(ws)
+                    try: ws_clients.remove(ws)
+                    except ValueError: pass
 
                 # 2. Contacts radar/datalink BMS (DrawingData — no god mode)
                 own_lat = pos.get("lat"); own_lon = pos.get("lon")
@@ -739,119 +796,166 @@ async def broadcast_loop() -> None:
                 msg_r = json.dumps({"type": "radar", "data": radar_c})
                 for ws in list(ws_clients):
                     try:    await ws.send_text(msg_r)
-                    except: pass
+                    except Exception: pass
 
-            # 3. Statut connexion
+                # 3. Contacts TRTT — alliés filtrés (solo=240NM / multi=L16)
+                pilots_online = pos.get("pilots_online", 1)
+                is_multi = pilots_online > 1
+                if not is_multi:
+                    # Solo : TRTT filtré 240 NM, alliés seulement
+                    acmi_c = get_acmi_contacts(
+                        own_lat=own_lat, own_lon=own_lon,
+                        max_nm=240.0, allies_only=True
+                    )
+                    if acmi_c:
+                        msg_acmi = json.dumps({"type": "acmi", "data": acmi_c})
+                        for ws in list(ws_clients):
+                            try:    await ws.send_text(msg_acmi)
+                            except Exception: pass
+                    # Diagnostic TRTT toutes les 15s
+                    global _acmi_diag_last
+                    _now_diag = _time.time()
+                    if _now_diag - _acmi_diag_last > 15.0:
+                        _acmi_diag_last = _now_diag
+                        with _acmi_lock:
+                            raw_total = len(_acmi_contacts)
+                            sample = [(oid, c.get('type_name','?'), c.get('camp','?'),
+                                       c.get('callsign','?'), round(_now_diag - c.get('_ts',0), 1))
+                                      for oid, c in list(_acmi_contacts.items())[:8]]
+                        logger.info(f"TRTT diag: {raw_total} contacts bruts | filtrés={len(acmi_c)} | TRTT_connecté={_acmi_connected}")
+                        for oid, typ, camp, cs, age in sample:
+                            logger.info(f"  [{oid}] type={typ} camp={camp} cs={cs} age={age}s")
+
+            # 4. Statut connexion
             if ws_clients:
                 status_msg = json.dumps({"type": "status", "data": {"connected": bms.connected}})
                 for ws in list(ws_clients):
                     try:    await ws.send_text(status_msg)
-                    except: pass
+                    except Exception: pass
 
         except Exception as e:
             logger.debug(f"broadcast_loop: {e}")
         await asyncio.sleep(APP_CONFIG.get("broadcast_ms", 200) / 1000.0)
 
 
-#  RADAR — OSBEntity (FalconSharedMemoryArea, BMS 4.38)
-#  Offset 0x0C78 · 40 bytes/entité · max 150
-import math as _math
+#  DATALINK L16 — via StringData (FalconSharedMemoryAreaString, BMS 4.38)
+#
+#  Structure StringData (depuis FlightData.h) :
+#    uint32 VersionNum
+#    uint32 NoOfStrings
+#    uint32 dataSize
+#    Pour chaque string :
+#      uint32 strId      (index dans enum StringIdentifier)
+#      uint32 strLength  (longueur sans \0)
+#      char   strData[strLength+1]
+#
+#  StringIdentifier::NavPoint = 30
+#  Format NavPoint : "NP:<idx>,<type>,<x>,<y>,<z>,<grnd_elev>;"
+#  Types : WP=waypoint, DL=datalink L16, MK=markpoint, CB=bullseye, etc.
+#
+import math as _math  # alias local
 
-_ENT_NAMES={1:"F-16",2:"F-15",3:"F/A-18",4:"A-10",5:"F-117",
-            6:"MiG-29",7:"Su-27",8:"MiG-21",9:"MiG-23",10:"Su-25",
-            20:"SA-2",21:"SA-3",22:"SA-6",23:"SA-8",24:"SA-10",25:"SA-11",30:"Helo",40:"Transport"}
+STRING_ID_NAVPOINT = 30   # enum StringIdentifier::NavPoint
 
-def _find_drawing_data_base(ptr1: int, ptr2: int) -> tuple:
-    """Cherche l'offset DrawingData dans toutes les zones SHM connues."""
-    candidates = []
-    # Toutes les zones ouvertes par BMS
-    for name, ptr in bms.shm_ptrs.items():
-        if not ptr: continue
-        for off in [0x000, 0x100, 0x200, 0x300, 0x400, 0x500,
-                    0x600, 0x700, 0x800, 0x900, 0xA00, 0xB00,
-                    0xC00, 0xD00, 0xE00, 0xF00,
-                    0x1000, 0x1200, 0x1500, 0x1800, 0x1E00,
-                    0x2000, 0x2400, 0x2800, 0x2BD0]:
-            candidates.append((ptr, off, f"{name}+0x{off:X}"))
-    # Fallback ptr1/ptr2
-    for ptr, off, lbl in [(ptr1, 0x2BD0, "ptr1+0x2BD0"), (ptr2, 0x000, "ptr2+0x000"),
-                          (ptr2, 0x100, "ptr2+0x100"), (ptr2, 0x200, "ptr2+0x200")]:
-        if ptr and (ptr, off, lbl) not in candidates:
-            candidates.append((ptr, off, lbl))
-    for base, off, label in candidates:
-        if not base: continue
-        b = safe_read(base + off, 4)
-        if b is None: 
-            logger.debug(f"  scan {label}: inaccessible")
-            continue
-        nb = struct.unpack('<i', b)[0]
-        if 1 <= nb <= 50:  # nb entités plausible: entre 1 et 50
-            # Vérifier que les coordonnées de la 1ère entité sont en Corée
-            blob = safe_read(base + off + 4, 8)
-            if blob:
-                lr, lo = struct.unpack('<ff', blob)
-                import math as _m
-                if 0.4 < abs(lr) < 1.0 and 2.0 < abs(lo) < 2.5:
-                    logger.info(f"DrawingData TROUVE: {label} nb={nb} lat={_m.degrees(lr):.2f} lon={_m.degrees(lo):.2f}")
-                    return base, off
-                else:
-                    logger.debug(f"  scan {label}: nb={nb} mais coords hors Corée ({lr:.3f},{lo:.3f})")
-            logger.debug(f"  scan {label}: nb={nb} mais blob illisible")
-        else:
-            logger.debug(f"  scan {label}: nb={nb} invalide")
-    return None, None
+def _read_string_data(ptr_str: int) -> list:
+    """
+    Lit FalconSharedMemoryAreaString et retourne la liste des NavPoints DL.
+    Retourne [] si inaccessible ou vide.
+    """
+    if not ptr_str:
+        return []
+    # Lire l'en-tête : VersionNum(4) + NoOfStrings(4) + dataSize(4)
+    hdr = safe_read(ptr_str, 12)
+    if not hdr or len(hdr) < 12:
+        return []
+    try:
+        _ver, no_strings, data_size = struct.unpack_from('<III', hdr, 0)
+    except Exception:
+        return []
+    if no_strings == 0 or no_strings > 500 or data_size > 4 * 1024 * 1024:
+        return []
+    # Lire tout le blob StringData
+    blob = safe_read(ptr_str + 12, data_size)
+    if not blob or len(blob) < data_size:
+        return []
+    navpoints = []
+    off = 0
+    for _ in range(no_strings):
+        if off + 8 > len(blob):
+            break
+        try:
+            str_id, str_len = struct.unpack_from('<II', blob, off)
+            off += 8
+            if off + str_len + 1 > len(blob):
+                break
+            raw = blob[off:off + str_len].decode('utf-8', errors='replace')
+            off += str_len + 1  # +1 pour le \0
+            if str_id == STRING_ID_NAVPOINT:
+                navpoints.append(raw)
+        except Exception:
+            break
+    return navpoints
+
+
+def _parse_navpoint_dl(raw: str, own_lat=None, own_lon=None) -> Optional[dict]:
+    """
+    Parse une entrée NavPoint BMS et retourne un contact DL si type=DL.
+    Format : "NP:<idx>,<type>,<x>,<y>,<z>,<grnd_elev>;"
+    x,y = coordonnées BMS en pieds (North, East)
+    z   = altitude en dizaines de pieds
+    """
+    try:
+        # Extraire le bloc NP:...;
+        import re as _re
+        m = _re.search(r'NP:(\d+),([A-Z]+),([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+);', raw)
+        if not m:
+            return None
+        idx  = int(m.group(1))
+        typ  = m.group(2)
+        x    = float(m.group(3))   # North ft
+        y    = float(m.group(4))   # East ft
+        z    = float(m.group(5))   # alt × 10 ft
+        if typ != 'DL':
+            return None
+        lat, lon = bms_to_latlon(x, y)
+        if not (25 <= lat <= 50 and 110 <= lon <= 145):
+            return None
+        if own_lat is not None and own_lon is not None:
+            if abs(lat - own_lat) < 0.002 and abs(lon - own_lon) < 0.002:
+                return None
+        return {
+            "lat":      round(lat, 5),
+            "lon":      round(lon, 5),
+            "alt":      round(abs(z) * 10),   # dizaines → pieds
+            "camp":     1,                     # L16 = toujours alliés
+            "type_name": "L16",
+            "callsign": f"DL{idx:02d}",
+            "heading":  0,
+            "speed":    0,
+        }
+    except Exception:
+        return None
+
 
 def get_radar_contacts(ptr1: int, own_lat=None, own_lon=None, ptr2: int = 0) -> list:
-    """Lit DrawingData via safe_read — cherche l'offset automatiquement."""
-    global _DD_CANDIDATES
-    if not ptr1: return []
-    # Détermination automatique de l'offset au premier appel
-    if _DD_CANDIDATES is None:
-        logger.info("Scan DrawingData en cours...")
-        found_base, found_off = _find_drawing_data_base(ptr1, ptr2)
-        if found_base:
-            _DD_CANDIDATES = (found_base, found_off)
-            logger.info(f"DrawingData lock: base={hex(found_base)} off=0x{found_off:X}")
-        else:
-            _DD_CANDIDATES = False
-            logger.warning("DrawingData: offset introuvable par scan — datalink désactivé")
-    if not _DD_CANDIDATES:
+    """
+    Lit les contacts L16/Datalink depuis StringData (NavPoint type=DL).
+    Source officielle SDK BMS 4.38 : FalconSharedMemoryAreaString.
+    """
+    ptr_str = bms.shm_ptrs.get("FalconSharedMemoryAreaString") if bms.shm_ptrs else None
+    if not ptr_str:
         return []
-    dd_base, dd_off = _DD_CANDIDATES
-    b = safe_read(dd_base + dd_off, 4)
-    if b is None:
-        logger.warning(f"DrawingData nb inaccessible @ 0x{dd_base+dd_off:X} — reset scan")
-        _DD_CANDIDATES = None
+    navpoints = _read_string_data(ptr_str)
+    if not navpoints:
         return []
-    nb_raw = struct.unpack('<i', b)[0]
-    logger.debug(f"DrawingData nb_raw={nb_raw}")
-    if nb_raw <= 0 or nb_raw > DRAWING_ENTITY_MAX: return []
-    blob = safe_read(dd_base + dd_off + 4, nb_raw * DRAWING_ENTITY_SIZE)
-    if blob is None:
-        logger.warning("DrawingData blob: lecture impossible")
-        return []
-    assert isinstance(blob, (bytes, bytearray))  # narrow type for static analysis
-    res: list = []
-    for i in range(nb_raw):
-        try:
-            off = i * DRAWING_ENTITY_SIZE
-            lat_r, lon_r, z, et, ca, hr, sp = struct.unpack_from('<fffiiif', blob, off)
-            lb = blob[off+32:off+40].split(b'\x00')[0].decode('ascii', errors='replace').strip()
-            if lat_r == 0.0 and lon_r == 0.0: continue
-            if not 1 <= ca <= 4: continue
-            lat = _math.degrees(lat_r); lon = _math.degrees(lon_r)
-            if not (25 <= lat <= 50 and 110 <= lon <= 145): continue
-            if own_lat and own_lon and abs(lat-own_lat)<0.002 and abs(lon-own_lon)<0.002: continue
-            res.append({"lat": round(lat,5), "lon": round(lon,5),
-                        "alt": round(abs(z)/100)*100, "camp": int(ca),
-                        "type_name": _ENT_NAMES.get(int(et), f"T{et}"),
-                        "callsign": lb,
-                        "heading": round(_math.degrees(hr)%360, 1),
-                        "speed": round(sp)})
-        except Exception as ex:
-            logger.debug(f"DrawingData[{i}]: {ex}")
-    logger.debug(f"DrawingData: {len(res)}/{nb_raw} contacts valides")
-    return res
+    result = []
+    for raw in navpoints:
+        c = _parse_navpoint_dl(raw, own_lat=own_lat, own_lon=own_lon)
+        if c:
+            result.append(c)
+    if result:
+        logger.debug(f"Datalink L16: {len(result)} contacts DL")
+    return result
 
 
 @app.websocket("/ws")
@@ -860,9 +964,19 @@ async def ws_endpoint(websocket: WebSocket):
     ws_clients.append(websocket)
     try:
         await websocket.send_text(json.dumps({"type":"status","data":{"connected": bms.connected}}))
-        while True: await websocket.receive_text()
+        while True:
+            try:
+                # receive_text avec timeout — détecte les connexions mortes
+                msg = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+            except asyncio.TimeoutError:
+                # ping pour maintenir la connexion
+                try: await websocket.send_text('{"type":"ping"}')
+                except Exception: break
     except WebSocketDisconnect:
-        if websocket in ws_clients: ws_clients.remove(websocket)
+        pass
+    finally:
+        try: ws_clients.remove(websocket)
+        except ValueError: pass
 
 
 AP_EXTRA = {
@@ -936,6 +1050,7 @@ async def ini_status():
         "file": os.path.basename(_ini_last_path) if _ini_last_path else None,
         "path": _ini_last_path,
         "loaded": bool(_ini_last_path),
+        "mtime": _ini_last_mtime,
         "steerpoints": len(mission_data.get("route", [])),
         "ppt": len(mission_data.get("threats", [])),
         "flightplan": len(mission_data.get("flightplan", [])),
@@ -946,9 +1061,12 @@ async def get_mission(): return mission_data
 
 @app.post("/api/upload")
 async def upload_mission(file: UploadFile = File(...)):
-    global mission_data
+    global mission_data, _ini_last_path, _ini_last_mtime
     try:
-        content = (await file.read()).decode("latin-1")
+        raw = await file.read()
+        if len(raw) > 1024 * 1024:  # 1 MB max
+            return {"status": "error", "message": "File too large (max 1 MB)"}
+        content = raw.decode("latin-1")
         cfg = configparser.RawConfigParser(); cfg.optionxform = str  # type: ignore[assignment]
         cfg.read_string(content)
         route, threats, fplan = [], [], []
@@ -959,11 +1077,9 @@ async def upload_mission(file: UploadFile = File(...)):
                     try:
                         x,y,z = float(parts[0]),float(parts[1]),float(parts[2])
                         if abs(x)>10 and abs(y)>10:
-                            # .ini BMS: col1=North(x), col2=East(y) — confirmé
                             lat,lon = bms_to_latlon(x, y)
                             if   "line" in key.lower(): fplan.append({"lat":lat,"lon":lon,"alt":z,"index":len(fplan)})
                             elif "ppt"  in key.lower():
-                                # col4 = range en pieds (164055 ft ≈ 27 NM pour SA2, etc.)
                                 try:
                                     r_ft=float(parts[3]);range_m=int(r_ft*0.3048);range_nm=max(1,round(r_ft/6076.12))
                                 except:
@@ -971,12 +1087,16 @@ async def upload_mission(file: UploadFile = File(...)):
                                 name_ppt=parts[4].strip() if len(parts)>4 else ""
                                 try:    ppt_num = 56 + int(key.lower().replace("ppt_","").strip())
                                 except: ppt_num = 56 + len(threats)
-                                # Ignorer les PPTs hors du théâtre Korea (IPs hors zone, etc.)
                                 if 30.0 <= lat <= 44.0 and 120.0 <= lon <= 135.0:
                                     threats.append({"lat":lat,"lon":lon,"name":name_ppt,"range_nm":range_nm,"range_m":range_m,"num":ppt_num,"index":len(threats)})
                             else:                       route.append({"lat":lat,"lon":lon,"alt":z,"index":len(route)})
-                    except: pass
+                    except Exception:
+                        pass
         mission_data = {"route":route,"threats":threats,"flightplan":fplan}
+        # Mark as loaded so tablet can detect via /api/ini/status
+        _ini_last_path = file.filename or "upload.ini"
+        _ini_last_mtime = _time.time()
+        logger.info(f"INI upload: {_ini_last_path} — {len(route)} steerpoints, {len(threats)} PPT")
         return {"status":"ok"}
     except Exception as e:
         return {"status":"error","message":str(e)}
@@ -989,32 +1109,55 @@ _ini_last_path: str = ""
 _ini_last_mtime: float = 0.0
 
 INI_SEARCH_PATHS = [
-    r"C:\Falcon BMS 4.38\User\DTC\*.ini",
-    r"C:\Falcon BMS 4.37\User\DTC\*.ini",
-    r"C:\Falcon BMS 4.38\User\Acmi\*.ini",
-    r"D:\Falcon BMS 4.38\User\DTC\*.ini",
-    r"D:\Falcon BMS 4.37\User\DTC\*.ini",
+    # BMS 4.38 — User\Config (mission.ini + pilot.ini)
+    r"D:\Falcon BMS 4.38\User\Config\*.ini",
+    r"D:\Falcon BMS 4.38\User\Config\**\*.ini",
+    r"C:\Falcon BMS 4.38\User\Config\*.ini",
+    r"C:\Falcon BMS 4.38\User\Config\**\*.ini",
+    # Fallback older BMS
+    r"D:\Falcon BMS 4.37\User\Config\*.ini",
+    r"C:\Falcon BMS 4.37\User\Config\*.ini",
 ]
 
 def _find_latest_ini() -> tuple[str, float]:
-    """Trouve le .ini BMS le plus récemment modifié."""
-    # Ajouter chemin depuis registre BMS
+    """Trouve le .ini BMS le plus récent qui contient [STPT] dans User\\Config.
+    BMS nomme le fichier DTC d'après le callsign (ex: Riesu.ini).
+    """
     patterns = list(INI_SEARCH_PATHS)
     try:
         import winreg
         key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                              r"SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.38")
         install_dir, _ = winreg.QueryValueEx(key, "InstallDir")
-        patterns.insert(0, os.path.join(install_dir, "User", "DTC", "*.ini"))
+        patterns.insert(0, os.path.join(install_dir, "User", "Config", "*.ini"))
+        patterns.insert(1, os.path.join(install_dir, "User", "Config", "**", "*.ini"))
     except Exception:
         pass
     files = []
     for pat in patterns:
-        try: files.extend(_glob.glob(pat))
-        except: pass
+        try: files.extend(_glob.glob(pat, recursive=True))
+        except Exception: pass
     if not files:
         return "", 0.0
-    best = max(files, key=os.path.getmtime)
+    # Filter: only .ini files that contain [STPT] (actual DTC/mission data)
+    valid = []
+    for f in files:
+        try:
+            with open(f, 'r', encoding='latin-1', errors='replace') as fh:
+                head = fh.read(8192)
+            if '[STPT]' in head or '[Stpt]' in head:
+                valid.append(f)
+        except Exception:
+            pass
+    if not valid:
+        return "", 0.0
+    # Pick most recent; deprioritize mission.ini (callsign.ini has actual DTC)
+    def _sort_key(f):
+        mtime = os.path.getmtime(f)
+        name = os.path.basename(f).lower()
+        penalty = -0.5 if name == 'mission.ini' else 0.0
+        return mtime + penalty
+    best = max(valid, key=_sort_key)
     return best, os.path.getmtime(best)
 
 def _parse_ini_file(path: str) -> dict:
@@ -1054,7 +1197,8 @@ def _parse_ini_file(path: str) -> dict:
                                                     "num": ppt_num, "index": len(threats)})
                             else:
                                 route.append({"lat": lat, "lon": lon, "alt": z, "index": len(route)})
-                    except: pass
+                    except Exception:
+                        pass
         result = {"route": route, "threats": threats, "flightplan": fplan}
         mission_data = result
         logger.info(f"INI auto-chargé: {os.path.basename(path)} — {len(route)} steerpoints, {len(threats)} PPT")
@@ -1066,16 +1210,25 @@ def _parse_ini_file(path: str) -> dict:
 async def _ini_watcher_loop():
     """Tâche asyncio: surveille et charge automatiquement le dernier .ini BMS."""
     global _ini_last_path, _ini_last_mtime
+    # Log search paths at startup
+    logger.info(f"INI watcher started — searching: {INI_SEARCH_PATHS}")
+    _first_scan = True
     while True:
         try:
             path, mtime = _find_latest_ini()
+            if _first_scan:
+                _first_scan = False
+                if path:
+                    logger.info(f"INI watcher: found {path} (age={_time.time()-mtime:.0f}s)")
+                else:
+                    logger.warning("INI watcher: no .ini found in search paths")
             if path and (path != _ini_last_path or mtime > _ini_last_mtime + 1):
                 _ini_last_path = path
                 _ini_last_mtime = mtime
                 _parse_ini_file(path)
         except Exception as e:
             logger.debug(f"INI watcher: {e}")
-        await asyncio.sleep(3)  # vérifier toutes les 3s
+        await asyncio.sleep(3)
 
 
 #  HTML / CSS / JS
@@ -1086,6 +1239,7 @@ HTML = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Falcon-Pad</title>
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAANdElEQVR42qWaeZRW9XnHP89d3mW2950VhmWYwQWQLQQBFxRRlKBVkhpTorG4VAynTVtPG23raeI5TUKP9SSamrRpWvXg0khNozlN4xLSBsWCCIIsCmEbGRhgmI2Zd+a99773/vrHfZd777wzgHnPAe69v3uf37N8f8/veb4/JN06VwGAoFBA/pbApVC8EMI/hUIQlFIEB/03JSxvxM+fUYpz518XRlwXZlb5vwuvaEFhkh+Wgi4S0F8BSgUkq4AghUhpXgl5IOgUlVe65CoJKhRVHhWwv2CgCvnEKOduJYE3JG9W8FkgWiVPU/SiCvhLhQwKzh0Or0KFvS0leaGvA2iIREAilo6cUkYBgqc8EIUmgegVVQlDSaQcDAvSJYK4oHskElvfgdqoGM1jSFQpxCoyrYigBCorK/AUWI6DpksIJKXrkoIq5BgfukWESySaEnhfjdTViHoiHAeFksh9HiAigm3n+Nuv/wmVFVXohvDMC6/w4d59VFdW4npeACSh1e3fB/RREgGXUiUnqsBSEELRVCoEoVFCH1iDIpLHv6CJhmXbZAYzfHDgCP+y4Q0e+bMHmDl9Gv2Dg2iaoGkammhomm+w67lYtoXjOL48TVAiQTeXcB7NRBJOJAVb9ER63GOqLLoDKSi0cCQEp76zA9y6fCkv/uwN2jvP8Mgf30PnydN0HD/J4NAQWdvGsm1czyNdU8PECROoSCbpGxgga1nomoZh6L4rVXieEWoJEZeDofKxEIlCTIWFqHzuyb+niYah6+zc8zHKsZl72aVs2bGPv8s8z1fvup2VNy/nWEcH2WyWmqoqGhoaqKmpZuKE8YxrrOXgoXZeeuXn7PhwL929fYhAzDTD7olAXkRQngrDMdU6p7TGVLlUk9c4YIimaQxlhxnX1MhN1y3m/q/cwUuvbWTP/kNYrsf+Q8domdTM7EvbiJk6mWGLrt4BjneeJlWVoK2lGeW6tE5upra6kpMnT7J563YOHTlKLudQXHgj0pVEUmnRgNLqH/OnQNOEIcti6eIreHD1Ko4f72TLhx9x7PRZtEQC3cpy5EQXPf0Zenv78m7S0HXBjOloms6NV19OIh7DdhxqUzUsv3Yh8y6byjfWPclrv/wV8VjMz0Iqip+RVYJvQNDTo2wLhRBajsPM6ZfyrUcf4pnnN3Dg0BEcMdnX0cv1pkXMNNhs1jK7pZllSxZh27aPaE1wXY9xDWlqEjrbd+4lmYhj2w6dp7vYt/8gXd3d2LYT1kUi3o+UNkYh5yhVZrdSkTpIE3Kuy52338pbv36bA4fbWXvfnSy9ZjEfb9tO9tuP8kTlVHIZh9tXXMO+PXtp7zhBPGbi5HLEYiYf2A7/9/4HZIaG83MqDF3HMAxM08jj3J9X0/wV67kKyWcyFVBUKYUhoYJHwoprgToIcF2XunSa+toUr2/cxLzZl7Fm9V0AXDJ1Cv+2Zy87//0tllw5jwVzp7N9+w4aG+pAKSw7x7aduzh2vJN4LI6uacRiMQxDx7Ic4vE4juOglMI0TZRSDAxmEITKygosx8a2bOJx/1vP84iZZikpFYox8SE7EkL5Qc/zQMAwDJxcDqW8YsC2ejHiiRj9A0M8+9ONVDdNom5CK7H0OL629l4unjqFRCLBvNnTuGHJVbRMbiZmmky/tA3HsWioT9PUUIebcxBNWHzFfBbOn0POzdEysZkbrr2S5nENVFVV0NRYh+3YGKVymFK1V4yEnzZF/I1GF6G3r49jHSeYN2s6r/96M49//0csvXYxm97bxX+/9Q4V8QRH2jvZvb8dACtrMXt6GwtntPD221u5+qoFPLXuUV5/cxObtsCDq1dxz5e/QH3bfB5+7AE+OnCIf3z8ab77g79n2kVtTG1r4YWXX2Xp4kV0dfeRTlezeet27v7S55m35FYMikV0mdUrJUM8FHHDpCqZ5L82vssD962iettO3vqfd3nx1Tc5diaDoHHL8sUsmD0d5djETB8ezU11PPfSBpysxZTJzYDGRwcOcOLUaSY2j+M3m99j1qwZ1Nam+O3hdkjEmT93Jn/619+i49BR1jy4moNHP+Eb657ix09+h1RNNQ0N9Ty09l4MCS5YLViKlwzxUKRTKVyl0zptMjOaUsxK6nx27mXs2LWPVE01ZwZzpGvT3H/9XDa8/DOOOSa9A8NkM/10dffQPzAAhs7MGdPYf/AwPSdPsfa+O7motZVUqobPzJ5BOpWi43gn49taSCYTWLbNyts+R2vLRNo7TnDNFQvIuQ4N9bV88zvfY903/xI9kR7/WEFfCW/kxQCkKquJVdSwdNE8mnMZLu/p4MyGl5n6xTvYc6gd23Zo7+zhz9es4sQrzzPw/lZ6lVBdU0XXsEfm7FlAkc1muW3FMtZveJU3/vdd/mj1H3D/1/6KXM6hsb6WxoY6blp6LTFDp6aqktuWL2PCpPG8t/1DbvvcMi7/7Gw2vPoLJk+cyNP/+iJNDXVIunWuirYdIv4Tz/WorqwkXpni89dfxapTBzixaROPk+KWtQ+y8tblbPzNO6z7wXoWLVzEmjuW8g9P/ZieM7184cxhlrQ08/GylXz/zS1kes/QP3AWXdNQQCxm4tgO2ayFYRjEYyYIJOJxhoctbMchnaqmu6cX11XUpWtwPZeBzDAVyQS5nIvrumgq2E4UClAliGhUVVWRTFbTenEbd7fVYx88yOtmipUP/wUrVtzAyt+/G6UUd33x97jluvmsXvsIF13UxlM/fILd6QkMnTrDlV3t3HjNAkwzQaq6GvINjZW1UQqSFcl8RnNxHJf+s4PkXBfDMOjrHyAej1NVWUFmOItl50gm4uRyLpoIpmmghfYBKZRSimQiSWPTePRYkplTJ5FwLMw5szlY10RDYz3/9KNnOfzRb1n35D+zYslC1r/0H3R/coKt23eTG8jQWT8OWbIEvb6Bz0xpxjNM6puaSdeki6W0ppWKMy1/bxg6Wr6yNAy92PHpmoYmguflG6l8wsyvgUibJ5DLudjWMLomVNSmuQqLzueehVyOgUtmsGDhfPqzw9iWxfqfvEZvXz9XX3sFz/zwCTr6B+j+yQvM2L2dyspK3k81sWPXx+SsIfrO9oeKXCmk6UKvEW7HS+AuLkxV6lYEJN06RxVSqRBupD3PpalxPDnRefgPV3L19nf4+a/e5j9zJhWTJrLmbx5mwuRJfO+7T3PXV75EY309W375Bj997gWuzGX48sWTcO99gIde/AVDPX1093XjeR4iWmiHDM4bLceKdaaUK29CxVwh65Rykac84qZJbV0jlalqLm6uY7xjcfvpIwwePcp7fUNkqmtI3ngT2Q92wJGjTBWHOW0tvHPJbHboSU70D3Gi4xSWNcjgYAZN0wGvxOx4AR4nwJyIhHkjHzaKaOFpSL5qLbAFKsAJaQhZ28LNWVhDCbbtOcKCOdPYed3NTHOzrOzpwjvVycyvrubweo2hWdMYbmnhYDLNJye72bVtNyoHMVOntyfjez7QEipCe2WgdQ2U78VOMtiTlEgGqQ2k0aITJMydmYZJPBYjEU9guyCxOKm6WurraqivqUb3cjhKMWS7dPX009vTi53JkNCFXM5m2PLTooT6Xsk7S42ohCXU7AfJNeX30JTek3TbXHWuJsbfi/1Qxc0YiUQCTddRHhjxJK4nuNYgnhIMXQAP27YZtrIhCBQJK1XiiHyxagR3pYTyBU6gKVNKYRAQVqjPo+2kiM9CKBS242A5djFeqZRHXcM4uk72MTQ0VAo3gib+H1WgA0WBV6q+lAoSDkG2weej1AhyVpU6SvGdYghSbNTDAAyCNCBKBMkj01NwdmAQ28lhWVaBMQplDRWUqUbeBxlUPyABiqVQ43vh71QAQoYqR/PlF4mIRPjLcPOj5eEwPDzkGxakNoLFFSp/H/RkeMVKgEELZZz8xlXkYwMEhAKMiI7F8JQEqzBdEwqobwQFcorSIpMgrYYW6O5UPqPkI6XEn0MC5FmeY1V5+BYgFfKLFHviMFVXjI0q/hOsrMPQKDQ8noRoyCANo/LYL8pSpZLFh4Yq7Vh5LxeoxwIz7jtRSvSmkuI+YZThc6Ph8D9V4TEpA5UCETyiHVUq36eqMHsj4Z5bhU80AtAL78xBvtH4+j03nx8nRPmtPPRorLGxHqpRuPuy74UfGhPH1Y3B/I8h/IInHuXYSo1e54w6Frg2bMeNADtCgpWb+FxKfFoZ5cbUKORcwQC/MixDapVjhkfjT+VTvve7yhhJVo/xK+e1sWDH6Iz9OcfOdbg5qgFRajQoxAvvS6Ezv8jp7IixUb6TiHxUeXmo0R2kjeUhiXROipEsJIQbjmgWlug5iUTY8kg/XvY7GZnqpdwZGedh9LnW1RjOKosKOcd76hx6aRcKU1VmnZUz8lxjoykl53UtoxsQmmg0vEYO0YNnwxL5HwPlZEQqlpCMwl4V/a7UCylcN1e818aCkIrgVVEev8Gx0PU5ZDDKmJKR9wXlDdOkvrGpGEntfDPohWZMziPlK7iALO5T+9U1Kaa0XYIZi+N5qnBCM/Ymeb6GyCjPyi36C61OQKHpOn093WQGB7GtrE+E/S4Z4HyiMZoM9SmjqgArm/UPyYH/B4vnKYpYUy6KAAAAAElFTkSuQmCC"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 .leaflet-popup-content-wrapper{background:transparent!important;border:none!important;box-shadow:none!important;padding:0!important}
@@ -1095,11 +1249,12 @@ HTML = r"""<!DOCTYPE html>
 .leaflet-popup-close-button:hover{color:#e2e8f0!important}
 </style>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060a12}
-#map{position:absolute;inset:0;bottom:72px}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;background:#060a12}
+#map{position:absolute;inset:0;bottom:80px}
+
 
 /* ═══ TOOLBAR ═════════════════════════════════════════════════════ */
 #toolbar{
@@ -1112,19 +1267,14 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   padding:10px 7px;
   display:flex;flex-direction:column;gap:3px;
   box-shadow:0 24px 60px rgba(0,0,0,.8),inset 0 1px 0 rgba(74,222,128,.08);
+  will-change:transform;
 }
 #toolbar::before{
   content:'';position:absolute;left:0;top:10px;bottom:10px;width:2px;
   background:linear-gradient(180deg,transparent,rgba(74,222,128,.55),transparent);
   border-radius:2px;
 }
-#toolbar::after{
-  content:'FALCON-PAD';
-  position:absolute;top:-9px;left:12px;
-  background:rgba(4,8,16,1);padding:0 6px;
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
-  letter-spacing:2px;color:rgba(74,222,128,.75);text-transform:uppercase;
-}
+#toolbar::after{display:none}
 .tool-btn{
   width:40px;height:40px;border-radius:2px;cursor:pointer;
   background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);
@@ -1138,6 +1288,11 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .tool-btn.active svg{stroke:#4ade80}
 .tool-btn.danger svg{stroke:#ef4444}
 .tool-btn.danger:hover{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);box-shadow:inset 2px 0 0 rgba(239,68,68,.5);}
+/* Compass button states */
+#compassBtn.north-up{background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.35);box-shadow:inset 2px 0 0 #4ade80,0 0 12px rgba(74,222,128,.12)}
+#compassBtn.north-up svg{stroke:#4ade80}
+#compassBtn.track-up{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.4);box-shadow:inset 2px 0 0 #ef4444,0 0 12px rgba(239,68,68,.12)}
+#compassBtn.track-up svg{stroke:#ef4444}
 .tool-divider{height:1px;margin:4px 4px;background:linear-gradient(90deg,transparent,rgba(74,222,128,.18),transparent);}
 
 /* ═══ STATUS BAR ══════════════════════════════════════════════════ */
@@ -1150,28 +1305,33 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 
 /* ═══ SYSTEM STATUS BAR (sous tab bar) ════════════════════════════ */
 #sysBar{
-  position:fixed;bottom:50px;left:0;right:0;height:22px;z-index:1999;
+  position:fixed;bottom:56px;left:0;right:0;height:24px;z-index:1999;
   background:rgba(1,3,8,.98);
   border-top:1px solid rgba(74,222,128,.07);
   display:flex;align-items:center;padding:0 14px;gap:0;
   box-shadow:0 -4px 20px rgba(0,0,0,.6);
+  overflow:hidden;
 }
 /* Segment gauche: BMS status */
-.sys-left{display:flex;align-items:center;gap:7px;flex:1;min-width:0}
+.sys-left{display:flex;align-items:center;gap:7px;flex:1;min-width:0;overflow:hidden}
 /* Segment centre: copyright */
 .sys-center{
   position:absolute;left:50%;transform:translateX(-50%);
   display:flex;align-items:center;gap:6px;white-space:nowrap;
+  pointer-events:none;
 }
 /* Segment droite: zulu + site */
-.sys-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.sys-right{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0}
+/* Hide center on narrow screens to prevent overlap */
+@media (max-width:900px){.sys-center{display:none}}
+@media (max-width:700px){.sys-fc{display:none}.sys-ip{display:none}}
 
 .sys-bms-tag{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(74,222,128,.45);letter-spacing:2px;text-transform:uppercase;
 }
 #statusText{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   letter-spacing:1.5px;text-transform:uppercase;color:rgba(148,163,184,.45);
   white-space:nowrap;
 }
@@ -1184,23 +1344,23 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sys-sig-line{width:18px;height:1px;background:linear-gradient(90deg,transparent,rgba(74,222,128,.25))}
 .sys-sig-line.r{background:linear-gradient(90deg,rgba(74,222,128,.25),transparent)}
 .sys-sig-text{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   color:rgba(255,255,255,.28);letter-spacing:2.5px;text-transform:uppercase;
 }
 .sys-sig-author{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(74,222,128,.55);letter-spacing:1px;
 }
 .sys-sig-dot{width:3px;height:3px;border-radius:50%;background:rgba(74,222,128,.2);flex-shrink:0}
 
 /* Zulu */
 .sys-zulu{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(74,222,128,.4);letter-spacing:1.5px;
 }
 /* Server IP */
 .sys-ip{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(96,165,250,.35);letter-spacing:1px;
   padding:1px 6px;border:1px solid rgba(96,165,250,.08);border-radius:1px;
   cursor:default;transition:color .25s;
@@ -1208,7 +1368,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sys-ip:hover{color:rgba(96,165,250,.75);border-color:rgba(96,165,250,.25)}
 /* Falcon Charts link */
 .sys-fc{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
   color:rgba(74,222,128,.45);letter-spacing:2px;text-transform:uppercase;
   text-decoration:none;transition:color .25s;
   padding:1px 6px;border:1px solid rgba(74,222,128,.06);border-radius:1px;
@@ -1228,7 +1388,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 
 /* ═══ SETTINGS PANEL ════════════════════════════════════════════ */
 #settingsPanel{
-  display:none;position:fixed;bottom:72px;right:14px;z-index:3000;
+  display:none;position:fixed;bottom:80px;right:14px;z-index:3000;
   width:320px;
   background:rgba(3,7,18,.98);
   border:1px solid rgba(74,222,128,.15);
@@ -1244,7 +1404,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(74,222,128,.08);
 }
 .sp-title{
-  font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:11px;font-weight:700;
   color:#4ade80;letter-spacing:2px;text-transform:uppercase;
 }
 .sp-close{
@@ -1256,22 +1416,22 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sp-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 .sp-row{display:flex;flex-direction:column;gap:4px}
 .sp-label{
-  font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
   color:#4a6e80;letter-spacing:1.5px;text-transform:uppercase;
 }
 .sp-input{
   background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
   border-radius:2px;padding:7px 10px;color:#e2e8f0;
-  font-family:'Share Tech Mono',monospace;font-size:13px;outline:none;width:100%;
+  font-family:'Consolas','Courier New',monospace;font-size:13px;outline:none;width:100%;
   transition:border-color .2s;
 }
 .sp-input:focus{border-color:rgba(74,222,128,.4)}
 .sp-hint{
-  font-family:'Rajdhani',sans-serif;font-size:10px;
+  font-family:system-ui,sans-serif;font-size:10px;
   color:rgba(148,163,184,.3);line-height:1.4;
 }
 .sp-warn{
-  font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
   color:#fbbf24;letter-spacing:.5px;display:none;
 }
 .sp-warn.show{display:block}
@@ -1280,27 +1440,20 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .sp-save{
   flex:1;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);
   border-radius:2px;padding:7px;color:#4ade80;
-  font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:12px;font-weight:700;
   letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:all .2s;
 }
 .sp-save:hover{background:rgba(74,222,128,.2);border-color:rgba(74,222,128,.6)}
 .sp-cancel{
   background:transparent;border:1px solid rgba(255,255,255,.08);
   border-radius:2px;padding:7px 12px;color:#546e82;
-  font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:12px;font-weight:700;
   cursor:pointer;transition:all .2s;
 }
 .sp-cancel:hover{border-color:rgba(255,255,255,.2);color:#94a3b8}
-.sp-theme-row{display:flex;gap:6px}
-.sp-theme-btn{
-  flex:1;padding:6px;border-radius:2px;cursor:pointer;
-  font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
-  letter-spacing:1px;text-transform:uppercase;transition:all .2s;
-  border:1px solid rgba(255,255,255,.08);background:transparent;color:#546e82;
-}
-.sp-theme-btn.sel{border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.08);color:#4ade80}
+
 .sp-status{
-  font-family:'Share Tech Mono',monospace;font-size:10px;
+  font-family:'Consolas','Courier New',monospace;font-size:10px;
   color:#4ade80;letter-spacing:1px;display:none;padding:6px 14px;
   border-top:1px solid rgba(74,222,128,.08);text-align:center;
 }
@@ -1320,9 +1473,9 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   box-shadow:0 4px 20px rgba(0,0,0,.7);
   backdrop-filter:blur(10px);
 }
-.ruler-hdg{font-size:15px;font-weight:700;color:#4ade80;letter-spacing:2px;line-height:1.2;font-family:'Rajdhani',sans-serif}
-.ruler-nm{font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.3;margin-top:2px;font-family:'Share Tech Mono',monospace;letter-spacing:.5px}
-.ruler-km{font-size:9px;color:#475569;line-height:1.2;margin-top:1px;font-family:'Share Tech Mono',monospace}
+.ruler-hdg{font-size:15px;font-weight:700;color:#4ade80;letter-spacing:2px;line-height:1.2;font-family:system-ui,sans-serif}
+.ruler-nm{font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.3;margin-top:2px;font-family:'Consolas','Courier New',monospace;letter-spacing:.5px}
+.ruler-km{font-size:9px;color:#475569;line-height:1.2;margin-top:1px;font-family:'Consolas','Courier New',monospace}
 
 /* ═══ ARROW LABEL ══════════════════════════════════════════════════ */
 .arrow-label{
@@ -1330,7 +1483,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   background:rgba(2,6,14,.88);
   border:1px solid rgba(255,255,255,.12);
   border-radius:2px;padding:2px 8px;
-  font-family:'Share Tech Mono',monospace;font-size:10px;
+  font-family:'Consolas','Courier New',monospace;font-size:10px;
   color:#94a3b8;pointer-events:none;white-space:nowrap;
   box-shadow:0 2px 10px rgba(0,0,0,.5);
 }
@@ -1346,7 +1499,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   box-shadow:0 16px 48px rgba(0,0,0,.65)
 }
 #colorPanel.open{display:block}
-#colorPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:'Rajdhani',sans-serif}
+#colorPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:system-ui,sans-serif}
 .c-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .c-swatch{width:30px;height:30px;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:all .15s}
 .c-swatch:hover{transform:scale(1.18);border-color:rgba(255,255,255,.4)}
@@ -1354,7 +1507,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 
 /* ═══ LAYER PANEL ══════════════════════════════════════════════════ */
 #layerPanel{
-  position:absolute;bottom:78px;left:20px;z-index:1010;
+  position:absolute;bottom:80px;left:20px;z-index:1010;
   background:rgba(4,8,16,.97);
   backdrop-filter:blur(20px);
   border:1px solid rgba(74,222,128,.15);
@@ -1363,24 +1516,24 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   box-shadow:0 16px 48px rgba(0,0,0,.65)
 }
 #layerPanel.open{display:block}
-#layerPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:'Rajdhani',sans-serif}
+#layerPanel h4{color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:system-ui,sans-serif}
 .layer-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer}
 .layer-row:last-child{margin-bottom:0}
 .layer-row input{accent-color:#4ade80;width:14px;height:14px;cursor:pointer}
-.layer-row label{color:#cbd5e1;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:600;cursor:pointer;letter-spacing:.5px}
+.layer-row label{color:#cbd5e1;font-size:13px;font-family:system-ui,sans-serif;font-weight:600;cursor:pointer;letter-spacing:.5px}
 
 /* ═══ NOTES / ANNOTATIONS ══════════════════════════════════════════ */
 .note-wrapper{
-  position:absolute;z-index:2000;min-width:170px;min-height:80px;
+  position:absolute;z-index:2000;touch-action:none;min-width:170px;min-height:80px;
   border-radius:3px;overflow:hidden;
   box-shadow:0 8px 32px rgba(0,0,0,.55);
   display:flex;flex-direction:column;resize:both;
   border:1px solid rgba(255,255,255,.12)
 }
 .note-header{
-  height:26px;flex-shrink:0;
+  height:32px;flex-shrink:0;
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 7px;cursor:move;user-select:none;
+  padding:0 7px;cursor:move;user-select:none;touch-action:none;
   background:rgba(0,0,0,.25)
 }
 .note-header-colors{display:flex;align-items:center;gap:5px}
@@ -1389,7 +1542,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .note-mini-picker .swatch{position:absolute;inset:0;border-radius:2px;pointer-events:none}
 .note-close{width:18px;height:18px;border-radius:2px;background:rgba(239,68,68,.12);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#f87171;font-size:13px;line-height:1;transition:background .15s;flex-shrink:0}
 .note-close:hover{background:rgba(239,68,68,.3)}
-.note-body{flex:1;resize:none;border:none;outline:none;padding:8px 10px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:500;line-height:1.5;background:transparent}
+.note-body{flex:1;resize:none;border:none;outline:none;padding:8px 10px;font-size:13px;font-family:system-ui,sans-serif;font-weight:500;line-height:1.5;background:transparent}
 
 /* ═══ DATALINK CONTACTS ════════════════════════════════════════════ */
 /* Label principal contact */
@@ -1398,13 +1551,13 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   pointer-events:none;white-space:nowrap;
 }
 .dl-callsign{
-  font-family:'Rajdhani',sans-serif;font-weight:700;
+  font-family:system-ui,sans-serif;font-weight:700;
   font-size:12px;letter-spacing:.8px;line-height:1.2;
   text-shadow:0 1px 4px rgba(0,0,0,.9),0 0 8px rgba(0,0,0,.7);
   padding:1px 5px;border-radius:2px;
 }
 .dl-data{
-  font-family:'Share Tech Mono',monospace;
+  font-family:'Consolas','Courier New',monospace;
   font-size:10px;letter-spacing:.3px;line-height:1.2;
   text-shadow:0 1px 4px rgba(0,0,0,.9);
   padding:0 5px;opacity:.85;
@@ -1418,13 +1571,13 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 
 /* ═══ AIRPORT LABELS ════════════════════════════════════════════════ */
 .ap-label{
-  font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;
+  font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
   color:rgba(96,165,250,.9);letter-spacing:.8px;
   text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);
   white-space:nowrap;pointer-events:none;
 }
 .ap-name{
-  font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;
+  font-family:system-ui,sans-serif;font-size:11px;font-weight:600;
   color:rgba(148,163,184,.85);letter-spacing:.3px;
   text-shadow:0 1px 4px #000;
   white-space:nowrap;pointer-events:none;
@@ -1433,7 +1586,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .ap-popup{
   background:rgba(4,8,18,.97);border:1px solid rgba(96,165,250,.2);
   border-top:2px solid rgba(96,165,250,.45);border-radius:3px;
-  padding:8px 28px 8px 11px;min-width:200px;font-family:'Share Tech Mono',monospace;
+  padding:8px 28px 8px 11px;min-width:200px;font-family:'Consolas','Courier New',monospace;
   box-shadow:0 4px 20px rgba(0,0,0,.7);white-space:nowrap;
 }
 /* Ligne 1 : ICAO · TACAN · TOUR */
@@ -1457,19 +1610,20 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .bms-toast{
   position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
   background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);
-  color:#10b981;font-family:'Rajdhani',sans-serif;font-size:11px;
+  color:#10b981;font-family:system-ui,sans-serif;font-size:11px;
   font-weight:700;letter-spacing:1.5px;padding:7px 16px;border-radius:2px;
   z-index:9999;pointer-events:none;text-transform:uppercase;
 }
 
 /* ═══ TAB BAR ══════════════════════════════════════════════════════ */
 #tabBar{
-  position:fixed;bottom:0;left:0;right:0;height:50px;z-index:2000;
+  position:fixed;bottom:0;left:0;right:0;height:56px;z-index:2000;
   background:rgba(2,5,12,.98);
   backdrop-filter:blur(24px) saturate(1.6);
   border-top:1px solid rgba(74,222,128,.12);
   display:flex;align-items:stretch;
   box-shadow:0 -8px 32px rgba(0,0,0,.7);
+  padding:0 4px;
 }
 #tabBar::before{
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
@@ -1491,7 +1645,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   transform:translate(-50%,-50%);
   background:rgba(2,5,12,.98);
   padding:2px 0;
-  font-family:'Share Tech Mono',monospace;font-size:7px;
+  font-family:'Consolas','Courier New',monospace;font-size:7px;
   color:rgba(74,222,128,.5);letter-spacing:1px;
   white-space:nowrap;writing-mode:vertical-rl;text-orientation:mixed;
 }
@@ -1517,22 +1671,25 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .tab-btn.active .tab-label{color:#4ade80}
 /* Label de catégorie au-dessus des onglets */
 .tab-group-label{
-  position:absolute;top:3px;left:0;right:0;text-align:center;
-  font-family:'Share Tech Mono',monospace;font-size:7px;
-  color:rgba(74,222,128,.38);letter-spacing:2px;text-transform:uppercase;
+  position:absolute;top:2px;left:0;right:0;text-align:center;
+  font-family:'Consolas','Courier New',monospace;font-size:7px;
+  color:rgba(74,222,128,.28);letter-spacing:2px;text-transform:uppercase;
   pointer-events:none;
 }
-.tab-icon{width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+.tab-icon{width:18px;height:18px;display:flex;align-items:center;justify-content:center}
 .tab-icon svg{stroke:#5a8c70;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:all .2s}
 .tab-label{
-  font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;
-  letter-spacing:1.5px;text-transform:uppercase;color:#4d7a62;
-  transition:color .2s;white-space:nowrap;
+  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;color:#4d7a62;
+  transition:color .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:100%;
 }
 
 /* ═══ TAB PANELS ════════════════════════════════════════════════════ */
 .tab-panel{
-  position:fixed;left:0;right:0;bottom:72px;z-index:1990;
+  position:fixed;
+  will-change:transform;
+  contain:layout style;left:0;right:0;bottom:80px;z-index:1990;
   background:rgba(2,5,12,.99);
   backdrop-filter:blur(24px);
   border-top:1px solid rgba(74,222,128,.15);
@@ -1560,11 +1717,11 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 }
 .gps-field:last-child{border-right:none}
 .gps-lbl{
-  font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:11px;font-weight:700;
   color:#4a6e80;letter-spacing:1.5px;text-transform:uppercase;line-height:1;
 }
 .gps-val{
-  font-family:'Share Tech Mono',monospace;font-size:17px;
+  font-family:'Consolas','Courier New',monospace;font-size:17px;
   color:#60a5fa;font-weight:400;line-height:1.4;letter-spacing:.5px;
 }
 .gps-val.green{color:#4ade80}
@@ -1583,12 +1740,12 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 }
 .steer-chip:hover{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.06)}
 .steer-chip.active{border-color:rgba(74,222,128,.5);background:rgba(74,222,128,.08);border-left:2px solid #4ade80}
-.steer-num{font-family:'Share Tech Mono',monospace;font-size:11px;color:#475569;letter-spacing:1px}
-.steer-fl{font-family:'Share Tech Mono',monospace;font-size:13px;color:#94a3b8;font-weight:700}
+.steer-num{font-family:'Consolas','Courier New',monospace;font-size:11px;color:#475569;letter-spacing:1px}
+.steer-fl{font-family:'Consolas','Courier New',monospace;font-size:13px;color:#94a3b8;font-weight:700}
 
 /* CHARTS panel — fullscreen iframe */
 #panel-charts{
-  height:calc(100vh - 72px);top:0;bottom:72px;
+  height:calc(100vh - 80px);top:0;bottom:80px;
   border-top:2px solid rgba(99,102,241,.4);
   display:flex;flex-direction:column;
 }
@@ -1599,12 +1756,12 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(99,102,241,.15);
 }
 #panel-charts .charts-header span{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#6366f1;letter-spacing:2px;text-transform:uppercase;
 }
 #panel-charts iframe{flex:1;border:none;background:#000}
 .ext-badge{
-  font-family:'Share Tech Mono',monospace;font-size:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:9px;
   color:rgba(99,102,241,.5);letter-spacing:1px;
   background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.15);
   border-radius:2px;padding:1px 6px;margin-left:auto;
@@ -1623,18 +1780,26 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(251,191,36,.12);
 }
 .kb-header-title{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#fbbf24;letter-spacing:2px;text-transform:uppercase;
 }
 .kb-tabs{display:flex;height:100%;margin-left:auto}
 .kb-tab{
   height:100%;padding:0 16px;display:flex;align-items:center;
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   letter-spacing:1.5px;color:#546e82;text-transform:uppercase;cursor:pointer;
   border-bottom:2px solid transparent;transition:all .15s;border-left:1px solid rgba(255,255,255,.04);
 }
 .kb-tab:hover{color:#94a3b8;background:rgba(255,255,255,.02)}
-.kb-tab.active{color:#fbbf24;border-bottom-color:#fbbf24}
+.kb-tab.active{color:var(--kt,#fbbf24);border-bottom-color:var(--kt,#fbbf24)}
+.kb-field-group{display:flex;flex-direction:column;gap:3px}
+.kb-field-lbl{font-size:9px;font-weight:700;color:#475569;letter-spacing:1.5px;text-transform:uppercase}
+.kb-input{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:2px;
+  padding:6px 10px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:12px;
+  outline:none;width:100%;transition:border-color .2s}
+.kb-input:focus{border-color:rgba(96,165,250,.4)}
+.kb-9l-num{font-family:'Consolas','Courier New',monospace;font-size:13px;font-weight:700;
+  color:#f97316;width:20px;text-align:right;align-self:flex-end;padding-bottom:6px}
 .kb-body{flex:1;overflow:hidden;position:relative}
 .kb-page{position:absolute;inset:0;overflow-y:auto;padding:16px 20px;display:none}
 .kb-page.active{display:block}
@@ -1644,21 +1809,21 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 /* Brevity */
 .brev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:9px}
 .brev-item{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.07);border-radius:2px;padding:10px 14px}
-.brev-word{font-family:'Share Tech Mono',monospace;font-size:15px;color:#fbbf24;font-weight:700;letter-spacing:.5px}
-.brev-def{font-family:'Rajdhani',sans-serif;font-size:14px;color:#64748b;margin-top:3px;line-height:1.45}
+.brev-word{font-family:'Consolas','Courier New',monospace;font-size:15px;color:#fbbf24;font-weight:700;letter-spacing:.5px}
+.brev-def{font-family:system-ui,sans-serif;font-size:14px;color:#64748b;margin-top:3px;line-height:1.45}
 /* Freq table */
-.freq-table{width:100%;border-collapse:collapse;font-family:'Rajdhani',sans-serif}
+.freq-table{width:100%;border-collapse:collapse;font-family:system-ui,sans-serif}
 .freq-table th{font-size:12px;font-weight:700;color:#546e82;letter-spacing:1.5px;text-transform:uppercase;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
 .freq-table td{font-size:15px;color:#94a3b8;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
 .freq-table td:first-child{color:#e2e8f0;font-weight:700}
-.freq-table td.hi{color:#4ade80;font-family:'Share Tech Mono',monospace}
+.freq-table td.hi{color:#4ade80;font-family:'Consolas','Courier New',monospace}
 /* Notes */
 .kb-notes{width:100%;height:100%;resize:none;background:transparent;border:none;outline:none;
-  font-family:'Share Tech Mono',monospace;font-size:14px;color:#94a3b8;line-height:1.8;padding:4px 0}
+  font-family:'Consolas','Courier New',monospace;font-size:14px;color:#94a3b8;line-height:1.8;padding:4px 0}
 
 /* ═══ BRIEFING PANEL ════════════════════════════════════════════ */
 #panel-briefing{
-  height:calc(100vh - 72px);top:0;bottom:72px;
+  height:calc(100vh - 80px);top:0;bottom:80px;
   border-top:2px solid rgba(251,191,36,.45);
   display:flex;flex-direction:column;
 }
@@ -1668,14 +1833,14 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   border-bottom:1px solid rgba(251,191,36,.12);
 }
 .brief-header-title{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#fbbf24;letter-spacing:2px;text-transform:uppercase;
 }
 .brief-upload-btn{
   margin-left:auto;display:flex;align-items:center;gap:6px;
   background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);
   border-radius:2px;padding:5px 12px;cursor:pointer;
-  font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
   color:#fbbf24;letter-spacing:1.5px;text-transform:uppercase;transition:all .2s;
 }
 .brief-upload-btn:hover{background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.5)}
@@ -1686,7 +1851,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   display:flex;flex-direction:column;overflow:hidden;
 }
 .brief-sidebar-hdr{
-  padding:8px 12px;font-family:'Rajdhani',sans-serif;font-size:9px;
+  padding:8px 12px;font-family:system-ui,sans-serif;font-size:9px;
   font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase;
   border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;
 }
@@ -1702,25 +1867,25 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
 .brief-file-icon{
   width:26px;height:30px;border-radius:2px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-family:'Rajdhani',sans-serif;font-size:7px;font-weight:700;letter-spacing:.5px;
+  font-family:system-ui,sans-serif;font-size:7px;font-weight:700;letter-spacing:.5px;
 }
 .brief-file-icon.pdf{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2)}
 .brief-file-icon.img{background:rgba(74,222,128,.07);color:#4ade80;border:1px solid rgba(74,222,128,.15)}
 .brief-file-icon.docx{background:rgba(59,130,246,.08);color:#60a5fa;border:1px solid rgba(59,130,246,.18)}
 .brief-file-info{flex:1;min-width:0}
 .brief-file-name{
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
   color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .brief-file-item.active .brief-file-name{color:#fbbf24}
-.brief-file-meta{font-family:'Share Tech Mono',monospace;font-size:10px;color:#3d6b52;margin-top:2px}
+.brief-file-meta{font-family:'Consolas','Courier New',monospace;font-size:10px;color:#3d6b52;margin-top:2px}
 .brief-file-del{
   opacity:0;font-size:13px;color:#546e82;cursor:pointer;
   transition:all .15s;padding:2px 4px;position:absolute;right:4px;top:50%;transform:translateY(-50%);
 }
 .brief-file-item:hover .brief-file-del{opacity:1}
 .brief-file-del:hover{color:#ef4444}
-.brief-empty{padding:28px 12px;text-align:center;font-family:'Rajdhani',sans-serif;font-size:11px;color:#3d6b52;line-height:1.8}
+.brief-empty{padding:28px 12px;text-align:center;font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;line-height:1.8}
 .brief-viewer{flex:1;overflow:hidden;position:relative;background:#04080f}
 .brief-viewer iframe{width:100%;height:100%;border:none}
 .brief-placeholder{
@@ -1728,62 +1893,141 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   align-items:center;justify-content:center;gap:10px;pointer-events:none;
 }
 .brief-placeholder svg{opacity:.06}
-.brief-placeholder-txt{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase}
+.brief-placeholder-txt{font-family:system-ui,sans-serif;font-size:11px;font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase}
 #briefingFileInput{display:none}
 
-/* ═══ MOBILE / TACTILE ══════════════════════════════════════════ */
-/* Touch targets minimum 44px */
-.tab-btn, .tbtn2 { min-height:44px }
-.tool-btn        { min-height:44px; min-width:44px }
-#settingsBtn     { min-width:36px; min-height:22px }
+/* ═══ RESPONSIVE & TACTILE ══════════════════════════════════════ */
 
-/* Toolbar escamotable sur mobile (portrait étroit) */
+/* ── Cibles tactiles minimum (WCAG 2.5.5) ── */
+.tab-btn,.tbtn2   { min-height:48px }
+.tool-btn         { min-height:48px; min-width:48px }
+#settingsBtn      { min-width:40px; min-height:28px }
+.kb-tab           { min-height:40px; padding:0 12px }
+.layer-row        { min-height:36px }
+
+/* ── Tablette / écran < 1024px — nettoyer le tabBar ── */
+@media (max-width:1024px) {
+  .tab-group-label{display:none}
+  .tab-group-sep{display:none}
+  #tabBar{gap:0;padding:0 2px}
+  .tab-btn{padding:0 4px;gap:2px}
+}
+
+/* ── Tablet paysage (768px+) — layout optimisé ── */
+@media (min-width:768px) {
+  .tool-btn     { width:44px; height:44px }
+  .tab-label    { font-size:12px }
+  .gps-val      { font-size:16px }
+  .gps-lbl      { font-size:11px }
+  /* Briefing sidebar plus large */
+  .brief-sidebar{ width:240px }
+}
+
+/* ── Grand écran (1200px+) ── */
+@media (min-width:1200px) {
+  #toolbar      { top:100px }
+  .tab-label    { font-size:13px; letter-spacing:.5px }
+  .gps-val      { font-size:18px }
+  .brief-sidebar{ width:280px }
+  .brev-grid    { grid-template-columns:repeat(3,1fr) }
+}
+
+/* ── Mobile portrait (≤600px) ── */
 @media (max-width:600px) {
+  /* Toolbar horizontal en bas */
   #toolbar{
-    top:auto;bottom:72px;left:50%;transform:translateX(-50%);
+    top:auto;bottom:80px;left:50%;transform:translateX(-50%);
     flex-direction:row;padding:6px 8px;gap:3px;
-    border-top:none;border-left:2px solid rgba(74,222,128,.35);
     border-top:2px solid rgba(74,222,128,.35);
+    border-left:none;
   }
   .tbdiv{width:1px;height:24px;margin:0 2px;
     background:linear-gradient(180deg,transparent,rgba(74,222,128,.15),transparent)}
-  /* Panels full height sur mobile */
-  #panel-charts,#panel-briefing{height:calc(100vh - 72px)}
-  #panel-kneeboard{height:calc(100vh - 72px)}
+  /* Panels full height */
+  #panel-charts,#panel-briefing,#panel-kneeboard{height:calc(100vh - 80px)}
+  /* GPS responsive */
   #panel-gps .gps-row{flex-wrap:wrap}
   .gps-field{flex:0 0 50%;border-right:none;border-bottom:1px solid rgba(255,255,255,.04)}
-  /* Settings panel full width sur mobile */
+  /* Settings full width */
   #settingsPanel{left:8px;right:8px;width:auto}
-  /* Tab labels plus grands */
-  .tab-label{font-size:10px;letter-spacing:1px}
-  /* SysBar IP masqué sur très petit écran */
+  /* Tab labels */
+  .tab-label{font-size:11px;letter-spacing:.5px}
+  /* SysBar compressé */
   .sys-ip{display:none}
+  /* Police lisible sur petit écran */
+  .dl-callsign{font-size:11px}
+  .dl-data    {font-size:10px}
+  .ap-label   {font-size:10px}
+  /* Briefing sidebar réduite */
+  .brief-sidebar{width:160px}
+  .brief-file-name{font-size:11px}
 }
 
+/* ── Très petit (≤400px) ── */
 @media (max-width:400px) {
-  .sys-center{display:none}
-  .sys-fc{display:none}
+  .sys-center,.sys-fc{display:none}
+  .tab-label{font-size:10px}
+  .brief-sidebar{width:130px}
 }
 
-/* Touch feedback */
-.tab-btn:active,.tbtn2:active{background:rgba(74,222,128,.12)!important}
-.tool-btn:active{background:rgba(74,222,128,.15)!important;transform:translateX(3px)}
+/* ── Notch / safe-area (iPhone X+) ── */
+@supports (padding-bottom:env(safe-area-inset-bottom)){
+  #tabBar{padding-bottom:env(safe-area-inset-bottom)}
+  #sysBar{padding-bottom:env(safe-area-inset-bottom)}
+}
+
+/* ── Touch feedback (animation GPU) ── */
+.tab-btn:active,.tbtn2:active{
+  background:rgba(74,222,128,.12)!important;
+  transform:scale(.97);
+  transition:transform .05s;
+}
+.tool-btn:active{
+  background:rgba(74,222,128,.15)!important;
+  transform:translateX(3px) scale(.95);
+}
 .brief-file-item:active{background:rgba(74,222,128,.08)!important}
 .ap-ils-chip:active{background:rgba(251,191,36,.12)!important}
+.kb-tab:active{opacity:.7}
 
-/* Scrollbars plus larges sur tactile */
+/* ── Pointeur grossier (tactile) ── */
 @media (pointer:coarse){
-  .brief-file-list::-webkit-scrollbar{width:6px}
-  .kb-page::-webkit-scrollbar{width:6px}
-  /* Prevent accidental text selection on long press */
-  #map,#tabBar,#sysBar,#toolbar{user-select:none;-webkit-user-select:none}
+  /* Scrollbars plus larges */
+  .brief-file-list::-webkit-scrollbar{width:8px}
+  .kb-page::-webkit-scrollbar        {width:8px}
+  /* Pas de sélection accidentelle */
+  #map,#tabBar,#sysBar,#toolbar{
+    user-select:none;-webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  /* Hover désactivé (pas pertinent au tactile) */
+  .tool-btn:hover{transform:none}
+  /* Touch action optimisé */
+  #map{touch-action:pan-x pan-y pinch-zoom}
+  .tool-btn,.tab-btn,.kb-tab{touch-action:manipulation}
 }
+
+/* ── Paysage mobile (hauteur réduite) ── */
+@media (max-height:500px) and (orientation:landscape){
+  #toolbar{top:60px}
+  #sysBar{height:18px;font-size:8px}
+  .tab-btn{min-height:40px}
+  .gps-val{font-size:13px}
+}
+
+/* ── Réduction mouvement (accessibilité) ── */
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
 </style></head><body>
 <div id="map"></div>
 
+
+
 <div id="toolbar">
   
-  <button class="tool-btn" id="uploadBtn" title="Importer .ini">
+  <button class="tool-btn" id="uploadBtn" title="Import .ini">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
       <polyline points="13 2 13 9 20 9"/>
@@ -1791,14 +2035,14 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
     </svg>
   </button>
   
-  <button class="tool-btn" id="annotationBtn" title="Note tactique">
+  <button class="tool-btn" id="annotationBtn" title="Tactical note">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <path d="M12 20h9"/>
       <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
     </svg>
   </button>
   
-  <button class="tool-btn" id="rulerBtn" title="Règle / Distance">
+  <button class="tool-btn" id="rulerBtn" title="Ruler / Distance">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <rect x="2" y="7" width="20" height="10" rx="2"/>
       <line x1="6" y1="7" x2="6" y2="10"/><line x1="10" y1="7" x2="10" y2="12"/>
@@ -1806,14 +2050,14 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
     </svg>
   </button>
   
-  <button class="tool-btn" id="arrowBtn" title="Tracer une flèche">
+  <button class="tool-btn" id="arrowBtn" title="Draw arrow">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <line x1="5" y1="19" x2="19" y2="5"/>
       <polyline points="9 5 19 5 19 15"/>
     </svg>
   </button>
   
-  <button class="tool-btn danger" id="clearArrowsBtn" title="Effacer les tracés">
+  <button class="tool-btn danger" id="clearArrowsBtn" title="Clear drawings">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <polyline points="3 6 5 6 21 6"/>
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
@@ -1822,7 +2066,7 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   </button>
   <div class="tool-divider"></div>
   
-  <button class="tool-btn" id="colorBtn" title="Couleur active">
+  <button class="tool-btn" id="colorBtn" title="Active color">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <circle cx="13.5" cy="6.5" r="1" fill="currentColor"/><circle cx="17.5" cy="10.5" r="1" fill="currentColor"/>
       <circle cx="8.5" cy="7.5" r="1" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1" fill="currentColor"/>
@@ -1831,33 +2075,28 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   </button>
   <div class="tool-divider"></div>
   
-  <button class="tool-btn active" id="pptBtn" title="Cercles de menace PPT">
+  <button class="tool-btn active" id="pptBtn" title="PPT threat circles">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
     </svg>
   </button>
   
-  <button class="tool-btn active" id="airportBtn" title="Aéroports">
+  <button class="tool-btn active" id="airportBtn" title="Airports">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19 4c-2 0-4 0-5.5 1.5L10 9 1.8 7.2c-.5-.1-.9.4-.8.9L3 11l3-1 .8 2.8L5 14l2 2 1.2-1.8L10 15l-1 3 3.1 1c.4.1 1-.3.9-.8z"/>
     </svg>
   </button>
   
-  <button class="tool-btn" id="radarBtn" title="Contacts datalink">
+  <button class="tool-btn" id="radarBtn" title="Contacts datalink L16">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/>
       <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
       <line x1="12" y1="2" x2="12" y2="6"/>
     </svg>
   </button>
+
   
-  <button class="tool-btn" id="calBtn" title="Calibrer les pistes" onclick="openCalPanel()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
-    </svg>
-  </button>
-  
-  <button class="tool-btn active" id="followBtn" title="Centrer sur l'avion (actif)">
+  <button class="tool-btn active" id="followBtn" title="Center on aircraft (active)">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9" stroke-dasharray="4 2"/>
       <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
@@ -1865,8 +2104,17 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
     </svg>
   </button>
 
+  <button class="tool-btn" id="compassBtn" title="North Up (click for Track Up)">
+    <svg id="compassSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="12" r="10"/>
+      <polygon points="12,3 14,11 12,10 10,11" fill="#ef4444" stroke="none"/>
+      <polygon points="12,21 14,13 12,14 10,13" fill="currentColor" stroke="none" opacity=".35"/>
+      <text x="12" y="5.5" text-anchor="middle" fill="#ef4444" font-size="4.5" font-weight="700" font-family="system-ui" stroke="none">N</text>
+    </svg>
+  </button>
+
   
-  <button class="tool-btn" id="layerBtn" title="Fonds de carte">
+  <button class="tool-btn" id="layerBtn" title="Map layers">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <polygon points="12 2 2 7 12 12 22 7 12 2"/>
       <polyline points="2 17 12 22 22 17"/>
@@ -1881,8 +2129,8 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   <div class="sys-left">
     <div class="dot off" id="dot"></div>
     <span class="sys-bms-tag">BMS</span>
-    <span id="statusText">NON DÉTECTÉ</span>
-    <span id="trttConfigBtn" title="Serveur TRTT" onclick="toggleTRTTPanel()">⚙</span>
+    <span id="statusText">NOT DETECTED</span>
+    <span id="trttConfigBtn" title="TRTT server" onclick="toggleTRTTPanel()">⚙</span>
   </div>
   <!-- Centre: signature -->
   <div class="sys-center">
@@ -1897,11 +2145,18 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   </div>
   <!-- Droite: IP serveur + zulu + site + settings -->
   <div class="sys-right">
-    <span id="sysServerIp" class="sys-ip" title="URL tablette/mobile">—</span>
+    <span id="sysServerIp" class="sys-ip" title="Tablet/mobile URL">—</span>
     <div class="sys-sep"></div>
     <span id="zuluClock" class="sys-zulu">00:00:00Z</span>
     <div class="sys-sep"></div>
-    <a href="https://www.falcon-charts.com" target="_blank" class="sys-fc">FALCON-CHARTS</a>
+    <a href="https://www.falcon-charts.com" target="_blank" class="sys-fc">FALCON-PAD</a>
+    <div class="sys-sep"></div>
+    <button id="fsBtn" onclick="toggleFullscreen()" title="Fullscreen" style="cursor:pointer;background:transparent;border:none;padding:0 8px;height:100%;display:flex;align-items:center;color:rgba(74,222,128,.3);transition:color .2s;flex-shrink:0;">
+      <svg id="fsIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+        <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+      </svg>
+    </button>
     <div class="sys-sep"></div>
     <button id="settingsBtn" onclick="toggleSettings()" title="Settings">
       <svg viewBox="0 0 24 24">
@@ -1925,105 +2180,113 @@ body{font-family:'Rajdhani',system-ui,sans-serif;overflow:hidden;background:#060
   <div class="sp-body">
     <!-- Port -->
     <div class="sp-row">
-      <label class="sp-label">PORT D'ÉCOUTE</label>
+      <label class="sp-label">LISTEN PORT</label>
       <input class="sp-input" id="sp-port" type="number" min="1024" max="65535" placeholder="8000"/>
-      <span class="sp-hint">Plage valide : 1024 – 65535. Redémarrage requis.</span>
-      <span class="sp-warn" id="sp-port-warn">⚠ Modification du port — relancez le script pour appliquer</span>
+      <span class="sp-hint">Valid range: 1024 – 65535. Restart required.</span>
+      <span class="sp-warn" id="sp-port-warn">⚠ Port changed — restart script to apply</span>
     </div>
     <div class="sp-divider"></div>
     <!-- Dossier briefing -->
     <div class="sp-row">
-      <label class="sp-label">DOSSIER BRIEFING</label>
+      <label class="sp-label">BRIEFING FOLDER</label>
       <input class="sp-input" id="sp-briefdir" type="text" placeholder="C:\temp\gpsbyriesu\briefing"/>
-      <span class="sp-hint">Chemin absolu Windows. Créé automatiquement si inexistant.</span>
+      <span class="sp-hint">Absolute Windows path. Auto-created if missing.</span>
     </div>
     <div class="sp-divider"></div>
     <!-- Broadcast interval -->
     <div class="sp-row">
       <label class="sp-label">BROADCAST INTERVAL</label>
       <input class="sp-input" id="sp-bcast" type="number" min="50" max="2000" placeholder="200"/>
-      <span class="sp-hint">Fréquence de mise à jour position (ms). 100 = fluide, 500 = économie.</span>
+      <span class="sp-hint">Position update rate (ms). 100 = smooth, 500 = eco.</span>
     </div>
-    <div class="sp-divider"></div>
-    <!-- Thème -->
-    <div class="sp-row">
-      <label class="sp-label">THÈME</label>
-      <div class="sp-theme-row">
-        <button class="sp-theme-btn sel" id="sp-theme-dark"  onclick="selectTheme('dark')">◼ DARK</button>
-        <button class="sp-theme-btn"     id="sp-theme-light" onclick="selectTheme('light')">◻ LIGHT</button>
-      </div>
-    </div>
+
   </div>
   <div class="sp-status" id="sp-status"></div>
   <div class="sp-footer">
-    <button class="sp-cancel" onclick="toggleSettings()">ANNULER</button>
-    <button class="sp-save"   onclick="saveSettings()">✓ SAUVEGARDER</button>
+    <button class="sp-cancel" onclick="toggleSettings()">CANCEL</button>
+    <button class="sp-save"   onclick="saveSettings()">✓ SAVE</button>
   </div>
 </div>
 
 <!-- COLOR PANEL -->
 <div id="colorPanel">
-  <h4>Couleur active</h4>
+  <h4>Active color</h4>
   <div class="c-grid" id="cGrid"></div>
 </div>
 
 <!-- LAYER PANEL -->
 <div id="layerPanel">
-  <h4>Fond de carte</h4>
+  <h4>Map layers</h4>
   <div class="layer-row"><input type="radio" name="layer" id="lDark" value="dark" checked><label for="lDark">Dark</label></div>
   <div class="layer-row"><input type="radio" name="layer" id="lOsm" value="osm"><label for="lOsm">OSM (fallback)</label></div>
   <div class="layer-row"><input type="radio" name="layer" id="lSat" value="satellite"><label for="lSat">Satellite</label></div>
   <div class="layer-row"><input type="radio" name="layer" id="lTerrain" value="terrain"><label for="lTerrain">Terrain</label></div>
   <div class="tool-divider" style="margin:8px 0"></div>
-  <h4 style="margin-top:4px">Affichage</h4>
-  <div class="layer-row"><input type="checkbox" id="chkPPT" checked><label for="chkPPT">Cercles PPT</label></div>
-  <div class="layer-row"><input type="checkbox" id="chkAirports" checked><label for="chkAirports">Aéroports</label></div>
-  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkApName"><label for="chkApName" style="font-size:10px;color:#94a3b8">Nom complet</label></div>
-  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkRunways" checked><label for="chkRunways" style="font-size:10px;color:#94a3b8">Pistes</label></div>
+  <h4 style="margin-top:4px">Display</h4>
+  <div class="layer-row"><input type="checkbox" id="chkDMZ" checked><label for="chkDMZ">DMZ</label></div>
+  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkApName"><label for="chkApName" style="font-size:10px;color:#94a3b8">Nom base aérienne</label></div>
+  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkRunways" checked><label for="chkRunways" style="font-size:10px;color:#94a3b8">Runways</label></div>
 </div>
 
 <!-- TRTT PANEL -->
-<div id="trttPanel" style="display:none;position:fixed;bottom:78px;left:20px;background:rgba(4,8,16,.97);border:1px solid rgba(74,222,128,.2);border-top:2px solid rgba(74,222,128,.35);border-radius:3px;padding:12px 16px;z-index:2000;min-width:280px;backdrop-filter:blur(16px)">
-  <div style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;color:#4ade80;letter-spacing:2px;margin-bottom:10px;text-transform:uppercase">⚙ Serveur TRTT</div>
+<div id="trttPanel" style="display:none;position:fixed;bottom:80px;left:20px;background:rgba(4,8,16,.97);border:1px solid rgba(74,222,128,.2);border-top:2px solid rgba(74,222,128,.35);border-radius:3px;padding:12px 16px;z-index:2000;min-width:280px;backdrop-filter:blur(16px)">
+  <div style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;color:#4ade80;letter-spacing:2px;margin-bottom:10px;text-transform:uppercase">⚙ Serveur TRTT</div>
   <div style="display:flex;gap:8px;align-items:center">
-    <input id="trttHostInput" type="text" placeholder="127.0.0.1" style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:Share Tech Mono,monospace;font-size:11px;outline:none">
-    <input id="trttPortInput" type="text" placeholder="42674" style="width:58px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:Share Tech Mono,monospace;font-size:11px;outline:none">
-    <button onclick="applyTRTTConfig()" style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.3);border-radius:2px;padding:5px 12px;color:#4ade80;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">OK</button>
+    <input id="trttHostInput" type="text" placeholder="127.0.0.1" style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;outline:none">
+    <input id="trttPortInput" type="text" placeholder="42674" style="width:58px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;outline:none">
+    <button onclick="applyTRTTConfig()" style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.3);border-radius:2px;padding:5px 12px;color:#4ade80;font-family:system-ui,sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">OK</button>
   </div>
-  <div id="trttPanelStatus" style="font-family:Share Tech Mono,monospace;font-size:10px;color:#475569;margin-top:8px"></div>
+  <div id="trttPanelStatus" style="font-family:'Consolas','Courier New',monospace;font-size:10px;color:#475569;margin-top:8px"></div>
 </div>
 
 <input type="file" id="fileInput" accept=".ini" style="display:none">
 
 <script>
-const map = L.map('map',{preferCanvas:true,zoomControl:true}).setView([37.5,127.5],7);
+const map = L.map('map',{preferCanvas:true,zoomControl:true,rotate:true,rotateControl:false,bearing:0,touchRotate:false,shiftKeyRotate:false,compassBearing:false}).setView([37.5,127.5],7);
+// Disable any user-triggered rotation (only programmatic setBearing allowed)
+if(map.touchRotate) map.touchRotate.disable();
+if(map.compassBearing) map.compassBearing.disable();
+if(map.shiftKeyRotate) map.shiftKeyRotate.disable();
 const layers = {
-  osm:       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:''}),
+  osm:       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:''}),
+  osmfr:     L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',{maxZoom:20,subdomains:'abc',attribution:''}),
+  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20,subdomains:'abcd',attribution:''}),
   satellite: L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:''}),
-  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:20,attribution:''}),
   terrain:   L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:''})
 };
 let _activeTileKey = 'dark';
 function switchLayer(key) {
   Object.values(layers).forEach(l => { try { map.removeLayer(l); } catch(e){} });
-  layers[key].addTo(map);
+  if(layers[key]) layers[key].addTo(map);
   _activeTileKey = key;
+  // Sync radio buttons
+  document.querySelectorAll('input[name="layer"]').forEach(r => r.checked = (r.value === key));
 }
+// Démarrer sur Dark, fallback OSM si inaccessible
 layers.dark.addTo(map);
-layers.dark.once('tileerror', () => {
-  console.warn('Dark tiles failed, falling back to OSM');
+let _darkFallbackDone = false;
+layers.dark.on('tileerror', function(){
+  if(_darkFallbackDone) return;
+  _darkFallbackDone = true;
+  console.warn('Dark tiles indisponibles, fallback OSM');
   map.removeLayer(layers.dark);
   layers.osm.addTo(map);
   _activeTileKey = 'osm';
   document.getElementById('lDark').checked = false;
-  document.getElementById('lOsm').checked = true;
+  document.getElementById('lOsm').checked  = true;
 });
-
 map.attributionControl.setPrefix('');
 
-L.polyline([[38.0,124.6],[38.1,125.0],[38.3,125.5],[38.2,126.0],[38.3,126.5],[38.4,127.0],
-            [38.5,127.5],[38.3,128.0],[38.4,128.5],[38.5,129.0],[38.6,129.5],[38.7,130.0]],
-  {color:'#dc2626',weight:1.8,opacity:.5,dashArray:'8 5'}).addTo(map);
+// DMZ — 38ème parallèle Corée (coordonnées corrigées)
+const _dmzLine = L.polyline([
+  [38.31,125.10],[38.27,125.40],[38.25,125.68],[38.27,126.00],
+  [38.25,126.35],[38.18,126.65],[38.12,126.95],[38.05,127.18],
+  [38.00,127.45],[37.97,127.75],[38.00,128.02],[38.10,128.30],
+  [38.20,128.55],[38.35,128.75],[38.45,129.00],[38.55,129.20]],
+  {color:'#dc2626',weight:2,opacity:.7,dashArray:'10 5'}).addTo(map);
+document.getElementById('chkDMZ').addEventListener('change',function(){
+  this.checked ? _dmzLine.addTo(map) : map.removeLayer(_dmzLine);
+});
 
 const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#1e293b'];
 let activeColor='#3b82f6';
@@ -2031,8 +2294,9 @@ let rulerActive=false,arrowActive=false;
 let drawMarkers=[],missionMarkers=[],aircraftMarker=null;
 let pptCircles=[],airportMarkers=[];
 
-function makeAircraftIcon(hdg,alt,kias){
-  const hdgStr=String(Math.round(hdg)).padStart(3,'0')+'°';
+function makeAircraftIcon(hdg,alt,kias,realHdg){
+  const displayHdg = realHdg != null ? realHdg : hdg;
+  const hdgStr=String(Math.round(displayHdg)).padStart(3,'0')+'°';
   const altFL=alt!=null?'FL'+String(Math.round(Math.abs(alt)/100)).padStart(3,'0'):'';
   const spdStr=kias!=null&&kias>5?String(Math.round(kias))+'kt':'';
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
@@ -2052,18 +2316,44 @@ function makeAircraftIcon(hdg,alt,kias){
     position:absolute;left:50%;transform:translateX(-50%);top:36px;
     white-space:nowrap;background:rgba(3,8,20,.92);
     border:1px solid rgba(59,130,246,.5);border-radius:2px;
-    padding:2px 8px;font-family:Rajdhani,sans-serif;font-weight:700;
+    padding:2px 8px;font-family:system-ui,sans-serif;font-weight:700;
     font-size:13px;pointer-events:none;letter-spacing:.5px;
     box-shadow:0 2px 10px rgba(0,0,0,.7),0 0 12px rgba(59,130,246,.12);
   ">${parts}</div>`;
   return L.divIcon({html:`<div style="position:relative;width:34px;height:34px">${svg}${label}</div>`,className:'',iconSize:[34,34],iconAnchor:[17,17]});
 }
 
+
 let followAircraft = true;
+let _trackUp = false;
+
+// ── Compass: North Up / Track Up ────────────────────────────────
+const _compassBtn = document.getElementById('compassBtn');
+_compassBtn.classList.add('north-up');
+
+_compassBtn.addEventListener('click', function(e){
+  e.stopPropagation();
+  _trackUp = !_trackUp;
+  if(_trackUp){
+    this.classList.remove('north-up');
+    this.classList.add('track-up');
+    this.title = 'Track Up (click for North Up)';
+    if(!followAircraft){
+      followAircraft = true;
+      document.getElementById('followBtn').classList.add('active');
+    }
+  } else {
+    this.classList.remove('track-up');
+    this.classList.add('north-up');
+    this.title = 'North Up (click for Track Up)';
+    if(typeof map.setBearing==='function') map.setBearing(0);
+  }
+});
+
 document.getElementById('followBtn').addEventListener('click', function() {
   followAircraft = !followAircraft;
   this.classList.toggle('active', followAircraft);
-  this.title = followAircraft ? "Centrer sur l'avion (actif)" : "Centrer sur l'avion (désactivé)";
+  this.title = followAircraft ? "Center on aircraft (active)" : "Center on aircraft (off)";
   if (followAircraft && aircraftMarker) {
     map.setView(aircraftMarker.getLatLng(), map.getZoom());
   }
@@ -2071,9 +2361,15 @@ document.getElementById('followBtn').addEventListener('click', function() {
 map.on('dragstart', () => {
   if (followAircraft) {
     followAircraft = false;
-    const btn = document.getElementById('followBtn');
-    btn.classList.remove('active');
-    btn.title = "Centrer sur l'avion (désactivé)";
+    document.getElementById('followBtn').classList.remove('active');
+    document.getElementById('followBtn').title = "Center on aircraft (off)";
+  }
+  if (_trackUp) {
+    _trackUp = false;
+    if(typeof map.setBearing==='function') map.setBearing(0);
+    _compassBtn.classList.remove('track-up');
+    _compassBtn.classList.add('north-up');
+    _compassBtn.title = 'North Up (click for Track Up)';
   }
 });
 
@@ -2093,7 +2389,7 @@ function _bullIcon() {
       <line x1="0"  y1="14" x2="7"  y2="14" stroke="${col}" stroke-width="1.4" opacity=".7"/>
       <line x1="21" y1="14" x2="28" y2="14" stroke="${col}" stroke-width="1.4" opacity=".7"/>
       <text x="14" y="-4" text-anchor="middle"
-        style="font-family:Share Tech Mono,monospace;font-size:9px;fill:${col};letter-spacing:1px;font-weight:700">BULL</text>
+        style="font-family:'Consolas','Courier New',monospace;font-size:9px;fill:${col};letter-spacing:1px;font-weight:700">BULL</text>
     </svg>`,
     className:'', iconSize:[28,28], iconAnchor:[14,14]
   });
@@ -2121,7 +2417,9 @@ function updateBullseye(lat, lon) {
 function updateAircraft(d){
   if(!d||d.lat===undefined||d.lon===undefined)return;
   if(d.lat===0&&d.lon===0)return;
-  const icon=makeAircraftIcon(d.heading||0,d.altitude,d.kias);
+  const hdg = d.heading||0;
+  const iconHdg = _trackUp ? 0 : hdg;
+  const icon=makeAircraftIcon(iconHdg,d.altitude,d.kias,hdg);
   if(aircraftMarker){aircraftMarker.setLatLng([d.lat,d.lon]);aircraftMarker.setIcon(icon);}
   else{aircraftMarker=L.marker([d.lat,d.lon],{icon,zIndexOffset:1000}).addTo(map);}
   if(followAircraft){
@@ -2131,6 +2429,8 @@ function updateAircraft(d){
       updateAircraft._lastPan=now;
     }
   }
+  // Track Up: rotate map bearing
+  if(_trackUp && typeof map.setBearing==='function') map.setBearing(hdg);
   // Bullseye
   if (d.bull_lat != null && d.bull_lon != null) {
     updateBullseye(d.bull_lat, d.bull_lon);
@@ -2230,16 +2530,35 @@ map.on('click',e=>{
   }
 });
 map.on('mousemove',e=>{if(arrowActive&&aStart)updateArrow(e.latlng);});
+// Touch ruler/arrow on tablet
+(function(){
+  const mc=map.getContainer();
+  function _enDT(){map.dragging.disable();map.touchZoom.disable();}
+  function _diDT(){map.dragging.enable();map.touchZoom.enable();}
+  const _mo=new MutationObserver(()=>{if(rulerActive||arrowActive)_enDT();else _diDT();});
+  _mo.observe(document.getElementById('rulerBtn'),{attributes:true,attributeFilter:['class']});
+  _mo.observe(document.getElementById('arrowBtn'),{attributes:true,attributeFilter:['class']});
+  mc.addEventListener('touchstart',function(e){
+    if(!rulerActive&&!arrowActive)return;if(e.touches.length!==1)return;
+    const t=e.touches[0],rect=mc.getBoundingClientRect();
+    const pt=map.containerPointToLatLng(L.point(t.clientX-rect.left,t.clientY-rect.top));
+    if(rulerActive&&!arrowActive){if(!rStart){rStart=pt;rDot=L.circleMarker(rStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{clearRuler();}e.preventDefault();}
+    if(arrowActive&&!rulerActive){if(!aStart){aStart=pt;aDot=L.circleMarker(aStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{const fL=L.polyline([aStart,pt],{color:activeColor,weight:2.5,opacity:.9}).addTo(map);drawMarkers.push(fL);const[p1,p2]=arrowHeadPts(aStart,pt,map.getZoom());const fH=L.polygon([pt,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);drawMarkers.push(fH);const d=map.distance(aStart,pt)/1852;if(d>0.05){const mid=L.latLng((aStart.lat+pt.lat)/2,(aStart.lng+pt.lng)/2);const lm=L.marker(mid,{icon:L.divIcon({html:'<div class="arrow-label" style="color:'+activeColor+'">'+d.toFixed(1)+' NM</div>',className:'',iconSize:[70,20],iconAnchor:[35,20]})}).addTo(map);drawMarkers.push(lm);}clearArrow();}e.preventDefault();}
+  },{passive:false});
+  mc.addEventListener('touchmove',function(e){if(e.touches.length!==1)return;const t=e.touches[0],rect=mc.getBoundingClientRect();const pt=map.containerPointToLatLng(L.point(t.clientX-rect.left,t.clientY-rect.top));if(rulerActive&&rStart){updateRuler(pt);e.preventDefault();}if(arrowActive&&aStart){updateArrow(pt);e.preventDefault();}},{passive:false});
+})();
 
 document.getElementById('clearArrowsBtn').addEventListener('click',()=>{
   drawMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});drawMarkers=[];clearArrow();
 });
 
+let _noteCount=0;
 function createNote(){
   let bgColor='#0f172a',textColor='#94a3b8';
   const wrapper=document.createElement('div');
   wrapper.className='note-wrapper';
-  wrapper.style.left='300px';wrapper.style.top='200px';
+  const _no=_noteCount%8;_noteCount++;
+  wrapper.style.left=(300+_no*28)+'px';wrapper.style.top=(200+_no*28)+'px';
   wrapper.style.background=bgColor;wrapper.style.border='1px solid rgba(74,222,128,.2)';
   const header=document.createElement('div');header.className='note-header';
   const bgPicker=document.createElement('div');bgPicker.className='note-mini-picker';bgPicker.title='Fond';
@@ -2252,10 +2571,10 @@ function createNote(){
   const txInput=document.createElement('input');txInput.type='color';txInput.value='#94a3b8';
   txInput.addEventListener('input',()=>{textColor=txInput.value;txSwatch.style.background=textColor;body.style.color=textColor;});
   txPicker.appendChild(txSwatch);txPicker.appendChild(txInput);
-  const txLabel=document.createElement('span');txLabel.textContent='T';txLabel.style.cssText='font-size:9px;color:rgba(255,255,255,.3);margin-right:1px;font-family:Rajdhani,sans-serif';
+  const txLabel=document.createElement('span');txLabel.textContent='T';txLabel.style.cssText='font-size:9px;color:rgba(255,255,255,.3);margin-right:1px;font-family:system-ui,sans-serif';
   const colors=document.createElement('div');colors.className='note-header-colors';
   colors.appendChild(bgPicker);colors.appendChild(txLabel);colors.appendChild(txPicker);
-  const closeBtn=document.createElement('button');closeBtn.className='note-close';closeBtn.innerHTML='×';closeBtn.title='Supprimer';
+  const closeBtn=document.createElement('button');closeBtn.className='note-close';closeBtn.innerHTML='×';closeBtn.title='Delete';
   closeBtn.addEventListener('click',()=>wrapper.remove());
   header.appendChild(colors);header.appendChild(closeBtn);
   const body=document.createElement('textarea');body.className='note-body';
@@ -2265,6 +2584,15 @@ function createNote(){
   header.addEventListener('mousedown',e=>{if(e.target===closeBtn||e.target===bgInput||e.target===txInput)return;drag=true;ox=e.clientX-wrapper.offsetLeft;oy=e.clientY-wrapper.offsetTop;e.preventDefault();});
   document.addEventListener('mousemove',e=>{if(drag){wrapper.style.left=(e.clientX-ox)+'px';wrapper.style.top=(e.clientY-oy)+'px';}});
   document.addEventListener('mouseup',()=>{drag=false;});
+  // Touch drag (tablet)
+  header.addEventListener('touchstart',e=>{
+    if(e.target===closeBtn||e.target===bgInput||e.target===txInput)return;
+    const t=e.touches[0];drag=true;ox=t.clientX-wrapper.offsetLeft;oy=t.clientY-wrapper.offsetTop;e.preventDefault();
+  },{passive:false});
+  document.addEventListener('touchmove',e=>{
+    if(drag&&e.touches.length){wrapper.style.left=(e.touches[0].clientX-ox)+'px';wrapper.style.top=(e.touches[0].clientY-oy)+'px';e.preventDefault();}
+  },{passive:false});
+  document.addEventListener('touchend',()=>{drag=false;});
   document.body.appendChild(wrapper);body.focus();
 }
 document.getElementById('annotationBtn').addEventListener('click',createNote);
@@ -2289,10 +2617,7 @@ document.getElementById('pptBtn').addEventListener('click',function(){
   pptCircles.forEach(c=>v?c.addTo(map):map.removeLayer(c));
   const chk=document.getElementById('chkPPT');if(chk)chk.checked=v;
 });
-document.getElementById('chkPPT').addEventListener('change',function(){
-  pptCircles.forEach(c=>this.checked?c.addTo(map):map.removeLayer(c));
-  document.getElementById('pptBtn').classList.toggle('active',this.checked);
-});
+// chkPPT: géré uniquement via le bouton toolbar pptBtn
 
 document.getElementById('airportBtn').addEventListener('click',function(){
   const v=this.classList.toggle('active');
@@ -2302,10 +2627,7 @@ document.getElementById('airportBtn').addEventListener('click',function(){
   runwayLayers.forEach(l=>{try{v?l.addTo(map):map.removeLayer(l);}catch(e){}});
   const chkR=document.getElementById('chkRunways');if(chkR)chkR.checked=v;
 });
-document.getElementById('chkAirports').addEventListener('change',function(){
-  airportMarkers.forEach(m=>this.checked?m.addTo(map):map.removeLayer(m));
-  document.getElementById('airportBtn').classList.toggle('active',this.checked);
-});
+// chkAirports: géré uniquement via le bouton toolbar airportBtn
 
 document.getElementById('uploadBtn').addEventListener('click',()=>document.getElementById('fileInput').click());
 document.getElementById('fileInput').addEventListener('change',async e=>{
@@ -2316,17 +2638,20 @@ document.getElementById('fileInput').addEventListener('change',async e=>{
 });
 
 let _lastIniFile=null;
+let _lastIniMtime=0;
 setInterval(async()=>{
   try{
     const s=await(await fetch('/api/ini/status')).json();
-    if(s.loaded&&s.file!==_lastIniFile){
-      _lastIniFile=s.file;loadMission();
+    if(s.loaded&&s.mtime&&s.mtime!==_lastIniMtime){
+      _lastIniFile=s.file;_lastIniMtime=s.mtime;
+      loadMission();
+      console.log('[INI] Auto-loaded:',s.file,'mtime:',s.mtime);
       const n=document.createElement('div');n.className='bms-toast';
-      n.textContent='✦ MISSION CHARGÉE — '+s.file;
+      n.textContent='✦ MISSION LOADED — '+s.file;
       document.body.appendChild(n);setTimeout(()=>n.remove(),3000);
     }
   }catch(e){}
-},5000);
+},3000);
 
 function loadMission(){
   missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});missionMarkers=[];
@@ -2338,7 +2663,7 @@ function loadMission(){
       d.flightplan.forEach((p,i)=>{
         missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:4,color:c,fillColor:c,fillOpacity:.85,weight:2}).addTo(map));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
-          html:`<div style="font-family:Share Tech Mono,monospace;color:${c};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
+          html:`<div style="font-family:'Consolas','Courier New',monospace;color:${c};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
         })}).addTo(map));
       });
@@ -2350,7 +2675,7 @@ function loadMission(){
       d.route.forEach((p,i)=>{
         missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:5,color:c,fillColor:c,fillOpacity:.9,weight:2}).addTo(map));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
-          html:`<div style="font-family:Share Tech Mono,monospace;color:#e2e8f0;font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
+          html:`<div style="font-family:'Consolas','Courier New',monospace;color:#e2e8f0;font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
         })}).addTo(map));
       });
@@ -2360,7 +2685,7 @@ function loadMission(){
       const c='#ef4444';
       d.threats.forEach(t=>{
         const circ=L.circle([t.lat,t.lon],{radius:(t.range_m||t.range_nm*1852),color:c,fillColor:c,fillOpacity:.05,weight:1.2,dashArray:'5 4'});
-        if(document.getElementById('chkPPT').checked)circ.addTo(map);
+        if(document.getElementById('pptBtn')?.classList.contains('active'))circ.addTo(map);
         pptCircles.push(circ);
         missionMarkers.push(L.circleMarker([t.lat,t.lon],{radius:5,color:'#fff',fillColor:c,fillOpacity:1,weight:2}).addTo(map));
         const nm=t.name?t.name.trim():'';
@@ -2369,10 +2694,10 @@ function loadMission(){
         const parts2=[
           `<span style="color:#f87171;font-size:9px;letter-spacing:1px;font-weight:700">PPT\u00a0${pptNum}</span>`,
           nm?`<span style="color:#fca5a5;font-size:10px;font-weight:700;letter-spacing:.3px">${nm}</span>`:'',
-          rng?`<span style="color:#ef4444;font-size:9px;font-family:Share Tech Mono,monospace">${rng}</span>`:'',
+          rng?`<span style="color:#ef4444;font-size:9px;font-family:'Consolas','Courier New',monospace">${rng}</span>`:'',
         ].filter(Boolean).join('<span style="color:rgba(239,68,68,.25);margin:0 3px;font-size:7px">▸</span>');
         missionMarkers.push(L.marker([t.lat,t.lon],{icon:L.divIcon({
-          html:`<div style="background:rgba(8,2,2,.9);border:1px solid rgba(239,68,68,.22);border-left:2px solid rgba(239,68,68,.65);border-radius:2px;padding:2px 7px;white-space:nowrap;pointer-events:none;font-family:Rajdhani,sans-serif;display:inline-flex;align-items:center;gap:0;box-shadow:0 2px 8px rgba(0,0,0,.5)">${parts2}</div>`,
+          html:`<div style="background:rgba(8,2,2,.9);border:1px solid rgba(239,68,68,.22);border-left:2px solid rgba(239,68,68,.65);border-radius:2px;padding:2px 7px;white-space:nowrap;pointer-events:none;font-family:system-ui,sans-serif;display:inline-flex;align-items:center;gap:0;box-shadow:0 2px 8px rgba(0,0,0,.5)">${parts2}</div>`,
           className:'',iconSize:[110,16],iconAnchor:[-6,8]
         }),zIndexOffset:50}).addTo(map));
       });
@@ -2437,20 +2762,33 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     apIconMarkers.push(mIcon);
 
     const apIcao = ap.icao.startsWith('KP-') ? ap.name : ap.icao;
-    const tacanPart = ap.tacan ? `<span style="color:rgba(148,163,184,.7);font-size:9px;margin-left:4px">${ap.tacan}</span>` : '';
     const labelHtml = `<div style="pointer-events:none;line-height:1.2">
-      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;
+      <div style="font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
         color:${col};letter-spacing:.8px;text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);
-        white-space:nowrap">${apIcao}${tacanPart}</div>
-      <div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:600;
-        color:rgba(148,163,184,.75);letter-spacing:.2px;text-shadow:0 1px 3px #000;
-        white-space:nowrap">${ap.name}</div>
+        white-space:nowrap">${apIcao}</div>
     </div>`;
     const mLabel=L.marker([ap.lat,ap.lon],{
       icon:L.divIcon({html:labelHtml,className:'',iconSize:[160,26],iconAnchor:[-8,6]}),
       zIndexOffset:-100,interactive:true
     }).addTo(map);
-    mLabel.on('click',()=>mIcon.openPopup());
+    mLabel.on('click',e=>{
+      if(rulerActive){
+        L.DomEvent.stopPropagation(e);
+        if(!rStart){
+          rStart=L.latLng(ap.lat,ap.lon);
+          rDot=L.circleMarker(rStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
+        } else { clearRuler(); }
+      } else { mIcon.openPopup(); }
+    });
+    mIcon.on('click',e=>{
+      if(rulerActive){
+        L.DomEvent.stopPropagation(e);
+        if(!rStart){
+          rStart=L.latLng(ap.lat,ap.lon);
+          rDot=L.circleMarker(rStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
+        } else { clearRuler(); }
+      } else { mIcon.openPopup(); }
+    });
     apLabelMarkers.push(mLabel);
     airportMarkers.push(mIcon,mLabel);
     apNameMarkers.push(mLabel);
@@ -2460,6 +2798,17 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     runwaysVisible=this.checked;
     runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
   });
+
+  // chkApName — afficher/masquer les labels ICAO des aéroports
+  document.getElementById('chkApName').addEventListener('change',function(){
+    apLabelMarkers.forEach(m=>{
+      try{ this.checked ? m.addTo(map) : map.removeLayer(m); }catch(e){}
+    });
+  });
+  // Etat initial : labels visibles si coché
+  if(!document.getElementById('chkApName').checked){
+    apLabelMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
+  }
 });
 
 const RUNWAY_DATA = [
@@ -2583,7 +2932,7 @@ function startCalibration() {
   if (!_calIcao) return;
   _calMode = true;
   document.getElementById('calPanel').style.display = 'none';
-  document.getElementById('calStatus').textContent = `CALIB ${_calIcao} — Cliquez sur le seuil de piste réel`;
+  document.getElementById('calStatus').textContent = `CALIB ${_calIcao} — Click on actual runway threshold`;
   document.getElementById('calStatus').style.display = 'block';
   map.getContainer().style.cursor = 'crosshair';
 
@@ -2617,7 +2966,7 @@ map.on('click', function(e) {
 
   const dn = ((cur.dlat+dlat)*111000).toFixed(0);
   const de = ((cur.dlon+dlon)*111000*Math.cos(_calAnchorPt[0]*Math.PI/180)).toFixed(0);
-  showToast(`${_calIcao} recalé: ${dn>0?'+':''}${dn}m N, ${de>0?'+':''}${de}m E`);
+  showToast(`${_calIcao} recalibrated: ${dn>0?'+':''}${dn}m N, ${de>0?'+':''}${de}m E`);
 });
 
 function resetCalibration() {
@@ -2643,30 +2992,43 @@ function connectWS(){
       }
     }
     if(msg.type==='radar')updateRadarContacts(msg.data);
+    if(msg.type==='acmi'){_lastAcmiContacts=msg.data;updateAcmiContacts(msg.data);}
     if(msg.type==='status'){
       const on=msg.data.connected;
       document.getElementById('dot').className='dot '+(on?'on':'off');
-      document.getElementById('statusText').textContent=on?'BMS 4.38 CONNECTÉ':'NON DÉTECTÉ';
+      document.getElementById('statusText').textContent=on?'BMS 4.38 CONNECTED':'NOT DETECTED';
     }
   };
   ws.onclose=()=>setTimeout(connectWS,2000);
 }
 connectWS();
 
-// Appliquer le thème sauvegardé au démarrage
-(async function applyThemeOnLoad(){
-  try {
-    const d = await(await fetch('/api/settings')).json();
-    if (d.theme && d.theme !== 'dark') selectTheme(d.theme, false);
-  } catch(e) {}
-})();
+// ── Touch listeners passifs — améliore le scroll sur mobile ──────
+try {
+  const _passiveTest = Object.defineProperty({}, 'passive', {get: function(){ return true; }});
+  window.addEventListener('testPassive', null, _passiveTest);
+  window.removeEventListener('testPassive', null, _passiveTest);
+  // Appliquer le passive aux events tactiles de la carte
+  const _mapEl = document.getElementById('map');
+  if (_mapEl) {
+    _mapEl.addEventListener('touchstart', function(){}, {passive:true});
+    _mapEl.addEventListener('touchmove',  function(){}, {passive:true});
+  }
+} catch(e) {}
 
-let dlMarkers=[],dlVisible=false;
+
+// Apply saved settings on startup
+
+
+let dlMarkers=[],dlVisible=true;
+// Datalink actif par défaut
+document.getElementById('radarBtn').classList.add('active');
 document.getElementById('radarBtn').addEventListener('click',()=>{
   dlVisible=!dlVisible;
   document.getElementById('radarBtn').classList.toggle('active',dlVisible);
   dlMarkers.forEach(m=>{try{if(dlVisible)m.addTo(map);else map.removeLayer(m);}catch(e){}});
 });
+
 
 function dlSym(camp,col,sz){
   sz=sz||22;
@@ -2705,42 +3067,100 @@ function dlVec(hdg,col){
 }
 
 function updateRadarContacts(contacts){
+  _lastDlContacts = contacts;
   dlMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});dlMarkers=[];
   if(!contacts||!contacts.length)return;
   if(!dlVisible){dlVisible=true;document.getElementById('radarBtn').classList.add('active');}
+  // Taille adaptée au zoom (petite à zoom faible, plus grande en rapproché)
+  const z = map.getZoom();
+  const sz = z >= 10 ? 16 : z >= 8 ? 12 : 9;
   contacts.forEach(c=>{
-    if(!c.lat||!c.lon)return;
+    if(c.lat==null||c.lon==null)return;
     const camp=c.camp;
     const col=camp===1?'#4ade80':camp===2?'#f87171':'#fbbf24';
     const cls=camp===1?'friend':camp===2?'foe':'unknwn';
-    const sz=22;
 
     const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({
       html:dlSym(camp,col,sz),className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
     }),zIndexOffset:camp===2?200:100});
     if(dlVisible)mS.addTo(map);dlMarkers.push(mS);
 
-    if(c.heading!=null){
+    // Vecteur cap uniquement si assez zoomé
+    if(c.heading!=null && z>=8){
       const mV=L.marker([c.lat,c.lon],{icon:L.divIcon({
-        html:dlVec(c.heading,col),className:'',iconSize:[60,60],iconAnchor:[30,30]
+        html:dlVec(c.heading,col),className:'',iconSize:[40,40],iconAnchor:[20,20]
       }),zIndexOffset:50});
       if(dlVisible)mV.addTo(map);dlMarkers.push(mV);
     }
 
-    const call=c.callsign||c.type_name||'';
-    const altFL=c.alt!=null&&c.alt>0?'FL'+String(Math.round(c.alt/100)).padStart(3,'0'):'';
-    const spdStr=c.speed!=null&&c.speed>10?Math.round(c.speed)+'kt':'';
-    const hdgStr=c.heading!=null?String(Math.round(c.heading)).padStart(3,'0')+'°':'';
-    const dataLine=[altFL,spdStr,hdgStr].filter(Boolean).join('\u00a0·\u00a0');
+    // Label uniquement si assez zoomé
+    if(z >= 7){
+      const call=c.callsign||c.type_name||'';
+      const altFL=c.alt!=null&&c.alt>0?'FL'+String(Math.round(c.alt/100)).padStart(3,'0'):'';
+      const spdStr=c.speed!=null&&c.speed>10?Math.round(c.speed)+'kt':'';
+      const hdgStr=c.heading!=null&&z>=9?String(Math.round(c.heading)).padStart(3,'0')+'°':'';
+      const dataLine=[altFL,spdStr,hdgStr].filter(Boolean).join('\u00a0·\u00a0');
+      const lH=`<div class="dl-block">
+        ${call?`<div class="dl-callsign ${cls}" style="font-size:${z>=9?11:10}px">${call}</div>`:''}
+        ${dataLine&&z>=8?`<div class="dl-data ${cls}">${dataLine}</div>`:''}
+      </div>`;
+      const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({
+        html:lH,className:'',iconSize:[110,30],iconAnchor:[-(sz/2+2),14]
+      }),zIndexOffset:camp===2?201:101});
+      if(dlVisible)mL.addTo(map);dlMarkers.push(mL);
+    }
+  });
+}
 
-    const lH=`<div class="dl-block">
-      ${call?`<div class="dl-callsign ${cls}">${call}</div>`:''}
-      ${dataLine?`<div class="dl-data ${cls}">${dataLine}</div>`:''}
-    </div>`;
-    const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({
-      html:lH,className:'',iconSize:[120,36],iconAnchor:[-sz/2-2,18]
-    }),zIndexOffset:camp===2?201:101});
-    if(dlVisible)mL.addTo(map);dlMarkers.push(mL);
+// Redessiner les contacts quand le zoom change
+map.on('zoomend', ()=>{
+  if(_lastDlContacts) updateRadarContacts(_lastDlContacts);
+  if(_lastAcmiContacts) updateAcmiContacts(_lastAcmiContacts);
+});
+let _lastDlContacts=[];
+let _lastAcmiContacts=null;
+
+// ── Contacts ACMI coalition (TRTT — mode dieu) ───────────────────
+// Séparé du datalink L16 : bouton propre, toggle indépendant
+let acmiMarkers=[], acmiVisible=true;
+
+function updateAcmiContacts(contacts){
+  _lastAcmiContacts = contacts;
+  acmiMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});acmiMarkers=[];
+  if(!contacts||!contacts.length||!acmiVisible)return;
+  const z = map.getZoom();
+  const sz = z >= 10 ? 14 : z >= 8 ? 10 : 7;
+  contacts.forEach(c=>{
+    if(c.lat==null||c.lon==null)return;
+    // camp=3 (unknown) traité comme allié en solo — BMS injecte les couleurs tardivement
+    const camp = c.camp === 2 ? 2 : 1;
+    const col = '#4ade80'; // vert allié (ennemis exclus côté serveur)
+    const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({
+      html:dlSym(1,col,sz),className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]
+    }),zIndexOffset:80,interactive:false});
+    mS.addTo(map);acmiMarkers.push(mS);
+    // Vecteur cap si assez zoomé
+    if(c.heading!=null && z>=9){
+      const mV=L.marker([c.lat,c.lon],{icon:L.divIcon({
+        html:dlVec(c.heading,col),className:'',iconSize:[36,36],iconAnchor:[18,18]
+      }),zIndexOffset:40,interactive:false});
+      mV.addTo(map);acmiMarkers.push(mV);
+    }
+    // Label : callsign court + altitude — seulement si zoom >= 9
+    if(z >= 9){
+      const raw = c.callsign || c.type_name || '';
+      // Garder le type avion : "F-16CM-52" → "F-16", "Su-27" → "Su-27"
+      const call = raw.replace(/-\d+$/, '').trim();
+      const altFL = c.alt!=null&&c.alt>0 ? 'FL'+String(Math.round(c.alt/100)).padStart(3,'0') : '';
+      const lH=`<div class="dl-block">
+        ${call?`<div class="dl-callsign friend" style="font-size:10px;opacity:.8">${call}</div>`:''}
+        ${altFL?`<div class="dl-data friend">${altFL}</div>`:''}
+      </div>`;
+      const mL=L.marker([c.lat,c.lon],{icon:L.divIcon({
+        html:lH,className:'',iconSize:[80,24],iconAnchor:[-(sz/2+2),10]
+      }),zIndexOffset:81,interactive:false});
+      mL.addTo(map);acmiMarkers.push(mL);
+    }
   });
 }
 
@@ -2754,15 +3174,15 @@ function toggleTRTTPanel(){
       document.getElementById('trttHostInput').value=parts[0];
       document.getElementById('trttPortInput').value=parts[1]||'42674';
       document.getElementById('trttPanelStatus').textContent=
-        d.connected?'● Connecté — '+d.nb_contacts+' contacts':'○ Non connecté';
+        d.connected?'● Connected — '+d.nb_contacts+' contacts':'○ Not connected';
     }).catch(()=>{});
   }
 }
 async function applyTRTTConfig(){
   const host=document.getElementById('trttHostInput').value.trim();
   const port=parseInt(document.getElementById('trttPortInput').value)||42674;
-  if(!host){document.getElementById('trttPanelStatus').textContent='Entrez une IP';return;}
-  document.getElementById('trttPanelStatus').textContent='Connexion…';
+  if(!host){document.getElementById('trttPanelStatus').textContent='Enter an IP';return;}
+  document.getElementById('trttPanelStatus').textContent='Connecting…';
   try{
     const r=await fetch('/api/trtt/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host,port})});
     const d=await r.json();
@@ -2779,7 +3199,6 @@ document.addEventListener('click',e=>{
 //  SETTINGS
 // ══════════════════════════════════════════════════════════════════
 let _settingsOpen = false;
-let _currentTheme = 'dark';
 
 async function loadSettings() {
   try {
@@ -2787,8 +3206,6 @@ async function loadSettings() {
     document.getElementById('sp-port').value    = d.port         || 8000;
     document.getElementById('sp-briefdir').value= d.briefing_dir || '';
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
-    _currentTheme = d.theme || 'dark';
-    selectTheme(_currentTheme, false);
   } catch(e) {}
 }
 
@@ -2798,35 +3215,16 @@ function toggleSettings() {
   if (_settingsOpen) loadSettings();
 }
 
-function selectTheme(t, save=false) {
-  _currentTheme = t;
-  document.getElementById('sp-theme-dark').classList.toggle('sel',  t==='dark');
-  document.getElementById('sp-theme-light').classList.toggle('sel', t==='light');
-  // Appliquer le thème sur le document
-  if (t === 'light') {
-    document.documentElement.style.setProperty('--map-bg',   '#e8ecf0');
-    document.documentElement.style.setProperty('--ui-bg',    'rgba(240,244,248,.98)');
-    document.documentElement.style.setProperty('--ui-text',  '#1e293b');
-    document.documentElement.style.setProperty('--acc-green','#166534');
-    document.body.style.filter = 'invert(1) hue-rotate(180deg)';
-  } else {
-    document.documentElement.style.removeProperty('--map-bg');
-    document.documentElement.style.removeProperty('--ui-bg');
-    document.documentElement.style.removeProperty('--ui-text');
-    document.documentElement.style.removeProperty('--acc-green');
-    document.body.style.filter = '';
-  }
-}
+
 
 async function saveSettings() {
   const port     = parseInt(document.getElementById('sp-port').value);
   const bdir     = document.getElementById('sp-briefdir').value.trim();
   const bcast    = parseInt(document.getElementById('sp-bcast').value);
-  const theme    = _currentTheme;
   const status   = document.getElementById('sp-status');
   const portWarn = document.getElementById('sp-port-warn');
 
-  status.textContent = '⏳ Sauvegarde…';
+  status.textContent = '⏳ Saving…';
   status.classList.add('show');
 
   try {
@@ -2837,16 +3235,15 @@ async function saveSettings() {
         port:         isNaN(port)  ? null : port,
         briefing_dir: bdir         || null,
         broadcast_ms: isNaN(bcast) ? null : bcast,
-        theme:        theme,
       })
     });
     const d = await r.json();
     if (d.ok) {
-      status.textContent = '✓ Sauvegardé — ' + d.changed.join(', ');
+      status.textContent = '✓ Saved — ' + d.changed.join(', ');
       status.style.color = '#4ade80';
       if (d.needs_restart) {
         portWarn.classList.add('show');
-        status.textContent += ' — RELANCER LE SCRIPT';
+        status.textContent += ' — RESTART SCRIPT';
         status.style.color = '#fbbf24';
       }
       setTimeout(() => {
@@ -2854,7 +3251,7 @@ async function saveSettings() {
         if (!d.needs_restart) toggleSettings();
       }, 2200);
     } else {
-      status.textContent = '✗ Erreur';
+      status.textContent = '✗ Error';
       status.style.color = '#ef4444';
     }
   } catch(e) {
@@ -2880,13 +3277,13 @@ function updateZulu(){
   if (_bmsTimeSec !== null && (Date.now() - _bmsTimeTs) < 5000) {
     const elapsed = Math.floor((Date.now() - _bmsTimeTs) / 1000);
     secs = (_bmsTimeSec + elapsed) % 86400;
-    el.title = 'Heure BMS';
+    el.title = 'BMS Time';
     el.style.color = 'rgba(74,222,128,.55)';
   } else {
     // Fallback UTC
     const n = new Date();
     secs = n.getUTCHours()*3600 + n.getUTCMinutes()*60 + n.getUTCSeconds();
-    el.title = 'Heure UTC (BMS non connecté)';
+    el.title = 'UTC Time (BMS not connected)';
     el.style.color = 'rgba(74,222,128,.35)';
   }
   const h = Math.floor(secs / 3600);
@@ -2896,6 +3293,26 @@ function updateZulu(){
 }
 updateZulu(); setInterval(updateZulu, 1000);
 
+// ── Fullscreen ───────────────────────────────────────────────────
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen().catch(e=>{});
+  } else {
+    document.exitFullscreen().catch(e=>{});
+  }
+}
+document.addEventListener('fullscreenchange',()=>{
+  const btn = document.getElementById('fsBtn');
+  const icon = document.getElementById('fsIcon');
+  if(!btn||!icon) return;
+  const fs = !!document.fullscreenElement;
+  btn.style.color = fs ? 'rgba(74,222,128,.7)' : 'rgba(74,222,128,.3)';
+  // Changer icône : exit si fullscreen, enter si normal
+  icon.innerHTML = fs
+    ? '<polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/>'
+    : '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>';
+});
+
 // ── Affichage IP serveur ─────────────────────────────────────────
 (async function loadServerIp(){
   try{
@@ -2903,7 +3320,7 @@ updateZulu(); setInterval(updateZulu, 1000);
     const el = document.getElementById('sysServerIp');
     if(el && d.ip){
       el.textContent = d.ip + ':' + d.port;
-      el.title = 'Tablette → ' + d.url;
+      el.title = 'Tablet → ' + d.url;
     }
   } catch(e){ /* silencieux */ }
 })();
@@ -2914,7 +3331,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#layerPanel')&&!e.target.closest('#layerBtn'))
     document.getElementById('layerPanel').classList.remove('open');
 
-  if(!e.target.closest('#calPanel')&&!e.target.closest('#calBtn')&&!_calMode)
+  if(!e.target.closest('#calPanel')&&!_calMode)
     document.getElementById('calPanel').style.display='none';
 });
 </script>
@@ -2924,44 +3341,44 @@ document.addEventListener('click',e=>{
   background:rgba(4,8,18,.97);border:1px solid rgba(251,191,36,.25);
   border-top:2px solid rgba(251,191,36,.4);border-radius:3px;
   padding:12px 14px;z-index:2000;min-width:240px;backdrop-filter:blur(16px)">
-  <div style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;
+  <div style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
     color:#fbbf24;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">
-    ✎ Calibration pistes</div>
-  <div style="font-family:Share Tech Mono,monospace;font-size:10px;color:#64748b;
+    ✎ Runway calibration</div>
+  <div style="font-family:'Consolas','Courier New',monospace;font-size:10px;color:#64748b;
     margin-bottom:8px;line-height:1.5">
-    1. Sélectionner la base<br>
-    2. Cliquer "Calibrer"<br>
-    3. Cliquer sur le <span style="color:#fbbf24">seuil réel</span> de la piste</div>
+    1. Select airbase<br>
+    2. Click "Calibrate"<br>
+    3. Click on the <span style="color:#fbbf24">actual threshold</span></div>
   <select id="calIcaoSel" style="width:100%;background:rgba(255,255,255,.04);
     border:1px solid rgba(255,255,255,.1);border-radius:2px;padding:5px 8px;
-    color:#e2e8f0;font-family:Share Tech Mono,monospace;font-size:11px;
+    color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;
     margin-bottom:8px;outline:none"></select>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
     <button onclick="startCalibration()"
       style="flex:1;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);
-      border-radius:2px;padding:5px;color:#fbbf24;font-family:Rajdhani,sans-serif;
-      font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">CALIBRER</button>
+      border-radius:2px;padding:5px;color:#fbbf24;font-family:system-ui,sans-serif;
+      font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">CALIBRATE</button>
     <button onclick="resetCalibration()"
       style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
-      border-radius:2px;padding:5px 8px;color:#f87171;font-family:Rajdhani,sans-serif;
+      border-radius:2px;padding:5px 8px;color:#f87171;font-family:system-ui,sans-serif;
       font-size:11px;cursor:pointer">RESET</button>
     <button onclick="document.getElementById('calPanel').style.display='none'"
       style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
-      border-radius:2px;padding:5px 8px;color:#64748b;font-family:Rajdhani,sans-serif;
+      border-radius:2px;padding:5px 8px;color:#64748b;font-family:system-ui,sans-serif;
       font-size:11px;cursor:pointer">✕</button>
   </div>
   <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.05)">
     <button onclick="resetAllCalibration()"
       style="width:100%;background:transparent;border:1px solid rgba(239,68,68,.15);
-      border-radius:2px;padding:3px;color:#64748b;font-family:Rajdhani,sans-serif;
-      font-size:10px;cursor:pointer">Reset toutes les bases</button>
+      border-radius:2px;padding:3px;color:#64748b;font-family:system-ui,sans-serif;
+      font-size:10px;cursor:pointer">Reset all bases</button>
   </div>
 </div>
 <!-- STATUS CALIBRATION -->
 <div id="calStatus" style="display:none;position:fixed;top:40px;left:50%;
   transform:translateX(-50%);background:rgba(251,191,36,.15);
   border:1px solid rgba(251,191,36,.4);border-radius:3px;
-  padding:6px 16px;z-index:3000;font-family:Rajdhani,sans-serif;
+  padding:6px 16px;z-index:3000;font-family:system-ui,sans-serif;
   font-size:13px;font-weight:700;color:#fbbf24;letter-spacing:1px;
   pointer-events:none"></div>
 
@@ -3002,11 +3419,11 @@ document.addEventListener('click',e=>{
     </div>
   </div>
   <div style="padding:4px 18px 4px;display:flex;align-items:center;gap:8px">
-    <span style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;color:#3d6b52;letter-spacing:1.5px;text-transform:uppercase">STEERPOINTS</span>
-    <span id="gps-steer-count" style="font-family:Share Tech Mono,monospace;font-size:9px;color:#3d6b52">0 WPT</span>
+    <span style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;color:#3d6b52;letter-spacing:1.5px;text-transform:uppercase">STEERPOINTS</span>
+    <span id="gps-steer-count" style="font-family:'Consolas','Courier New',monospace;font-size:9px;color:#3d6b52">0 WPT</span>
   </div>
   <div class="gps-steer-list" id="gps-steer-list">
-    <span style="font-family:Rajdhani,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>
+    <span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>
   </div>
 </div>
 
@@ -3018,7 +3435,7 @@ document.addEventListener('click',e=>{
     </svg>
     <span>FALCON CHARTS</span>
     <span class="ext-badge">FALCONCHARTS.COM</span>
-    <button onclick="document.getElementById('panel-charts').classList.remove('open');document.querySelector('[data-tab=charts]').classList.remove('active')" style="margin-left:8px;background:transparent;border:none;cursor:pointer;color:#546e82;font-size:16px;line-height:1;padding:0 4px" title="Fermer">✕</button>
+    <button onclick="document.getElementById('panel-charts').classList.remove('open');document.querySelector('[data-tab=charts]').classList.remove('active')" style="margin-left:8px;background:transparent;border:none;cursor:pointer;color:#546e82;font-size:16px;line-height:1;padding:0 4px" title="Close">✕</button>
   </div>
   <iframe id="charts-frame" src="about:blank" allowfullscreen></iframe>
 </div>
@@ -3032,65 +3449,442 @@ document.addEventListener('click',e=>{
     </svg>
     <span class="kb-header-title">KNEEBOARD</span>
     <div class="kb-tabs">
-      <div class="kb-tab active" data-kbtab="brevity" onclick="switchKbTab('brevity',this)">BREVITY</div>
-      <div class="kb-tab" data-kbtab="freqs" onclick="switchKbTab('freqs',this)">FRÉQUENCES</div>
-      <div class="kb-tab" data-kbtab="notes" onclick="switchKbTab('notes',this)">NOTES</div>
+      <div class="kb-tab active" data-kbtab="chklist" style="--kt:#22d3ee" onclick="switchKbTab('chklist',this)">CHKLIST</div>
+      <div class="kb-tab"        data-kbtab="comms"    style="--kt:#4ade80" onclick="switchKbTab('comms',this)">COMMS</div>
+      <div class="kb-tab"        data-kbtab="fplan"    style="--kt:#60a5fa" onclick="switchKbTab('fplan',this)">FLIGHT PLAN</div>
+      <div class="kb-tab"        data-kbtab="notes"    style="--kt:#fbbf24" onclick="switchKbTab('notes',this)">NOTES</div>
+      <div class="kb-tab"        data-kbtab="cas"      style="--kt:#f97316" onclick="switchKbTab('cas',this)">9-LINE</div>
+      <div class="kb-tab"        data-kbtab="brevity"  style="--kt:#94a3b8" onclick="switchKbTab('brevity',this)">BREVITY</div>
     </div>
   </div>
   <div class="kb-body">
-    <!-- BREVITY -->
-    <div class="kb-page active" id="kb-brevity">
-      <div class="brev-grid">
-        <div class="brev-item"><div class="brev-word">BOGEY</div><div class="brev-def">Contact aérien non identifié</div></div>
-        <div class="brev-item"><div class="brev-word">BANDIT</div><div class="brev-def">Contact aérien ennemi confirmé</div></div>
-        <div class="brev-item"><div class="brev-word">FRIENDLY</div><div class="brev-def">Contact aérien ami confirmé</div></div>
-        <div class="brev-item"><div class="brev-word">SPIKE</div><div class="brev-def">Missile SAM en vol / radar lock ennemi</div></div>
-        <div class="brev-item"><div class="brev-word">BLIND</div><div class="brev-def">Pas de contact visuel avec wingman/élément</div></div>
-        <div class="brev-item"><div class="brev-word">VISUAL</div><div class="brev-def">Contact visuel confirmé (ami ou ennemi)</div></div>
-        <div class="brev-item"><div class="brev-word">BINGO</div><div class="brev-def">Carburant minimum pour RTB</div></div>
-        <div class="brev-item"><div class="brev-word">WINCHESTER</div><div class="brev-def">Toutes munitions épuisées</div></div>
-        <div class="brev-item"><div class="brev-word">FOX 1</div><div class="brev-def">Tir missile semi-actif (AIM-7)</div></div>
-        <div class="brev-item"><div class="brev-word">FOX 2</div><div class="brev-def">Tir missile à guidage IR (AIM-9)</div></div>
-        <div class="brev-item"><div class="brev-word">FOX 3</div><div class="brev-def">Tir missile actif (AIM-120 AMRAAM)</div></div>
-        <div class="brev-item"><div class="brev-word">GUNS</div><div class="brev-def">Tir canon (engagement BVR → WVR)</div></div>
-        <div class="brev-item"><div class="brev-word">MERGE</div><div class="brev-def">Engagement WVR — contact passé BRAA 0</div></div>
-        <div class="brev-item"><div class="brev-word">DEFENSIVE</div><div class="brev-def">Sous attaque, besoin d'appui immédiat</div></div>
-        <div class="brev-item"><div class="brev-word">PITBULL</div><div class="brev-def">AMRAAM en mode actif (auto-guidage)</div></div>
-        <div class="brev-item"><div class="brev-word">SKOSH</div><div class="brev-def">AIM-120 en mode actif — portée limite</div></div>
-        <div class="brev-item"><div class="brev-word">BRAA</div><div class="brev-def">Bearing / Range / Altitude / Aspect</div></div>
-        <div class="brev-item"><div class="brev-word">BULLSEYE</div><div class="brev-def">Référence de navigation radio partagée</div></div>
-        <div class="brev-item"><div class="brev-word">ANGELS</div><div class="brev-def">Altitude en milliers de pieds (Angels 15 = 15 000 ft)</div></div>
-        <div class="brev-item"><div class="brev-word">CHERUBS</div><div class="brev-def">Altitude en centaines de pieds (< 1 000 ft)</div></div>
-        <div class="brev-item"><div class="brev-word">DECLARE</div><div class="brev-def">Demande d'identification d'un contact au GCI</div></div>
-        <div class="brev-item"><div class="brev-word">TALLY</div><div class="brev-def">Contact visuel sur bogey/bandit confirmé</div></div>
-        <div class="brev-item"><div class="brev-word">NO JOY</div><div class="brev-def">Pas de contact visuel sur bogey/bandit</div></div>
-        <div class="brev-item"><div class="brev-word">SNAP</div><div class="brev-def">Vecteur d'interception immédiat demandé</div></div>
-      </div>
-    </div>
-    <!-- FREQUENCES -->
-    <div class="kb-page" id="kb-freqs">
+
+    <!-- ── COMMS LADDER ── -->
+    <div class="kb-page" id="kb-comms">
       <table class="freq-table">
-        <thead><tr><th>CANAL / USAGE</th><th>FRÉQ (MHz)</th><th>REMARQUE</th></tr></thead>
+        <thead><tr><th>ROLE</th><th>UHF (MHz)</th><th>VHF / REMARK</th></tr></thead>
         <tbody>
-          <tr><td>GUARD</td><td class="hi">243.000</td><td>Urgence UHF</td></tr>
-          <tr><td>GUARD VHF</td><td class="hi">121.500</td><td>Urgence VHF</td></tr>
-          <tr><td>AWACS Alpha</td><td class="hi">268.800</td><td>Corée BMS</td></tr>
-          <tr><td>Osan Tower</td><td class="hi">126.200</td><td>RKSO</td></tr>
-          <tr><td>Osan Approach</td><td class="hi">119.300</td><td>RKSO</td></tr>
-          <tr><td>Gunsan Tower</td><td class="hi">122.100</td><td>RKJK</td></tr>
-          <tr><td>Incheon Tower</td><td class="hi">119.100</td><td>RKSI</td></tr>
-          <tr><td>Gimpo Tower</td><td class="hi">118.100</td><td>RKSS</td></tr>
-          <tr><td>Daegu Tower</td><td class="hi">126.200</td><td>RKTN</td></tr>
-          <tr><td>Tanker (CH11)</td><td class="hi">317.175</td><td>A/R fréq standard</td></tr>
-          <tr><td>ATC Seoul</td><td class="hi">127.900</td><td>Centre</td></tr>
-          <tr><td>Rescue SAR</td><td class="hi">282.800</td><td>Combat SAR</td></tr>
+          <tr><td>GUARD</td><td class="hi" style="color:#ef4444">243.000</td><td style="color:#ef4444">UHF Emergency</td></tr>
+          <tr><td>GUARD VHF</td><td class="hi" style="color:#ef4444">121.500</td><td style="color:#ef4444">VHF Emergency</td></tr>
+          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS</b></td><td class="hi">268.800</td><td>Alpha — Corée BMS</td></tr>
+          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS Bravo</b></td><td class="hi">265.400</td><td>Secondary</td></tr>
+          <tr><td>Tanker CH11</td><td class="hi">317.175</td><td>A/R standard</td></tr>
+          <tr><td>Tanker CH12</td><td class="hi">340.200</td><td>Backup</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Osan Tower</td><td class="hi">126.200</td><td>RKSO</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Osan Appr.</td><td class="hi">119.300</td><td>RKSO</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Gunsan Tower</td><td class="hi">122.100</td><td>RKJK</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Daegu Tower</td><td class="hi">126.200</td><td>RKTN</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Seoul AB</td><td class="hi">126.200</td><td>RKSM</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Incheon Tower</td><td class="hi">119.100</td><td>RKSI</td></tr>
+          <tr><td>ATC Centre</td><td class="hi">127.900</td><td>Seoul Centre</td></tr>
+          <tr><td>SAR / CSAR</td><td class="hi">282.800</td><td>Combat SAR</td></tr>
+          <tr><td>JTAC (def.)</td><td class="hi">305.000</td><td>Interop CAS</td></tr>
         </tbody>
       </table>
     </div>
-    <!-- NOTES -->
-    <div class="kb-page" id="kb-notes">
-      <textarea class="kb-notes" id="kb-notes-ta" placeholder="Notes mission…&#10;&#10;Callsign:&#10;Package:&#10;TOT:&#10;Bullseye:&#10;Tanker:&#10;"></textarea>
+
+    <!-- ── FLIGHT PLAN ── -->
+    <div class="kb-page" id="kb-fplan">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">CALLSIGN / FLIGHT</div>
+          <input class="kb-input" id="kb-callsign" placeholder="VIPER 1-1" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">PACKAGE</div>
+          <input class="kb-input" id="kb-package" placeholder="ALPHA BRAVO" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">TOT</div>
+          <input class="kb-input" id="kb-tot" placeholder="14:30Z" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">TANKER / FREQ</div>
+          <input class="kb-input" id="kb-tanker" placeholder="SHELL 1 / 317.175" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">BULLSEYE</div>
+          <input class="kb-input" id="kb-bull-val" placeholder="270/45 NM" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">BINGO FUEL</div>
+          <input class="kb-input" id="kb-bingo" placeholder="3500 lbs" autocomplete="off">
+        </div>
+      </div>
+      <div class="kb-field-lbl" style="margin-bottom:6px">MISSION NOTES</div>
+      <textarea class="kb-notes" id="kb-fplan-ta" placeholder="Objectif, menaces, règles d'engagement…" style="height:120px"></textarea>
     </div>
+
+    <!-- ── NOTES LIBRES ── -->
+    <div class="kb-page" id="kb-notes">
+      <textarea class="kb-notes" id="kb-notes-ta" placeholder="Notes libres…"></textarea>
+    </div>
+
+    <!-- ── 9-LINE CAS — T.O. 1F-16-1CL-1-1 ── -->
+    <div class="kb-page" id="kb-cas">
+      <style>
+        .cas-table{width:100%;border-collapse:collapse;font-family:'Consolas','Courier New',monospace}
+        .cas-section{background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.15);padding:5px 10px;
+          font-family:system-ui,sans-serif;font-size:10px;font-weight:700;color:rgba(249,115,22,.7);
+          letter-spacing:1.5px;text-transform:uppercase;text-align:center;margin:6px 0 2px}
+        .cas-row{display:grid;border-bottom:1px solid rgba(255,255,255,.04)}
+        .cas-row-pre{grid-template-columns:1fr}
+        .cas-row-2{grid-template-columns:auto 1fr}
+        .cas-row-3{grid-template-columns:auto 1fr auto 100px 100px}
+        .cas-row-laser{grid-template-columns:auto 1fr auto 1fr}
+        .cas-num{font-family:'Consolas','Courier New',monospace;font-size:14px;font-weight:700;
+          color:#f97316;width:24px;text-align:center;display:flex;align-items:center;justify-content:center;
+          padding:4px 6px;border-right:1px solid rgba(249,115,22,.2);flex-shrink:0}
+        .cas-lbl{font-family:system-ui,sans-serif;font-size:10px;font-weight:700;color:#4a6e80;
+          letter-spacing:1px;text-transform:uppercase;padding:3px 8px 0;white-space:nowrap}
+        .cas-hint{font-family:system-ui,sans-serif;font-size:9px;color:#334155;padding:0 8px 3px;
+          font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .cas-input{background:transparent;border:none;outline:none;padding:4px 8px;color:#e2e8f0;
+          font-family:'Consolas','Courier New',monospace;font-size:12px;width:100%;min-width:0}
+        .cas-input::placeholder{color:#334155;font-size:11px}
+        .cas-cell{display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.04);min-width:0}
+        .cas-cell:last-child{border-right:none}
+        .cas-offset-lbl{font-family:system-ui,sans-serif;font-size:10px;font-weight:700;color:#4a6e80;
+          letter-spacing:1px;text-transform:uppercase;padding:4px 10px;display:flex;align-items:center;
+          border-right:1px solid rgba(255,255,255,.04);flex-shrink:0}
+        .cas-offset-cell{display:flex;flex-direction:column;align-items:center;
+          border-right:1px solid rgba(255,255,255,.04);padding:3px 6px;min-width:90px}
+        .cas-offset-cell:last-child{border-right:none}
+        .cas-offset-btn{display:flex;gap:6px;align-items:center}
+        .cas-radio{accent-color:#f97316;width:14px;height:14px;cursor:pointer}
+        .cas-radio-lbl{font-family:system-ui,sans-serif;font-size:11px;color:#94a3b8;cursor:pointer}
+        .cas-fac{font-family:system-ui,sans-serif;font-size:10px;color:rgba(249,115,22,.5);
+          text-align:center;padding:5px 8px;font-style:italic;letter-spacing:.5px;
+          border:1px solid rgba(249,115,22,.1);margin:4px 0}
+        .cas-pre-row{display:grid;grid-template-columns:1fr 1fr;gap:0}
+      </style>
+
+      <!-- En-tête FAC -->
+      <div class="cas-fac">FAC: " <input id="kb-fac-id" class="cas-input" style="width:90px;display:inline-block" placeholder="callsign"> , this is <input id="kb-fac-self" class="cas-input" style="width:90px;display:inline-block" placeholder="callsign"> , standing by for aircraft check-in"</div>
+
+      <!-- Pré-briefing -->
+      <div class="cas-pre-row">
+        <div class="cas-row cas-row-2" style="border-right:1px solid rgba(255,255,255,.04)">
+          <div class="cas-cell" style="border-right:none;flex:1">
+            <span class="cas-lbl">Leader Callsign / Mission</span>
+            <input id="kb-pre-1" class="cas-input" placeholder="VIPER 1-1 / MISSION ALPHA" autocomplete="off">
+          </div>
+        </div>
+        <div class="cas-row cas-row-2">
+          <div class="cas-cell" style="border-right:none;flex:1">
+            <span class="cas-lbl">Number and type of aircraft</span>
+            <input id="kb-pre-2" class="cas-input" placeholder="2× F-16C" autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Position and altitude</span>
+          <input id="kb-pre-3" class="cas-input" placeholder="037/18 NM from IP / FL150" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Ordinance</span>
+          <span class="cas-hint">Weapon (GBU-12, MK82, AGM-65, etc)</span>
+          <input id="kb-pre-4" class="cas-input" placeholder="2× GBU-12 / 20mm" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Time on station</span>
+          <span class="cas-hint">Playtime</span>
+          <input id="kb-pre-5" class="cas-input" placeholder="30 MIN" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row" style="margin-bottom:4px">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Additional Remarks</span>
+          <input id="kb-pre-6" class="cas-input" placeholder="" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-fac" style="font-size:9px">Provide friendly, enemy situation and game plan</div>
+      <div class="cas-fac">FAC: "Stand by for 9 line"</div>
+
+      <!-- 9 LIGNES -->
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">1</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">IP / BP</span>
+          <span class="cas-hint">Initial point (FW or battle position RW)</span>
+          <input id="kb-9l-1" class="cas-input" placeholder="IP ALPHA" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- Ligne 2 avec OFFSET -->
+      <div class="cas-row" style="display:grid;grid-template-columns:24px 1fr auto">
+        <span class="cas-num" style="width:auto;padding:4px 6px">2</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Heading</span>
+          <span class="cas-hint">Degrees Magnetic, IP / BP to Tgt</span>
+          <input id="kb-9l-2" class="cas-input" placeholder="090°M" autocomplete="off">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:0 12px;border-left:1px solid rgba(255,255,255,.06);flex-shrink:0">
+          <span class="cas-offset-lbl" style="padding:0;border:none;font-size:10px">OFFSET</span>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="radio" name="cas-offset" id="cas-offset-l" class="cas-radio" value="L">
+            <span class="cas-radio-lbl">Left</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="radio" name="cas-offset" id="cas-offset-r" class="cas-radio" value="R">
+            <span class="cas-radio-lbl">Right</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">3</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Distance</span>
+          <span class="cas-hint">IP / BP to Tgt in nautical miles</span>
+          <input id="kb-9l-3" class="cas-input" placeholder="4.5 NM" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">4</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Target Elevation</span>
+          <span class="cas-hint">Feet MSL (meter × 3.3 = feet)</span>
+          <input id="kb-9l-4" class="cas-input" placeholder="1250 ft MSL" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">5</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Target Description</span>
+          <span class="cas-hint">How many, what it is, degree of protection</span>
+          <input id="kb-9l-5" class="cas-input" placeholder="3× T-72, dug in, light AAA" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">6</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Target Location</span>
+          <span class="cas-hint">UMT, Latitude/longitude, visual reference, etc</span>
+          <input id="kb-9l-6" class="cas-input" placeholder="AB 123 456 / N37°30.123 E127°15.456" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- Ligne 7 avec Laser code -->
+      <div class="cas-row" style="display:grid;grid-template-columns:24px 1fr auto 1fr">
+        <span class="cas-num" style="width:auto;padding:4px 6px">7</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Type Mark</span>
+          <span class="cas-hint">WP, laser, IR pointer</span>
+          <input id="kb-9l-7" class="cas-input" placeholder="Laser" autocomplete="off">
+        </div>
+        <div style="display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(255,255,255,.06);flex-shrink:0">
+          <span class="cas-lbl" style="white-space:nowrap">Laser code</span>
+        </div>
+        <div class="cas-cell">
+          <input id="kb-9l-laser" class="cas-input" placeholder="1688" autocomplete="off" style="font-size:14px;letter-spacing:3px">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">8</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Friendlies</span>
+          <span class="cas-hint">From target, cardinal direction and distance in meters</span>
+          <input id="kb-9l-8" class="cas-input" placeholder="N 500m" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2" style="margin-bottom:4px">
+        <span class="cas-num">9</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Egress</span>
+          <span class="cas-hint">Cardinal / subcardinal direction and location (CP / IP) as required</span>
+          <input id="kb-9l-9" class="cas-input" placeholder="West / RTB IP ALPHA" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-fac">FAC: "Say when ready to copy remarks"</div>
+
+      <!-- Remarks -->
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Remarks</span>
+          <span class="cas-hint">Stay above / below, No fly areas</span>
+          <input id="kb-rmk" class="cas-input" placeholder="" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Final Attack Heading</span>
+          <span class="cas-hint">Degrees Magnetic</span>
+          <input id="kb-fah" class="cas-input" placeholder="270°M" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Threats</span>
+          <span class="cas-hint">Description, cardinal direction from target, distance in meters, type of suppression</span>
+          <input id="kb-thr" class="cas-input" placeholder="SA-13 N 2km, MANPADS SE 800m" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row" style="margin-bottom:6px">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">TOT / TTT or "push ASAP"</span>
+          <input id="kb-tot9" class="cas-input" placeholder="14:30Z / push ASAP" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-fac" style="font-size:9px">FAC: "Say when ready for amplifying information". Give pilot talk-on to TGT, bid to Small</div>
+
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button onclick="clearNineLines()" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:2px;padding:5px 14px;color:#f87171;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">CLEAR</button>
+        <button onclick="copyNineLines()" style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:2px;padding:5px 14px;color:#60a5fa;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">COPY</button>
+        <span style="font-family:system-ui,sans-serif;font-size:9px;color:#334155;margin-left:4px">* Minimum essential in limited comms environment</span>
+      </div>
+    </div>
+
+    <!-- ── BREVITY ── -->
+    <div class="kb-page" id="kb-brevity">
+      <div class="brev-grid">
+        <div class="brev-item"><div class="brev-word">BOGEY</div><div class="brev-def">Unidentified air contact</div></div>
+        <div class="brev-item"><div class="brev-word">BANDIT</div><div class="brev-def">Confirmed hostile air contact</div></div>
+        <div class="brev-item"><div class="brev-word">FRIENDLY</div><div class="brev-def">Confirmed friendly air contact</div></div>
+        <div class="brev-item"><div class="brev-word">SPIKE</div><div class="brev-def">Enemy radar lock / SAM in flight</div></div>
+        <div class="brev-item"><div class="brev-word">BLIND</div><div class="brev-def">No visual on wingman/element</div></div>
+        <div class="brev-item"><div class="brev-word">VISUAL</div><div class="brev-def">Visual contact confirmed</div></div>
+        <div class="brev-item"><div class="brev-word">BINGO</div><div class="brev-def">Minimum fuel for RTB</div></div>
+        <div class="brev-item"><div class="brev-word">WINCHESTER</div><div class="brev-def">All ordnance expended</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 1</div><div class="brev-def">Semi-active missile (AIM-7)</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 2</div><div class="brev-def">IR guided missile (AIM-9)</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 3</div><div class="brev-def">Active missile (AIM-120 AMRAAM)</div></div>
+        <div class="brev-item"><div class="brev-word">GUNS</div><div class="brev-def">Gun engagement</div></div>
+        <div class="brev-item"><div class="brev-word">MERGE</div><div class="brev-def">WVR engagement</div></div>
+        <div class="brev-item"><div class="brev-word">DEFENSIVE</div><div class="brev-def">Under attack — need immediate support</div></div>
+        <div class="brev-item"><div class="brev-word">PITBULL</div><div class="brev-def">AMRAAM active — self-guiding</div></div>
+        <div class="brev-item"><div class="brev-word">SKOSH</div><div class="brev-def">AIM-120 active — range limit</div></div>
+        <div class="brev-item"><div class="brev-word">BRAA</div><div class="brev-def">Bearing / Range / Altitude / Aspect</div></div>
+        <div class="brev-item"><div class="brev-word">BULLSEYE</div><div class="brev-def">Shared nav reference point</div></div>
+        <div class="brev-item"><div class="brev-word">ANGELS</div><div class="brev-def">Altitude in thousands ft</div></div>
+        <div class="brev-item"><div class="brev-word">CHERUBS</div><div class="brev-def">Altitude in hundreds ft (&lt;1,000)</div></div>
+        <div class="brev-item"><div class="brev-word">DECLARE</div><div class="brev-def">Request contact ID from GCI</div></div>
+        <div class="brev-item"><div class="brev-word">TALLY</div><div class="brev-def">Visual on bogey/bandit confirmed</div></div>
+        <div class="brev-item"><div class="brev-word">NO JOY</div><div class="brev-def">No visual on bogey/bandit</div></div>
+        <div class="brev-item"><div class="brev-word">SNAP</div><div class="brev-def">Immediate intercept vector</div></div>
+        <div class="brev-item"><div class="brev-word">NOTCH</div><div class="brev-def">Fly perpendicular to break radar lock</div></div>
+        <div class="brev-item"><div class="brev-word">DRAG</div><div class="brev-def">Place threat on beam/tail — extend away</div></div>
+        <div class="brev-item"><div class="brev-word">PUMP</div><div class="brev-def">Abort intercept, reverse away</div></div>
+        <div class="brev-item"><div class="brev-word">MADDOG</div><div class="brev-def">AIM-120 launched without radar lock</div></div>
+      </div>
+    </div>
+
+
+    <!-- ── CHECKLIST RAMP START ── -->
+    <div class="kb-page active" id="kb-chklist">
+      <style>
+        .cl-master{
+          cursor:pointer;user-select:none;
+          display:flex;align-items:center;gap:12px;margin-bottom:0;
+          padding:8px 12px;
+          background:rgba(34,211,238,.06);
+          border:1px solid rgba(34,211,238,.15);
+          border-radius:3px;
+          transition:background .15s;
+        }
+        .cl-master:hover{background:rgba(34,211,238,.1)}
+        .cl-master-chevron{
+          font-size:10px;color:#22d3ee;transition:transform .25s;display:inline-block;
+        }
+        .cl-master.open .cl-master-chevron{transform:rotate(90deg)}
+        .cl-master-title{
+          font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
+          color:#22d3ee;letter-spacing:2px;text-transform:uppercase;
+        }
+        .cl-master-body{overflow:hidden;max-height:0;transition:max-height .35s ease}
+        .cl-master-body.open{max-height:8000px;margin-top:6px}
+        .cl-section{
+          font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
+          color:#fff;letter-spacing:2px;text-transform:uppercase;
+          background:#0e4a52;padding:8px 10px;margin:8px 0 0;
+          border-left:3px solid #22d3ee;
+          cursor:pointer;user-select:none;
+          display:flex;align-items:center;gap:8px;
+          transition:background .15s;
+        }
+        .cl-section:hover{background:#125c66}
+        .cl-section::before{
+          content:'▶';font-size:8px;color:#22d3ee;
+          transition:transform .2s;display:inline-block;
+        }
+        .cl-section.open::before{transform:rotate(90deg)}
+        .cl-section-count{
+          margin-left:auto;font-family:'Consolas','Courier New',monospace;
+          font-size:9px;color:rgba(34,211,238,.5);letter-spacing:1px;
+        }
+        .cl-group{overflow:hidden;max-height:0;transition:max-height .3s ease}
+        .cl-group.open{max-height:3000px}
+        .cl-row{
+          display:flex;align-items:flex-start;gap:8px;
+          padding:4px 6px 4px 8px;border-bottom:1px solid rgba(255,255,255,.04);
+          cursor:pointer;transition:background .1s;
+        }
+        .cl-row:hover{background:rgba(34,211,238,.04)}
+        .cl-row.done{opacity:.45}
+        .cl-row.done .cl-item{text-decoration:line-through}
+        .cl-cb{
+          width:15px;height:15px;flex-shrink:0;margin-top:1px;
+          accent-color:#22d3ee;cursor:pointer;
+        }
+        .cl-num{
+          font-family:'Consolas','Courier New',monospace;font-size:11px;
+          font-weight:700;color:#22d3ee;width:18px;flex-shrink:0;
+          line-height:1.4;
+        }
+        .cl-item{
+          font-family:system-ui,sans-serif;font-size:12px;color:#cbd5e1;
+          line-height:1.4;flex:1;
+        }
+        .cl-status{
+          font-family:'Consolas','Courier New',monospace;font-size:11px;
+          font-weight:700;color:#4ade80;white-space:nowrap;flex-shrink:0;
+          line-height:1.4;text-align:right;min-width:80px;
+        }
+        .cl-note{
+          font-family:system-ui,sans-serif;font-size:10px;
+          color:#f97316;font-style:italic;padding:2px 8px 4px 30px;
+        }
+        .cl-reset-btn{
+          background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
+          border-radius:2px;padding:5px 14px;color:#f87171;
+          font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;
+          margin-top:8px;
+        }
+        .cl-reset-btn:hover{background:rgba(239,68,68,.18)}
+        .cl-progress{
+          font-family:'Consolas','Courier New',monospace;font-size:10px;
+          color:#22d3ee;margin-top:8px;letter-spacing:1px;
+        }
+      </style>
+
+      <div class="cl-master" id="cl-master" onclick="clToggleMaster()">
+        <span class="cl-master-chevron">▶</span>
+        <span class="cl-master-title">RAMP START — BMS 4.38 SQN SOP</span>
+        <span class="cl-progress" id="cl-prog">0 / 0</span>
+        <button class="cl-reset-btn" onclick="event.stopPropagation();clReset()">RESET</button>
+      </div>
+
+      <div class="cl-master-body" id="cl-master-body">
+        <div id="cl-list"></div>
+      </div>
+    </div>
+
+    <!-- script checklist déplacé en bas -->
+
+
   </div>
 </div>
 
@@ -3168,11 +3962,11 @@ document.addEventListener('click',e=>{
       <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
     </svg>
     <span class="brief-header-title">BRIEFING</span>
-    <span id="briefFileCount" style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#3d6b52;letter-spacing:1px">0 DOC</span>
+    <span id="briefFileCount" style="font-family:'Consolas','Courier New',monospace;font-size:9px;color:#3d6b52;letter-spacing:1px">0 DOC</span>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
       <div class="brief-upload-btn" onclick="document.getElementById('briefingFileInput').click()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        IMPORTER
+        IMPORT
       </div>
       <button onclick="document.getElementById('panel-briefing').classList.remove('open');document.querySelector('[data-tab=briefing]').classList.remove('active')" style="background:transparent;border:none;cursor:pointer;color:#546e82;font-size:16px;padding:0 4px">✕</button>
     </div>
@@ -3183,7 +3977,7 @@ document.addEventListener('click',e=>{
     <div class="brief-sidebar">
       <div class="brief-sidebar-hdr">DOCUMENTS</div>
       <div class="brief-file-list" id="briefFileList">
-        <div class="brief-empty">Aucun document<br>Importer PDF, image<br>ou Word (.docx)</div>
+        <div class="brief-empty">No documents<br>Import PDF, image<br>or Word (.docx)</div>
       </div>
     </div>
     <!-- Viewer -->
@@ -3193,12 +3987,192 @@ document.addEventListener('click',e=>{
           <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
           <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
         </svg>
-        <span class="brief-placeholder-txt">Sélectionner un document</span>
+        <span class="brief-placeholder-txt">Select a document</span>
       </div>
       <iframe id="briefIframe" src="about:blank" style="display:none"></iframe>
     </div>
   </div>
 </div>
+
+<script>
+// ══ Checklist Ramp Start BMS 4.38 ═══════════════════════════════
+const CL_DATA=[
+  {section:'BOARDING'},
+  {n:1, item:'Canopy',            status:'Closed & locked',              loc:'sidewall & spider'},
+  {n:2, item:'Exterior Lights',   status:'ON',                           loc:'Ext Lightning panel'},
+  {n:3, item:'Engine Feed',       status:'NORM',                         loc:'Fuel panel'},
+  {n:4, item:'Elec. Power',       status:'Main Power ON',                loc:'Elec panel'},
+  {n:5, item:'ILS',               status:'Set as required',              loc:'Audio 2 panel'},
+  {n:6, item:'Radio & volume',    status:'ON / Set',                     loc:'Audio 1 panel'},
+  {n:7, item:'Radio Mode',        status:'Both UHF',                     loc:'Backup panel'},
+  {n:8, item:'Vol IVC/AI',        status:'Set as desired',               loc:'UHF Backup panel'},
+  {n:9, item:'Cockpit lights',    status:'Set as desired',               loc:'Lightning panel'},
+  {n:10,item:'Air Source',        status:'NORM',                         loc:'Air Cond panel'},
+  {n:11,item:'Anti-ice',          status:'ON',                           loc:'Anti-ice panel'},
+  {n:12,item:'Radio',             status:'IVC-UHF BACKUP 6 / 225.00',   loc:'callsign - ready to start engine'},
+  {section:'ENGINE START & CHECK'},
+  {n:1, item:'Throttle',          status:'Check / IDLE CUTOFF',          loc:'IRL & 3D'},
+  {n:2, item:'Start 2',           status:'ON — wait >20% RPM & SEC off', loc:'JFS panel'},
+  {n:3, item:'Idle Detent',       status:'Toggle',                       loc:'Throttle'},
+  {note:'FTIT <650 — OTHERWISE SHUTDOWN IMMEDIATELY! Hyd/oil >15PSI/40bar'},
+  {n:4, item:'RPM',               status:'CHECK 70%',                    loc:'Engine gauges'},
+  {n:5, item:'Master Caution',    status:'RESET',                        loc:'Left Eyebrow'},
+  {n:6, item:'FLCS',              status:'RESET',                        loc:'Flt control panel'},
+  {n:7, item:'Probe Heat',        status:'ON',                           loc:'Test panel'},
+  {n:8, item:'Master Caution',    status:'CHECK OFF',                    loc:'Left eyebrow'},
+  {n:9, item:'Probe Heat light',  status:'CHECK OFF',                    loc:'Caution panel'},
+  {section:'AVIONICS START'},
+  {n:1, item:'Avionics Power',    status:'ON — EGI ALIGN NORM',          loc:'Avionics Power panel'},
+  {n:2, item:'Sensors Power',     status:'ON — RDR ALT STD-BY',          loc:'Sensor power panel'},
+  {n:3, item:'Sym',               status:'Set as desired',               loc:'ICP'},
+  {n:4, item:'RWR',               status:'ON',                           loc:'Threat warning aux'},
+  {n:5, item:'EWS Power',         status:'ON',                           loc:'CMDS panel'},
+  {n:6, item:'HMCS',              status:'Set as desired',               loc:'HMCS panel'},
+  {n:7, item:'ECM',               status:'OPR ON',                       loc:'ECM panel'},
+  {n:8, item:'C&I',               status:'UFC',                          loc:'IFF panel'},
+  {n:9, item:'IFF Master',        status:'STAND-BY',                     loc:'IFF panel'},
+  {n:10,item:'INS',               status:'NAV (after READY)',            loc:'Avionics Power panel'},
+  {n:11,item:'MIDS',              status:'ON',                           loc:'Avionics Power panel'},
+  {n:12,item:'Test',              status:'Clear & check',                loc:'MFD'},
+  {n:13,item:'DTE Load',          status:'Load (after MIDS INIT)',       loc:'MFD'},
+  {n:14,item:'Radio freq & nav',  status:'Check',                        loc:'MFD & DED'},
+  {n:15,item:'Radio',             status:'IVC-VHF Flight',               loc:'callsign - radio check on victor'},
+  {section:'SETTINGS'},
+  {n:1, item:'Trim',              status:'Set as required',              loc:'Manual Trim panel'},
+  {n:2, item:'CatI/III',          status:'Set as required',              loc:'LG panel'},
+  {n:3, item:'RWR Mode',          status:'Set as desired',               loc:'Threat warning prime'},
+  {n:4, item:'HMCS',              status:'Aligned',                      loc:'ICP'},
+  {n:5, item:'TCN / ILS',         status:'Set as briefed',               loc:'ICP'},
+  {n:6, item:'Joker / Bingo',     status:'Set as briefed',               loc:'ICP'},
+  {n:7, item:'Data-link members', status:'Set as briefed',               loc:'ICP'},
+  {n:8, item:'Loadout (SMS)',      status:'Set as briefed',               loc:'MFD'},
+  {n:9, item:'Selective Jettison',status:'Pre-set as required',          loc:'MFD'},
+  {n:10,item:'TGP/WPN/HAD',       status:'ON and set',                   loc:'MFD'},
+  {n:11,item:'HDG - CRS',         status:'Set as required',              loc:'HSI'},
+  {n:12,item:'Alt Baro',          status:'Set',                          loc:'HUD panel'},
+  {n:13,item:'Seat',              status:'Adjust as desired',            loc:'Right sidewall'},
+  {section:'BEFORE TAXI'},
+  {n:1, item:'Anti-ice',          status:'AUTO (after 2min)',            loc:'Anti-ice panel'},
+  {n:2, item:'Oxygen supply',     status:'ON (after 2min)',              loc:'Oxygen regulator'},
+  {n:3, item:'RDR ALT',           status:'ON',                           loc:'SNSR Power panel'},
+  {n:4, item:'NWS',               status:'Engaged',                      loc:'Stick & Right indexer'},
+  {n:5, item:'FCR',               status:'CRM',                          loc:'MFD'},
+  {n:6, item:'Landing Lights',    status:'TAXI',                         loc:'GEAR panel'},
+  {n:7, item:'Seat',              status:'ARMED',                        loc:'Seat'},
+  {n:8, item:'IFF Master',        status:'NORM',                         loc:'IFF panel'},
+  {n:9, item:'Position Lights',   status:'FLASH',                        loc:'Ext Lightning panel'},
+  {n:10,item:'Radio',             status:'Ground',                       loc:'Remove EPU pins & remove chocks'},
+  {n:11,item:'Brakes',            status:'Check',                        loc:'Rudder/throttle'},
+  {n:12,item:'Master Caution',    status:'CHECK OFF',                    loc:'Eyebrow'},
+  {n:13,item:'F-ACK (PFL)',       status:'CHECK OFF',                    loc:'Eyebrow/PFL'},
+  {n:14,item:'Warning Lights',    status:'CHECK OFF',                    loc:'Caution panel'},
+  {n:15,item:'Radio',             status:'IVC',                          loc:'callsign - ready to taxi'},
+  {n:16,item:'Radio (Lead)',      status:'Ground',                       loc:'ready to taxi'},
+  {section:'BEFORE TAKE OFF (Hold Short)'},
+  {n:1, item:'Radio',             status:'IVC',                          loc:'callsign - holdshort'},
+  {n:2, item:'Pressure QNH',      status:'Set',                          loc:'Instr altimeter'},
+  {n:3, item:'Data-link BIT (Deputy)',status:'CONT & Send',              loc:'MFD & TQS'},
+  {n:4, item:'Landing Light',     status:'ON',                           loc:'LG panel'},
+  {n:5, item:'ACMI (Deputies)',   status:'Recording ON',                 loc:''},
+  {n:6, item:'Visor',             status:'Set as desired',               loc:'Helmet'},
+  {n:7, item:'Radio Tower (Lead)',status:'Ready for departure',          loc:''},
+];
+
+let clState={};
+try{clState=JSON.parse(localStorage.getItem('bms_cl_state')||'{}');}catch(e){}
+function clSave(){try{localStorage.setItem('bms_cl_state',JSON.stringify(clState));}catch(e){}}
+
+let clOpenSecs={};
+try{clOpenSecs=JSON.parse(sessionStorage.getItem('bms_cl_open')||'{}');}catch(e){}
+function clSaveOpen(){try{sessionStorage.setItem('bms_cl_open',JSON.stringify(clOpenSecs));}catch(e){}}
+
+function clRender(){
+  const list=document.getElementById('cl-list');
+  if(!list)return;
+
+  // Pre-count items per section
+  let secCounts={},curSec='';
+  CL_DATA.forEach(row=>{
+    if(row.section){curSec=row.section;secCounts[curSec]={total:0,done:0};}
+    else if(row.n && curSec){
+      secCounts[curSec].total++;
+      const key=`${curSec}_${row.n}`;
+      if(clState[key])secCounts[curSec].done++;
+    }
+  });
+
+  let html='',sec='',total=0,done=0,groupOpen=false;
+  CL_DATA.forEach((row,idx)=>{
+    if(row.section){
+      // Close previous group
+      if(groupOpen) html+='</div>';
+      sec=row.section;
+      const isOpen=!!clOpenSecs[sec];
+      const cnt=secCounts[sec]||{total:0,done:0};
+      const badge=cnt.done>0?`<span class="cl-section-count">${cnt.done}/${cnt.total}</span>`
+                             :`<span class="cl-section-count">${cnt.total}</span>`;
+      html+=`<div class="cl-section${isOpen?' open':''}" onclick="clToggleSec(this,'${sec.replace(/'/g,"\\'")}')">
+        ${row.section}${badge}</div>`;
+      html+=`<div class="cl-group${isOpen?' open':''}">`;
+      groupOpen=true;
+    } else if(row.note){
+      html+=`<div class="cl-note">&#9888; ${row.note}</div>`;
+    } else {
+      const key=`${sec}_${row.n}`;
+      const chk=!!clState[key];
+      total++;if(chk)done++;
+      html+=`<div class="cl-row${chk?' done':''}" onclick="clToggle('${key}',this)">
+        <input type="checkbox" class="cl-cb"${chk?' checked':''} onclick="event.stopPropagation();clToggle('${key}',this.closest('.cl-row'))">
+        <span class="cl-num">${row.n}</span>
+        <span class="cl-item">${row.item}<br><span style="font-size:10px;color:#475569">${row.loc}</span></span>
+        <span class="cl-status">${row.status}</span>
+      </div>`;
+    }
+  });
+  if(groupOpen) html+='</div>';
+  list.innerHTML=html;
+  const p=document.getElementById('cl-prog');
+  if(p)p.textContent=`${done} / ${total}`;
+}
+
+function clToggleSec(el,sec){
+  const isOpen=el.classList.toggle('open');
+  const group=el.nextElementSibling;
+  if(group)group.classList.toggle('open',isOpen);
+  clOpenSecs[sec]=isOpen;clSaveOpen();
+}
+
+function clToggle(key,row){
+  clState[key]=!clState[key];clSave();
+  if(row){row.classList.toggle('done',clState[key]);const cb=row.querySelector('.cl-cb');if(cb)cb.checked=clState[key];}
+  const p=document.getElementById('cl-prog');
+  if(p){const d=Object.values(clState).filter(Boolean).length,t=CL_DATA.filter(r=>r.n).length;p.textContent=`${d} / ${t}`;}
+  // Update section badges
+  document.querySelectorAll('.cl-section').forEach(secEl=>{
+    const secName=secEl.textContent.replace(/\d+\/?\d*/g,'').trim();
+    const badge=secEl.querySelector('.cl-section-count');
+    if(!badge)return;
+    let st=0,sd=0;
+    CL_DATA.forEach(r=>{if(r.section===secName)st=-1;if(st===-1&&r.n){st++;const k=secName+'_'+r.n;if(clState[k])sd++;}});
+    // recount properly
+    let t2=0,d2=0,inSec=false;
+    CL_DATA.forEach(r=>{if(r.section===secName)inSec=true;else if(r.section)inSec=false;
+      if(inSec&&r.n){t2++;if(clState[secName+'_'+r.n])d2++;}});
+    badge.textContent=d2>0?d2+'/'+t2:String(t2);
+  });
+}
+
+function clReset(){clState={};clOpenSecs={};clSave();clSaveOpen();clRender();}
+function clToggleMaster(){
+  const m=document.getElementById('cl-master');
+  const b=document.getElementById('cl-master-body');
+  if(!m||!b)return;
+  const isOpen=m.classList.toggle('open');
+  b.classList.toggle('open',isOpen);
+}
+clRender(); // Init on page load
+</script>
+
 
 <script>
 // ── Tab switching ────────────────────────────────────────────────
@@ -3263,7 +4237,7 @@ function briefingRenderList(files) {
   const count = document.getElementById('briefFileCount');
   count.textContent = files.length + ' DOC';
   if (!files.length) {
-    list.innerHTML = '<div class="brief-empty">Aucun document<br>Importer PDF, image<br>ou Word (.docx)</div>';
+    list.innerHTML = '<div class="brief-empty">No documents<br>Import PDF, image<br>or Word (.docx)</div>';
     return;
   }
   list.innerHTML = files.map(f => {
@@ -3276,7 +4250,7 @@ function briefingRenderList(files) {
         <div class="brief-file-name">${f.name}</div>
         <div class="brief-file-meta">${f.size_kb} KB · ${f.modified}</div>
       </div>
-      <span class="brief-file-del" onclick="event.stopPropagation();briefingDelete('${f.name}')" title="Supprimer">✕</span>
+      <span class="brief-file-del" onclick="event.stopPropagation();briefingDelete('${f.name}')" title="Delete">✕</span>
     </div>`;
   }).join('');
 }
@@ -3299,7 +4273,7 @@ async function briefingUpload(files) {
   if (!files || !files.length) return;
   const btn = document.querySelector('.brief-upload-btn');
   const origTxt = btn.innerHTML;
-  btn.innerHTML = '⏳ ENVOI…';
+  btn.innerHTML = '⏳ UPLOADING…';
   btn.style.pointerEvents = 'none';
   let lastFiles = [];
   for (const file of files) {
@@ -3319,7 +4293,7 @@ async function briefingUpload(files) {
 }
 
 async function briefingDelete(name) {
-  if (!confirm('Supprimer "' + name + '" ?')) return;
+  if (!confirm('Delete "' + name + '" ?')) return;
   try {
     const r = await fetch('/api/briefing/delete/' + encodeURIComponent(name), {method:'DELETE'});
     const d = await r.json();
@@ -3339,15 +4313,81 @@ function switchKbTab(name, el) {
   el.classList.add('active');
   const page = document.getElementById('kb-' + name);
   if (page) page.classList.add('active');
+  if(name==='chklist') setTimeout(clRender,0);
 }
 
-// Persister les notes kneeboard
-const _kbNotes = document.getElementById('kb-notes-ta');
-const _KB_KEY = 'bms_kb_notes';
-try { _kbNotes.value = localStorage.getItem(_KB_KEY) || ''; } catch(e) {}
-_kbNotes.addEventListener('input', () => {
-  try { localStorage.setItem(_KB_KEY, _kbNotes.value); } catch(e) {}
+// Persister kneeboard (notes, plan de vol, 9-line)
+const _kbPersist = {
+  'kb-notes-ta':'bms_kb_notes',
+  'kb-fplan-ta':'bms_kb_fplan',
+  'kb-callsign':'bms_kb_callsign','kb-package':'bms_kb_package',
+  'kb-tot':'bms_kb_tot','kb-tanker':'bms_kb_tanker',
+  'kb-bull-val':'bms_kb_bull','kb-bingo':'bms_kb_bingo',
+  'kb-9l-1':'bms_9l_1','kb-9l-2':'bms_9l_2','kb-9l-3':'bms_9l_3',
+  'kb-9l-4':'bms_9l_4','kb-9l-5':'bms_9l_5','kb-9l-6':'bms_9l_6',
+  'kb-9l-7':'bms_9l_7','kb-9l-8':'bms_9l_8','kb-9l-9':'bms_9l_9',
+  'kb-9l-laser':'bms_9l_laser',
+  'kb-fac-id':'bms_fac_id','kb-fac-self':'bms_fac_self',
+  'kb-pre-1':'bms_pre_1','kb-pre-2':'bms_pre_2','kb-pre-3':'bms_pre_3',
+  'kb-pre-4':'bms_pre_4','kb-pre-5':'bms_pre_5','kb-pre-6':'bms_pre_6',
+  'kb-rmk':'bms_9l_rmk','kb-fah':'bms_9l_fah','kb-thr':'bms_9l_thr','kb-tot9':'bms_9l_tot9',
+};
+Object.entries(_kbPersist).forEach(([id,key])=>{
+  const el=document.getElementById(id);
+  if(!el)return;
+  try{el.value=localStorage.getItem(key)||'';}catch(e){}
+  el.addEventListener('input',()=>{try{localStorage.setItem(key,el.value);}catch(e){}});
 });
+// Persistance radio offset
+try{
+  const sv=localStorage.getItem('bms_cas_offset');
+  if(sv){const r=document.querySelector(`input[name="cas-offset"][value="${sv}"]`);if(r)r.checked=true;}
+}catch(e){}
+document.querySelectorAll('input[name="cas-offset"]').forEach(r=>{
+  r.addEventListener('change',()=>{try{localStorage.setItem('bms_cas_offset',r.value);}catch(e){}});
+});
+function clearNineLines(){
+  const ids=['kb-9l-1','kb-9l-2','kb-9l-3','kb-9l-4','kb-9l-5','kb-9l-6','kb-9l-7','kb-9l-8','kb-9l-9',
+    'kb-9l-laser','kb-fac-id','kb-fac-self','kb-pre-1','kb-pre-2','kb-pre-3','kb-pre-4','kb-pre-5','kb-pre-6',
+    'kb-rmk','kb-fah','kb-thr','kb-tot9'];
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.value='';try{localStorage.removeItem('bms_'+id.replace('kb-',''));}catch(e){}}
+  });
+  // Reset radios
+  document.querySelectorAll('input[name="cas-offset"]').forEach(r=>r.checked=false);
+  try{localStorage.removeItem('bms_cas_offset');}catch(e){}
+}
+function copyNineLines(){
+  const g=id=>document.getElementById(id)?.value||'';
+  const offset=document.querySelector('input[name="cas-offset"]:checked')?.value||'';
+  const lines=[
+    `FAC: "${g('kb-fac-id')}, this is ${g('kb-fac-self')}, standing by for aircraft check-in"`,
+    `Leader/Mission: ${g('kb-pre-1')}`,
+    `Aircraft: ${g('kb-pre-2')}`,
+    `Position/Alt: ${g('kb-pre-3')}`,
+    `Ordinance: ${g('kb-pre-4')}`,
+    `TOS: ${g('kb-pre-5')}`,
+    g('kb-pre-6')?`Remarks: ${g('kb-pre-6')}`:'',
+    '---',
+    `1. IP/BP: ${g('kb-9l-1')}`,
+    `2. Heading: ${g('kb-9l-2')}${offset?' | Offset: '+offset:''}`,
+    `3. Distance: ${g('kb-9l-3')}`,
+    `4. Elevation: ${g('kb-9l-4')}`,
+    `5. Target: ${g('kb-9l-5')}`,
+    `6. Location: ${g('kb-9l-6')}`,
+    `7. Mark: ${g('kb-9l-7')}${g('kb-9l-laser')?' | Laser: '+g('kb-9l-laser'):''}`,
+    `8. Friendlies: ${g('kb-9l-8')}`,
+    `9. Egress: ${g('kb-9l-9')}`,
+    '---',
+    g('kb-rmk')?`Remarks: ${g('kb-rmk')}`:'',
+    g('kb-fah')?`Final Attack Hdg: ${g('kb-fah')}`:'',
+    g('kb-thr')?`Threats: ${g('kb-thr')}`:'',
+    g('kb-tot9')?`TOT: ${g('kb-tot9')}`:'',
+  ].filter(Boolean);
+  try{navigator.clipboard.writeText(lines.join('\n'));}catch(e){}
+  showToast('9-LINE COPIED');
+}
 
 // ── GPS Panel data ───────────────────────────────────────────────
 let _lastAircraftData = null;
@@ -3419,7 +4459,7 @@ function buildGpsSteers(route) {
   const count = document.getElementById('gps-steer-count');
   list.innerHTML = '';
   if (!route || !route.length) {
-    list.innerHTML = '<span style="font-family:Rajdhani,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>';
+    list.innerHTML = '<span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>';
     count.textContent = '0 WPT';
     return;
   }
@@ -3467,6 +4507,24 @@ map.on('click', () => {
     _activeTab = null;
   }
 });
+
+// Init mission on secondary device (tablet) — retry with delay
+(async function _initMission(){
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      await new Promise(r=>setTimeout(r, 1000 + attempt*2000));
+      const s=await(await fetch('/api/ini/status')).json();
+      console.log('[INIT] ini/status attempt',attempt+1,':',JSON.stringify(s));
+      if(s.loaded&&s.mtime&&s.mtime!==_lastIniMtime){
+        _lastIniFile=s.file;_lastIniMtime=s.mtime;
+        loadMission();
+        console.log('[INIT] Mission loaded:',s.file,'mtime:',s.mtime);
+        return;
+      }
+    }catch(e){console.warn('[INIT] error:',e);}
+  }
+  console.log('[INIT] No mission found after 3 attempts');
+})();
 </script>
 </body></html>
 """
@@ -3478,7 +4536,6 @@ class SettingsModel(BaseModel):
     port:         Optional[int] = None
     briefing_dir: Optional[str] = None
     broadcast_ms: Optional[int] = None
-    theme:        Optional[str] = None
 
 @app.get("/api/settings")
 async def settings_get():
@@ -3499,8 +4556,6 @@ async def settings_save(s: SettingsModel):
             raise HTTPException(400, f"Dossier invalide: {e}")
     if s.broadcast_ms is not None and 50 <= s.broadcast_ms <= 2000:
         APP_CONFIG["broadcast_ms"] = s.broadcast_ms; changed.append("broadcast_ms")
-    if s.theme is not None and s.theme in ("dark", "light"):
-        APP_CONFIG["theme"] = s.theme; changed.append("theme")
     _save_config(APP_CONFIG)
     needs_restart = "port" in changed
     logger.info(f"Settings: {changed}" + (" — RESTART requis (port)" if needs_restart else ""))
@@ -3621,9 +4676,8 @@ async def _docx_to_html_response(fp: str):
         body = "\n".join(paras)
         html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
-  body{{background:#060a12;color:#cbd5e1;font-family:'Rajdhani',sans-serif;
+  body{{background:#060a12;color:#cbd5e1;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
     max-width:860px;margin:0 auto;padding:32px 24px;font-size:15px;line-height:1.7}}
-  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap');
   h1{{font-size:22px;color:#fbbf24;letter-spacing:2px;text-transform:uppercase;
     border-bottom:1px solid rgba(251,191,36,.2);padding-bottom:8px;margin:24px 0 12px}}
   h2{{font-size:16px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin:20px 0 8px}}
@@ -3643,9 +4697,210 @@ async def _docx_to_html_response(fp: str):
         return _HR(content=f"<html><body style='background:#060a12;color:#ef4444;padding:40px;font-family:monospace'>"
                    f"<h2>Erreur conversion DOCX</h2><pre>{e}</pre></body></html>", status_code=500)
 
+@app.get("/api/logo/{name}")
+async def serve_logo(name: str):
+    safe = "".join(c for c in name if c.isalnum() or c in "._- ").strip()
+    fp = os.path.join(ASSETS_DIR, safe)
+    if not os.path.exists(fp):
+        raise HTTPException(404, "Logo not found")
+    ext = os.path.splitext(safe)[1].lower()
+    mime = {".png":"image/png",".jpg":"image/jpeg",".ico":"image/x-icon"}.get(ext,"application/octet-stream")
+    return FileResponse(fp, media_type=mime)
+
 @app.get("/")
 async def index(): return HTMLResponse(content=HTML)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="warning")
+    import threading as _th_main
+
+    def _run_server():
+        uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="warning")
+
+    _srv_thread = _th_main.Thread(target=_run_server, daemon=True)
+    _srv_thread.start()
+
+    try:
+        from PySide6.QtWidgets import QApplication, QWidget  # type: ignore[import-untyped]
+        from PySide6.QtCore    import Qt, QTimer             # type: ignore[import-untyped]
+        from PySide6.QtGui     import (QPainter, QColor, QPen, QFont,  # type: ignore[import-untyped]
+                                       QPixmap, QIcon, QBrush)
+    except ImportError:
+        logger.error("PySide6 absent — pip install PySide6")
+        _srv_thread.join()
+        raise SystemExit(0)
+
+    class FalconPadWindow(QWidget):
+        W, H = 420, 350
+        BG         = QColor("#060a12")
+        BG2        = QColor("#0b1220")
+        ACCENT     = QColor("#4ade80")
+        ACCENT_DIM = QColor("#1f4d35")
+        RED        = QColor("#ef4444")
+        RED_DIM    = QColor("#1a0808")
+        RED_HOV    = QColor("#3d1010")
+        RED_OUT    = QColor("#7f2222")
+        BLUE       = QColor("#60a5fa")
+        TXT_DIM    = QColor("#64748b")
+        TXT_MID    = QColor("#94a3b8")
+
+        def __init__(self):
+            super().__init__()
+            self.setFixedSize(self.W, self.H)
+            # Window + Frameless = barre des tâches OK + showMinimized() OK
+            self.setWindowFlags(
+                Qt.WindowType.Window |
+                Qt.WindowType.FramelessWindowHint
+            )
+            self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            self.setWindowTitle("Falcon-Pad")
+            _ico = os.path.join(ASSETS_DIR, "falcon_pad.ico")
+            if os.path.exists(_ico):
+                self.setWindowIcon(QIcon(_ico))
+            screen = QApplication.primaryScreen().availableGeometry()
+            self.move((screen.width()-self.W)//2, (screen.height()-self.H)//2)
+            self._logo = None
+            _lp = os.path.join(ASSETS_DIR, "logo_app.png")
+            if os.path.exists(_lp):
+                px = QPixmap(_lp)
+                if not px.isNull():
+                    self._logo = px.scaled(64,64,Qt.AspectRatioMode.KeepAspectRatio,
+                                           Qt.TransformationMode.SmoothTransformation)
+            self._drag_pos  = None
+            self._btn_hover = False
+            self._min_hover = False
+            self._btn_rect  = None
+            self._min_rect  = None
+            self._bms_ok    = False
+            self._timer = QTimer(self)
+            self._timer.timeout.connect(self._poll_bms)
+            self._timer.start(3000)
+            QTimer.singleShot(600, self._poll_bms)
+            self.setMouseTracking(True)
+            self.show()
+
+        def _poll_bms(self):
+            try:
+                ok = bms.connected or bms.try_reconnect()
+                if ok != self._bms_ok:
+                    self._bms_ok = ok
+                    self.update()
+            except Exception:
+                pass
+
+        def paintEvent(self, _):
+            p = QPainter(self)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            W, H = self.W, self.H
+            p.fillRect(0, 0, W, H, self.BG)
+            p.fillRect(0, 0, W, 80, self.BG2)
+            p.fillRect(0, 0, W, 3, self.ACCENT)
+            p.setPen(QPen(self.ACCENT_DIM, 1))
+            p.drawRect(0, 0, W-1, H-1)
+            p.drawLine(20, 80, W-20, 80)
+            p.drawLine(20, H-66, W-20, H-66)
+            # Bouton réduire
+            rx,ry,rw,rh = W-36,10,24,18
+            self._min_rect=(rx,ry,rw,rh)
+            mc = self.TXT_MID if self._min_hover else self.TXT_DIM
+            p.setPen(QPen(mc,1)); p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(rx,ry,rw,rh)
+            p.setPen(QPen(mc,2))
+            p.drawLine(rx+5, ry+rh//2, rx+rw-5, ry+rh//2)
+            # Logo + titre
+            tx = 20
+            if self._logo:
+                p.drawPixmap(12, 8, self._logo); tx = 88
+            p.setPen(QPen(self.ACCENT))
+            p.setFont(QFont("Consolas",15,QFont.Weight.Bold))
+            p.drawText(tx,8,W-tx-44,40,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,"FALCON-PAD")
+            p.setPen(QPen(self.TXT_DIM))
+            p.setFont(QFont("Consolas",8))
+            p.drawText(tx,48,W-tx-44,20,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,
+                       f"v{APP_VERSION}  ·  by {APP_AUTHOR}")
+            # URLs
+            y=96
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22,y,"LOCAL"); y+=17
+            p.setFont(QFont("Consolas",11)); p.setPen(QPen(self.ACCENT))
+            p.drawText(22,y,f"http://localhost:{SERVER_PORT}"); y+=25
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22,y,"NETWORK  —  Tablet / Mobile"); y+=17
+            p.setFont(QFont("Consolas",11)); p.setPen(QPen(self.BLUE))
+            p.drawText(22,y,f"http://{SERVER_IP}:{SERVER_PORT}"); y+=25
+            # BMS
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22,y,"FALCON BMS 4.38"); y+=17
+            dc = self.ACCENT if self._bms_ok else self.RED
+            p.setBrush(QBrush(dc)); p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(22,y-9,10,10)
+            p.setPen(QPen(dc))
+            p.setFont(QFont("Consolas",10,QFont.Weight.Bold))
+            p.drawText(38,y,"CONNECTED" if self._bms_ok else "NOT DETECTED"); y+=25
+            # Logs
+            p.setPen(QPen(self.TXT_DIM))
+            p.setFont(QFont("Consolas",7,QFont.Weight.Bold))
+            p.drawText(22,y,"LOGS"); y+=15
+            ls = LOG_DIR if len(LOG_DIR)<=54 else "…"+LOG_DIR[-52:]
+            p.setFont(QFont("Consolas",8)); p.drawText(22,y,ls)
+            # Stop button
+            bx,by_,bw_,bh_ = W//2-72,H-52,144,28
+            self._btn_rect=(bx,by_,bw_,bh_)
+            p.setBrush(QBrush(self.RED_HOV if self._btn_hover else self.RED_DIM))
+            p.setPen(QPen(self.RED if self._btn_hover else self.RED_OUT,1))
+            p.drawRect(bx,by_,bw_,bh_)
+            p.setPen(QPen(self.RED))
+            p.setFont(QFont("Consolas",11,QFont.Weight.Bold))
+            p.drawText(bx,by_,bw_,bh_,Qt.AlignmentFlag.AlignCenter,"■  STOP")
+            p.setPen(QPen(self.TXT_DIM)); p.setFont(QFont("Consolas",7))
+            p.drawText(0,H-13,W,12,Qt.AlignmentFlag.AlignCenter,"Server will be stopped")
+            p.end()
+
+        def mousePressEvent(self, e):
+            if e.button() != Qt.MouseButton.LeftButton: return
+            mx,my = e.position().x(), e.position().y()
+            if self._btn_rect:
+                bx,by_,bw_,bh_ = self._btn_rect
+                if bx<=mx<=bx+bw_ and by_<=my<=by_+bh_:
+                    self._do_quit(); return
+            if self._min_rect:
+                rx,ry,rw,rh = self._min_rect
+                if rx<=mx<=rx+rw and ry<=my<=ry+rh:
+                    self.showMinimized(); return
+            if my < 80:
+                self._drag_pos = e.globalPosition().toPoint()
+
+        def mouseMoveEvent(self, e):
+            if self._drag_pos and e.buttons()==Qt.MouseButton.LeftButton:
+                delta = e.globalPosition().toPoint()-self._drag_pos
+                self.move(self.pos()+delta)
+                self._drag_pos = e.globalPosition().toPoint()
+            mx,my = e.position().x(), e.position().y()
+            if self._btn_rect:
+                bx,by_,bw_,bh_ = self._btn_rect
+                h = bx<=mx<=bx+bw_ and by_<=my<=by_+bh_
+                if h!=self._btn_hover: self._btn_hover=h; self.update()
+            if self._min_rect:
+                rx,ry,rw,rh = self._min_rect
+                h2 = rx<=mx<=rx+rw and ry<=my<=ry+rh
+                if h2!=self._min_hover: self._min_hover=h2; self.update()
+
+        def mouseReleaseEvent(self, _e): self._drag_pos = None
+
+        def leaveEvent(self, _e):
+            if self._btn_hover or self._min_hover:
+                self._btn_hover=False; self._min_hover=False; self.update()
+
+        def keyPressEvent(self, e):
+            if e.key()==Qt.Key.Key_F4 and e.modifiers()==Qt.KeyboardModifier.AltModifier:
+                self._do_quit()
+
+        def _do_quit(self):
+            self._timer.stop(); self.close()
+            os.kill(os.getpid(), 9)
+
+    _app = QApplication(sys.argv)
+    _app.setApplicationName("Falcon-Pad")
+    _app.setApplicationVersion(APP_VERSION)
+    _win = FalconPadWindow()
+    _app.exec()
 
