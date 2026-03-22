@@ -1,4 +1,4 @@
-# 🛩️ FALCON-PAD v0.3
+# 🛩️ FALCON-PAD v0.2
 
 <p align="center">
   <img src="assets/logo_moyen.png" alt="Falcon-PAD" width="500"/>
