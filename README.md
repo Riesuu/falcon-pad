@@ -1,149 +1,109 @@
-<p align="center">
-  <img src="logo.png" alt="Falcon-Pad Logo" width="480"/>
-</p>
-
-<h1 align="center">Falcon-Pad</h1>
+# 🛩️ FALCON-PAD v0.3
 
 <p align="center">
-  <strong>Tactical companion app for Falcon BMS — web-based, multi-device, no god mode.</strong><br/>
-  by <a href="mailto:contact@falcon-charts.com">Riesu</a> · <a href="https://www.falcon-charts.com">falcon-charts.com</a>
+  <img src="assets/logo_moyen.png" alt="Falcon-PAD" width="500"/>
 </p>
 
 <p align="center">
-  <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python" alt="Python"/></a>
-  <a href="https://fastapi.tiangolo.com"><img src="https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=flat-square&logo=fastapi" alt="FastAPI"/></a>
-  <a href="https://www.benchmarksims.org"><img src="https://img.shields.io/badge/Falcon%20BMS-4.38-orange?style=flat-square" alt="BMS"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-green?style=flat-square" alt="License"/></a>
+  Real-time tactical map for Falcon BMS 4.38 — PC + Tablet<br/>
+  Carte tactique temps réel pour Falcon BMS 4.38 — PC + Tablette
 </p>
+
+---
+
+## 🇬🇧 English
+
+### Getting Started
+
+1. Launch **Falcon-PAD.exe**
+2. Open `http://localhost:8000` in your browser
+3. On your tablet: open `http://YOUR_PC_IP:8000`
+4. Start BMS and fly
+
+### First Time Setup
+
+**Windows Firewall** — allow tablet access:
+```
+netsh advfirewall firewall add rule name="Falcon-PAD" dir=in action=allow protocol=TCP localport=8000
+```
+
+**BMS Config** — add to `Falcon BMS User.cfg`:
+```
+set g_bTacviewRealTime 1
+set g_bTacviewRealTimeHost 1
+```
+
+### Features
+
+**Live Map** — aircraft position, heading, altitude and speed on a dark tactical map. Follow mode auto-tracks your aircraft. Compass button switches between North Up and Track Up.
+
+**Mission Auto-Load** — automatically detects your DTC file (callsign.ini) from `User\Config` and displays steerpoints, flight plan, PPT threat circles and Bullseye on the map. Updates within 3 seconds when you modify your DTC.
+
+**Datalink** — L16 contacts and TRTT/Tacview coalition aircraft displayed in real-time. Green = friendly, red = hostile.
+
+**Kneeboard** — interactive ramp start checklist with progress tracking, 9-LINE CAS brief, brevity codes, COMMS frequencies, flight plan notes, and sticky map notes.
+
+**Briefing** — upload and view PDF, images and Word documents directly in the app.
+
+**Drawing Tools** — ruler for distance measurement, arrows, color picker, and tactical annotations.
+
+**Tablet** — full touch support. The tablet auto-syncs mission data from your PC. Just bookmark the URL.
+
+### Folder Structure
+
+```
+Falcon-PAD/
+  Falcon-PAD.exe
+  assets/
+    logo_app.png
+    logo_moyen.png
+  logs/           ← created automatically
+  briefing/       ← your briefing files
+  config/         ← settings
+```
 
 ---
 
 ## 🇫🇷 Français
 
-### Présentation
+### Démarrage
 
-**Falcon-Pad** est une application web tactique conçue pour **Falcon BMS 4.38**, accessible depuis n'importe quel device sur votre réseau local  PC, tablette, smartphone. Elle lit directement la **Shared Memory BMS** pour afficher votre position, vos contacts radar/datalink, votre Bullseye, votre plan de vol et vos menaces PPT sur une carte  interactive.
+1. Lancer **Falcon-PAD.exe**
+2. Ouvrir `http://localhost:8000` dans le navigateur
+3. Sur la tablette : ouvrir `http://IP_DU_PC:8000`
+4. Lancer BMS et voler
 
-L'objectif est simple : avoir un **kneeboard numérique** complet sur une tablette posée à côté de votre HOTAS, sans dépendre d'une application Windows tierce.
+### Premier lancement
+
+**Pare-feu Windows** — autoriser l'accès tablette :
+```
+netsh advfirewall firewall add rule name="Falcon-PAD" dir=in action=allow protocol=TCP localport=8000
+```
+
+**Config BMS** — ajouter dans `Falcon BMS User.cfg` :
+```
+set g_bTacviewRealTime 1
+set g_bTacviewRealTimeHost 1
+```
 
 ### Fonctionnalités
 
-**Navigation & Carte**
-- Carte Leaflet interactive — théâtre Corée (Korea)
-- Position ownship en temps réel via Shared Memory BMS
-- Marker **Bullseye** en temps réel (lecture FD2 `bullseyeX/Y`) avec bearing & distance depuis ownship
-- Contacts radar/datalink BMS uniquement — **pas de mode dieu** (DrawingData uniquement)
-- Cercles de menace PPT avec rayon NM configurable
-- Chargement automatique du dernier fichier `.ini` BMS (steerpoints, PPT, flightplan)
-- Popup aéroport compact : ICAO · TACAN · fréquence tour + chips ILS (RWY · freq · CRS)
-- Outils de dessin : annotations, règle, flèches, notes collantes
+**Carte en direct** — position, cap, altitude et vitesse de l'avion sur une carte tactique sombre. Le mode suivi centre automatiquement l'avion. Le bouton boussole bascule entre Nord en haut et Track Up.
 
-**Onglets tactiques**
-- **GPS** — LAT/LON, cap, FL, KIAS, distance & bearing vers le steerpoint actif, position Bullseye
-- **Charts** — [falcon-charts.com](https://www.falcon-charts.com) intégré en plein écran
-- **Briefing** — visionneuse PDF / image / Word (.docx converti en HTML), stockage persistant sur disque
-- **Kneeboard** — brevity codes NATO, fréquences Korea BMS, notes libres persistantes
+**Chargement auto de la mission** — détecte automatiquement votre fichier DTC (callsign.ini) dans `User\Config` et affiche les steerpoints, le plan de vol, les cercles de menace PPT et le Bullseye. Mise à jour en 3 secondes quand vous modifiez votre DTC.
 
-**Système**
-- Heure simulée BMS (`currentTime` FD2 Shared Memory) — pas l'heure UTC réelle
-- Barre de statut : IP réseau cliquable (copie l'URL), connexion BMS, horloge BMS
-- Roue crantée **Settings** : port d'écoute, dossier briefing, intervalle broadcast, thème dark/light
-- Config persistante JSON dans `config/`
-- Logs rotatifs dans `logs/` — 3 fichiers × 2 MB max
-- Sécurité : middleware LAN uniquement (RFC-1918 + localhost), accès refusé depuis internet
-- Multi-device : PC + tablette + téléphone en simultané sur le même serveur
+**Datalink** — contacts L16 et avions de la coalition TRTT/Tacview en temps réel. Vert = allié, rouge = ennemi.
 
-**Mobile & Tactile**
-- Optimisé tablette : viewport meta, `user-scalable=no`, touch targets 44px min
-- Layout adaptatif : toolbar horizontale, panels plein écran, GPS en grille sur portrait
-- Feedback tactile sur tous les éléments interactifs
-- `user-select: none` sur la carte pour éviter les sélections accidentelles
+**Kneeboard** — checklist ramp start interactive avec suivi de progression, brief 9-LINE CAS, codes brevity, fréquences COMMS, notes de plan de vol et notes autocollantes sur la carte.
 
-### Installation
+**Briefing** — upload et visualisation de PDF, images et documents Word directement dans l'application.
 
-télécharger directement `Falcon-PAD.exe` depuis les [Releases](../../releases).
+**Outils de dessin** — règle pour mesurer les distances, flèches, sélecteur de couleur et annotations tactiques.
 
-```
-  Local    : http://localhost:8000       ← PC
-  Réseau   : http://192.168.x.x:8000    ← Tablette / Mobile
-  Sécurité : LAN uniquement (RFC-1918 + localhost)
-```
-
-### Configuration BMS requise
-
-Dans `User/config/Falcon BMS User.cfg` :
-```
-set g_bTacviewRealTime 1
-```
-
-
-
-## 🇬🇧 English
-
-### Overview
-
-**Falcon-Pad** is a web-based tactical companion for **Falcon BMS 4.38**, accessible from any device on your local network — PC, tablet, smartphone. It reads directly from **BMS Shared Memory** to display your position, radar/datalink contacts, Bullseye, flight plan, and PPT threat circles on an interactive Leaflet map.
-
-The goal: a complete **digital kneeboard** on a tablet next to your HOTAS, no third-party Windows app required.
-
-### Features
-
-**Navigation & Map**
-- Interactive Leaflet map — Korea theater
-- Real-time ownship position via BMS Shared Memory
-- Real-time **Bullseye** marker (FD2 `bullseyeX/Y`) with bearing & distance from ownship
-- BMS radar/datalink contacts only — **no god mode** (DrawingData only)
-- PPT threat circles with configurable NM radius
-- Auto-loads latest BMS `.ini` file (steerpoints, PPT, flightplan)
-- Compact airbase popup: ICAO · TACAN · tower freq + ILS chips (RWY · freq · CRS)
-- Drawing tools: annotations, ruler, arrows, sticky notes
-
-**Tactical tabs**
-- **GPS** — LAT/LON, heading, FL, KIAS, distance & bearing to active steerpoint, Bullseye position
-- **Charts** — [falcon-charts.com](https://www.falcon-charts.com) embedded full-screen
-- **Briefing** — PDF / image / Word viewer (.docx → HTML), persistent disk storage
-- **Kneeboard** — NATO brevity codes, Korea BMS frequencies, persistent free notes
-
-**System**
-- BMS simulated time (`currentTime` FD2 Shared Memory) — not wall-clock UTC
-- Status bar: clickable network IP (copies URL to clipboard), BMS connection, BMS clock
-- **Settings** gear panel: listen port, briefing folder, broadcast interval, dark/light theme
-- Persistent JSON config in `config/`
-- Rotating logs in `logs/` — 3 files × 2 MB max
-- LAN-only security middleware (RFC-1918 + localhost) — internet access blocked
-- Multi-device: PC + tablet + phone simultaneously on the same server
-
-**Mobile & Touch**
-- Tablet-optimized: viewport meta, `user-scalable=no`, 44px min touch targets
-- Responsive layout: horizontal toolbar, full-height panels, GPS grid on portrait
-- Touch feedback on all interactive elements
-- `user-select: none` on map to prevent accidental text selection
-
-download `Falcon-PAD.exe` from [Releases](../../releases).
-
-```
-  Local    : http://localhost:8000       ← PC
-  Network  : http://192.168.x.x:8000    ← Tablet / Mobile
-  Security : LAN only (RFC-1918 + localhost)
-```
-
-### Required BMS config
-
-In `User/config/Falcon BMS User.cfg`:
-```
-set g_bTacviewRealTime 1
-```
-
-## License
-
-Falcon-Pad is free software released under the **GNU General Public License v3.0**.
-See [LICENSE](LICENSE) for full terms.
+**Tablette** — support tactile complet. La tablette synchronise automatiquement les données mission depuis le PC. Ajoutez simplement l'URL en favori.
 
 ---
 
-## Credits
-
-**Falcon-Pad** — built by [Riesu](mailto:contact@falcon-charts.com)  
-Charts — [falcon-charts.com](https://www.falcon-charts.com)
-
-*Falcon BMS is developed by the BMS Team. This project is not affiliated with or endorsed by the BMS Team.*
+<p align="center">
+  by <strong>Riesu</strong> · <a href="https://www.falcon-charts.com">falcon-charts.com</a>
+</p>
