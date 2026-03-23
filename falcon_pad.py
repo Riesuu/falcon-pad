@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil
 from datetime import datetime
 import app_info
-from stringdata import read_all_strings, get_mk_markpoints, get_hsd_lines
+from stringdata import read_all_strings, get_mk_markpoints, get_hsd_lines, detect_theater
 import app_info
 from typing import List, Optional, Dict
 import logging
@@ -196,27 +196,11 @@ FD2_LON          = 0x40C   # float,  longitude degrés WGS84
 FD2_BULLSEYE_X   = 0x4B0   # float,  bullseye North ft (coords BMS)
 FD2_BULLSEYE_Y   = 0x4B4   # float,  bullseye East  ft (coords BMS)
 
-#  CONVERSION TMERC KOREA → WGS84 (pour fichiers .ini)
-#  .ini: col1=North(ft), col2=East(ft)
-# Conversion TMERC Korea → WGS84 (pure Python, pas de dépendance externe)
-def bms_to_latlon(north_ft: float, east_ft: float) -> tuple:
-    a=6378137.0; e2=0.00669437999014; lon0=math.radians(127.5)
-    k0=0.9996; FE=512000.0; FN=-3749290.0
-    E_m=east_ft*0.3048; N_m=north_ft*0.3048
-    e1=(1-math.sqrt(1-e2))/(1+math.sqrt(1-e2))
-    M1=(N_m-FN)/k0
-    mu1=M1/(a*(1-e2/4-3*e2**2/64-5*e2**3/256))
-    phi1=(mu1+(3*e1/2-27*e1**3/32)*math.sin(2*mu1)
-          +(21*e1**2/16-55*e1**4/32)*math.sin(4*mu1)
-          +(151*e1**3/96)*math.sin(6*mu1))
-    N1r=a/math.sqrt(1-e2*math.sin(phi1)**2)
-    T1=math.tan(phi1)**2; C1=e2*math.cos(phi1)**2/(1-e2)
-    R1=a*(1-e2)/(1-e2*math.sin(phi1)**2)**1.5
-    D=(E_m-FE)/(N1r*k0)
-    lat=phi1-(N1r*math.tan(phi1)/R1)*(D**2/2-(5+3*T1+10*C1-4*C1**2-9*e2)*D**4/24)
-    lon=lon0+(D-(1+2*T1+C1)*D**3/6)/math.cos(phi1)
-    return math.degrees(lat), math.degrees(lon)
-PYPROJ_AVAILABLE = False
+# Conversion BMS → WGS84 : délégué à theaters.py (multi-théâtre)
+from theaters import (
+    bms_to_latlon, in_theater_bbox,
+    get_theater, get_theater_name, THEATER_DB
+)
 
 #  AÉROPORTS KOREA (47)
 AIRPORTS = {
@@ -822,10 +806,27 @@ async def broadcast_loop() -> None:
                         try:    await ws.send_text(msg_acmi)
                         except: pass
 
-                # 4. MK Markpoints + HSD Lines (STPTs 26-54, via StringData)
+                # 4. MK Markpoints + HSD Lines + theater detection (via StringData)
                 ptr_str = bms.shm_ptrs.get("FalconSharedMemoryArea3")
                 if ptr_str:
                     _strings = read_all_strings(ptr_str, safe_read)
+                    # Detect theater change and broadcast
+                    if detect_theater(_strings):
+                        tp = get_theater()
+                        lat_min, lat_max, lon_min, lon_max = tp.bbox
+                        c_lat = (lat_min + lat_max) / 2
+                        c_lon = (lon_min + lon_max) / 2
+                        span  = max(lat_max-lat_min, lon_max-lon_min)
+                        zoom  = 6 if span > 20 else 7 if span > 15 else 8
+                        msg_thr = json.dumps({"type": "theater", "data": {
+                            "name": get_theater_name(),
+                            "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
+                            "bbox": {"lat_min": lat_min, "lat_max": lat_max,
+                                     "lon_min": lon_min, "lon_max": lon_max},
+                        }})
+                        for ws in list(ws_clients):
+                            try:    await ws.send_text(msg_thr)
+                            except: pass
                     # MK markpoints (26-30)
                     mk_marks = get_mk_markpoints(_strings)
                     msg_mk = json.dumps({"type": "mk_marks", "data": mk_marks})
@@ -1227,6 +1228,10 @@ async def ui_prefs_save(p: UiPrefsModel):
         val = getattr(p, key)
         if val is not None:
             UI_PREFS[key] = val
+    for key in ("color_hsd_l1","color_hsd_l2","color_hsd_l3","color_hsd_l4"):
+        val = getattr(p, key)
+        if val is not None and re.match(r'#[0-9a-fA-F]{6}$', val):
+            UI_PREFS[key] = val
     for key in ("size_draw","size_stpt","size_fplan","size_ppt","size_bull","size_mk"):
         val = getattr(p, key)
         if val is not None and 0.5 <= val <= 20:
@@ -1260,6 +1265,27 @@ async def settings_save(s: SettingsModel):
     needs_restart = "port" in changed
     logger.info(f"Settings: {changed}" + (" — RESTART requis (port)" if needs_restart else ""))
     return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": APP_CONFIG}
+
+@app.get("/api/theater")
+async def theater_info():
+    """Expose le théâtre actif avec ses paramètres de carte."""
+    from math import floor, log2
+    tp = get_theater()
+    lat_min, lat_max, lon_min, lon_max = tp.bbox
+    center_lat = (lat_min + lat_max) / 2
+    center_lon = (lon_min + lon_max) / 2
+    lat_span   = lat_max - lat_min
+    lon_span   = lon_max - lon_min
+    span       = max(lat_span, lon_span)
+    zoom       = 6 if span > 20 else 7 if span > 15 else 8
+    return {
+        "name":       get_theater_name(),
+        "center_lat": center_lat,
+        "center_lon": center_lon,
+        "zoom":       zoom,
+        "bbox":       {"lat_min": lat_min, "lat_max": lat_max,
+                       "lon_min": lon_min, "lon_max": lon_max},
+    }
 
 @app.get("/api/app/info")
 async def app_info_route():

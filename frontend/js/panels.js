@@ -58,6 +58,13 @@ document.addEventListener('click',e=>{
 let _settingsOpen = false;
 // ── Couleurs & tailles par élément ──────────────────────────────
 const _ELEM_KEYS = ['draw','stpt','fplan','ppt','bull','mk'];
+const _HSD_KEYS  = ['l1','l2','l3','l4'];
+
+function onHsdColor(key, hex) {
+  const varName = 'C_HSD_' + key.toUpperCase();
+  if(typeof window[varName] !== 'undefined') window[varName] = hex;
+  saveUiPref({['color_hsd_'+key]: hex});
+}
 
 function onElemColor(key, hex) {
   // Mettre à jour la variable globale dans map.js
@@ -81,6 +88,11 @@ function onElemSize(key, val) {
 }
 
 function _syncElemControls(p) {
+  // HSD line colors
+  _HSD_KEYS.forEach(k => {
+    const cp = document.getElementById('sp-c-hsd-'+k);
+    if(cp && p['color_hsd_'+k]) cp.value = p['color_hsd_'+k];
+  });
   _ELEM_KEYS.forEach(k => {
     const cp = document.getElementById('sp-c-'+k);
     const sl = document.getElementById('sp-s-'+k);

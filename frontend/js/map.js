@@ -54,6 +54,34 @@ function bearingTo(lat1, lon1, lat2, lon2) {
 
 
 const map = L.map('map',{preferCanvas:true,zoomControl:true,rotate:true,rotateControl:false,bearing:0,touchRotate:false,shiftKeyRotate:false,compassBearing:false}).setView([37.5,127.5],7);
+
+// ── Theater management ────────────────────────────────────────────────────
+let _currentTheater = null;
+
+function updateTheater(data) {
+  if(!data || !data.name) return;
+  if(_currentTheater === data.name) return; // no change
+  _currentTheater = data.name;
+  console.log('[theater] switched to:', data.name);
+  // Re-center map on new theater
+  if(!followAircraft) {
+    map.setView([data.center_lat, data.center_lon], data.zoom);
+  }
+}
+
+// Load theater on startup
+(async function _initTheater() {
+  try {
+    const d = await (await fetch('/api/theater')).json();
+    if(d && d.name) {
+      _currentTheater = d.name;
+      // Only set view if no aircraft position yet
+      if(!window._hasAircraftPos) {
+        map.setView([d.center_lat, d.center_lon], d.zoom);
+      }
+    }
+  } catch(e) { console.warn('[theater] init failed:', e); }
+})();
 // Disable any user-triggered rotation (only programmatic setBearing allowed)
 if(map.touchRotate) map.touchRotate.disable();
 if(map.compassBearing) map.compassBearing.disable();
@@ -95,8 +123,11 @@ const _dmzLine = L.polyline([
   [38.00,127.45],[37.97,127.75],[38.00,128.02],[38.10,128.30],
   [38.20,128.55],[38.35,128.75],[38.45,129.00],[38.55,129.20]],
   {color:'#dc2626',weight:2,opacity:.7,dashArray:'10 5'}).addTo(map);
-document.getElementById('chkDMZ')?.addEventListener('change',function(){
-  this.checked ? _dmzLine.addTo(map) : map.removeLayer(_dmzLine);
+let _dmzVisible = true;
+document.getElementById('dmzBtn')?.addEventListener('click',function(){
+  _dmzVisible = !_dmzVisible;
+  this.classList.toggle('active', _dmzVisible);
+  _dmzVisible ? _dmzLine.addTo(map) : map.removeLayer(_dmzLine);
 });
 
 const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#1e293b'];
@@ -104,6 +135,11 @@ let activeColor='#3b82f6';
 
 // ── Couleurs & tailles configurables (chargées depuis ui_prefs) ──
 let C_DRAW  = '#3b82f6'; let S_DRAW  = 2;    // dessin/règle/flèches
+// HSD line colors (L1-L4) — valeurs par défaut cohérentes avec stringdata.py
+let C_HSD_L1 = '#4ade80';  // vert
+let C_HSD_L2 = '#60a5fa';  // bleu
+let C_HSD_L3 = '#f59e0b';  // ambre
+let C_HSD_L4 = '#f87171';  // rouge
 let C_STPT  = '#e2e8f0'; let S_STPT  = 5;    // steerpoints
 let C_FPLAN = '#f59e0b'; let S_FPLAN = 4;    // flight plan
 let C_PPT   = '#ef4444'; let S_PPT   = 1.2;  // PPT cercles
@@ -111,6 +147,10 @@ let C_BULL  = '#fbbf24'; let S_BULL  = 8;    // bullseye
 let C_MK    = '#fbbf24'; let S_MK    = 2.5;  // MK markpoints
 
 function applyUiPrefs(p) {
+  if(p.color_hsd_l1) C_HSD_L1 = p.color_hsd_l1;
+  if(p.color_hsd_l2) C_HSD_L2 = p.color_hsd_l2;
+  if(p.color_hsd_l3) C_HSD_L3 = p.color_hsd_l3;
+  if(p.color_hsd_l4) C_HSD_L4 = p.color_hsd_l4;
   if(p.color_draw)  C_DRAW  = p.color_draw;
   if(p.size_draw)   S_DRAW  = p.size_draw;
   if(p.color_stpt)  C_STPT  = p.color_stpt;
@@ -154,14 +194,13 @@ async function loadUiPrefs(){
       const r=document.querySelector(`input[name="layer"][value="${p.layer}"]`);
       if(r) r.checked=true;
     }
-    const chkPPT=document.getElementById('chkPPT');
-    const chkAP=document.getElementById('chkAirports');
-    const chkRW=document.getElementById('chkRunways');
-    const chkApN=document.getElementById('chkApName');
-    if(chkPPT&&p.ppt_visible===false){chkPPT.checked=false;pptCircles.forEach(c=>{try{map.removeLayer(c)}catch(e){}});document.getElementById('pptBtn').classList.remove('active');}
-    if(chkAP&&p.airports_visible===false){chkAP.checked=false;airportMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});document.getElementById('airportBtn').classList.remove('active');}
-    if(chkRW&&p.runways_visible===false){chkRW.checked=false;runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});}
-    if(chkApN&&p.ap_name_visible===true){chkApN.checked=true;apNameMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});}
+
+    const chkRW=null; // moved to runwayBtn
+    const chkApN=null; // moved to apNameBtn
+    if(p.ppt_visible===false){pptCircles.forEach(c=>{try{map.removeLayer(c)}catch(e){}});document.getElementById('pptBtn')?.classList.remove('active');}
+    if(p.airports_visible===false){airportMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});document.getElementById('airportBtn')?.classList.remove('active');}
+    if(p.runways_visible===false){runwaysVisible=false;document.getElementById('runwayBtn')?.classList.remove('active');runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});}
+    if(p.ap_name_visible===true){document.getElementById('apNameBtn')?.classList.add('active');apLabelMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});}
     console.log('[ui-prefs] restauration terminée');
   }catch(e){ console.error('[ui-prefs] erreur:',e); }
 }
@@ -291,6 +330,7 @@ function updateBullseye(lat, lon) {
 }
 
 function updateAircraft(d){
+  window._hasAircraftPos = true;
   if(!d||d.lat===undefined||d.lon===undefined)return;
   if(d.lat===0&&d.lon===0)return;
   const hdg = d.heading||0;
@@ -496,26 +536,22 @@ document.getElementById('pptLabelBtn')?.addEventListener('click',function(){
 document.getElementById('pptBtn')?.addEventListener('click',function(){
   const v=this.classList.toggle('active');
   pptCircles.forEach(c=>v?c.addTo(map):map.removeLayer(c));
-  const chk=document.getElementById('chkPPT');if(chk)chk.checked=v;
   saveUiPref({ppt_visible:v});
 });
-// chkPPT: géré uniquement via le bouton toolbar pptBtn
 
 document.getElementById('airportBtn')?.addEventListener('click',function(){
   const v=this.classList.toggle('active');
-  const apNameOn=document.getElementById('chkApName').checked;
+  const apNameOn=typeof _apNameVisible!=='undefined'?_apNameVisible:false;
   airportMarkers.forEach(m=>{
     if(!v){try{map.removeLayer(m)}catch(e){}}
     else if(apNameMarkers.includes(m)){if(apNameOn)try{m.addTo(map)}catch(e){}}
     else{try{m.addTo(map)}catch(e){}}
   });
-  const chk=document.getElementById('chkAirports');if(chk)chk.checked=v;
   runwaysVisible=v;
   runwayLayers.forEach(l=>{try{v?l.addTo(map):map.removeLayer(l);}catch(e){}});
-  const chkR=document.getElementById('chkRunways');if(chkR)chkR.checked=v;
+  document.getElementById('runwayBtn')?.classList.toggle('active',v);
   saveUiPref({airports_visible:v});
 });
-// chkAirports: géré uniquement via le bouton toolbar airportBtn
 
 document.getElementById('uploadBtn')?.addEventListener('click',()=>document.getElementById('fileInput').click());
 document.getElementById('fileInput')?.addEventListener('change',async e=>{
@@ -685,23 +721,25 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     apNameMarkers.push(mLabel);
   });
 
-  document.getElementById('chkRunways')?.addEventListener('change',function(){
-    runwaysVisible=this.checked;
+  document.getElementById('runwayBtn')?.addEventListener('click',function(){
+    runwaysVisible=!runwaysVisible;
+    this.classList.toggle('active',runwaysVisible);
     runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
-    saveUiPref({runways_visible:this.checked});
+    saveUiPref({runways_visible:runwaysVisible});
   });
 
-  // chkApName — afficher/masquer les labels ICAO des aéroports
-  document.getElementById('chkApName')?.addEventListener('change',function(){
+  // apNameBtn — afficher/masquer les labels ICAO des aéroports
+  let _apNameVisible = false;
+  document.getElementById('apNameBtn')?.addEventListener('click',function(){
+    _apNameVisible=!_apNameVisible;
+    this.classList.toggle('active',_apNameVisible);
     apLabelMarkers.forEach(m=>{
-      try{ this.checked ? m.addTo(map) : map.removeLayer(m); }catch(e){}
+      try{ _apNameVisible ? m.addTo(map) : map.removeLayer(m); }catch(e){}
     });
-    saveUiPref({ap_name_visible:this.checked});
+    saveUiPref({ap_name_visible:_apNameVisible});
   });
-  // Etat initial : labels visibles si coché
-  if(!document.getElementById('chkApName').checked){
-    apLabelMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
-  }
+  // Etat initial : labels masqués
+  apLabelMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
 
   // Charger les prefs UI après que tout est prêt
   loadUiPrefs();
@@ -1038,8 +1076,11 @@ function updateHsdLines(lines) {
   lines.forEach(line => {
     if(!line.points || line.points.length < 2) return;
     const pts = line.points.map(p => [p.lat, p.lon]);
+    // Color: use configured color if set, else server-provided color
+    const lineColorKey = 'C_HSD_' + line.line; // e.g. C_HSD_L1
+    const lineColor = window[lineColorKey] || line.color || '#4ade80';
     const poly = L.polyline(pts, {
-      color:   line.color || '#4ade80',
+      color:   lineColor,
       weight:  2,
       opacity: 0.85,
       dashArray: '6 3',
@@ -1051,7 +1092,7 @@ function updateHsdLines(lines) {
     const lbl = L.marker(mid, {
       icon: L.divIcon({
         html: `<div style="font-family:'Consolas','Courier New',monospace;font-size:9px;font-weight:700;
-          color:${line.color};text-shadow:0 1px 4px #000;padding:1px 4px;
+          color:${lineColor};text-shadow:0 1px 4px #000;padding:1px 4px;
           background:rgba(2,6,14,.7);border-radius:1px;white-space:nowrap">${line.line}</div>`,
         className:'', iconSize:[24,14], iconAnchor:[12,7]
       }),

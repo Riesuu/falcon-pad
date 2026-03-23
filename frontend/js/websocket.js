@@ -21,6 +21,7 @@ function connectWS(){
     if(msg.type==='acmi'){_lastAcmiContacts=msg.data;updateAcmiContacts(msg.data);}
     if(msg.type==='mk_marks')updateMkMarkpoints(msg.data);
     if(msg.type==='hsd_lines')updateHsdLines(msg.data);
+    if(msg.type==='theater')updateTheater(msg.data);
     if(msg.type==='status'){
       const on=msg.data.connected;
       document.getElementById('dot').className='dot '+(on?'on':'off');
