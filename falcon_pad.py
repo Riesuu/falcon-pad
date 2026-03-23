@@ -32,20 +32,36 @@ from datetime import datetime
 from typing import List, Optional, Dict
 import logging
 
-import app_info
+APP_NAME    = "Falcon-Pad"
+APP_VERSION = "0.2"
+APP_AUTHOR  = "Riesu"
+APP_CONTACT = "contact@falcon-charts.com"
+APP_WEBSITE = "https://www.falcon-charts.com"
 
-# ── Identité & chemins (source : app_info.py) ────────────────
-APP_NAME    = app_info.SHORT
-APP_VERSION = app_info.VERSION
-APP_AUTHOR  = app_info.AUTHOR
-APP_CONTACT = app_info.CONTACT
-APP_WEBSITE = app_info.WEBSITE
-IMAGES_DIR  = app_info.IMAGES_DIR
-LOG_DIR     = app_info.LOG_DIR
-BRIEFING_DIR= app_info.BRIEFING_DIR
-CONFIG_FILE = app_info.CONFIG_FILE
+# ── Dossiers de base ─────────────────────────────────────────
+# Structure cible : falcon-pad/ logs/ briefing/ config/ assets/
+def _resolve_base_dir() -> str:
+    if getattr(sys, "frozen", False):
+        candidate = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        candidate = os.path.dirname(os.path.abspath(__file__))
+    if os.path.basename(candidate).lower() == "falcon-pad":
+        return candidate
+    fp_dir = os.path.join(candidate, "falcon-pad")
+    os.makedirs(fp_dir, exist_ok=True)
+    return fp_dir
 
-LOG_FILE = os.path.join(LOG_DIR, f"falcon_pad_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+_BASE_DIR    = _resolve_base_dir()
+ASSETS_DIR   = os.path.join(_BASE_DIR, "assets")
+LOG_DIR      = os.path.join(_BASE_DIR, "logs")
+BRIEFING_DIR = os.path.join(_BASE_DIR, "briefing")
+_CONFIG_DIR  = os.path.join(_BASE_DIR, "config")
+CONFIG_FILE  = os.path.join(_CONFIG_DIR, "falcon_pad_config.json")
+
+for _d in (ASSETS_DIR, LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
+    os.makedirs(_d, exist_ok=True)
+
+LOG_FILE = os.path.join(LOG_DIR, "falcon_pad.log")  # Nom fixe — rotation gérée par RotatingFileHandler
 
 # ── Config persistante ───────────────────────────────────────────
 import json as _json
@@ -77,6 +93,49 @@ def _save_config(cfg: dict) -> None:
     except Exception:
         pass
 
+UI_PREFS_FILE = os.path.join(_CONFIG_DIR, "ui_prefs.json")
+
+_DEFAULT_UI_PREFS = {
+    "active_color":    "#3b82f6",
+    "layer":           "dark",
+    "ppt_visible":     True,
+    "airports_visible":True,
+    "runways_visible": True,
+    "ap_name_visible": False,
+}
+
+def _load_ui_prefs() -> dict:
+    try:
+        if os.path.exists(UI_PREFS_FILE):
+            with open(UI_PREFS_FILE, "r", encoding="utf-8") as f:
+                saved = _json.load(f)
+            prefs = dict(_DEFAULT_UI_PREFS)
+            prefs.update({k: v for k, v in saved.items() if k in _DEFAULT_UI_PREFS})
+            logger.info(f"ui_prefs: chargé depuis {UI_PREFS_FILE}")
+            return prefs
+        else:
+            logger.info("ui_prefs: fichier absent — utilisation des valeurs par défaut")
+    except _json.JSONDecodeError as e:
+        logger.error(f"ui_prefs: JSON invalide dans {UI_PREFS_FILE}: {e} — valeurs par défaut")
+    except OSError as e:
+        logger.error(f"ui_prefs: impossible de lire {UI_PREFS_FILE}: {e}")
+    except Exception as e:
+        logger.error(f"ui_prefs: erreur inattendue au chargement: {e}", exc_info=True)
+    return dict(_DEFAULT_UI_PREFS)
+
+def _save_ui_prefs(prefs: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(UI_PREFS_FILE), exist_ok=True)
+        with open(UI_PREFS_FILE, "w", encoding="utf-8") as f:
+            _json.dump(prefs, f, indent=2)
+        logger.debug(f"ui_prefs: sauvegardé → {UI_PREFS_FILE}")
+    except OSError as e:
+        logger.error(f"ui_prefs: impossible d'écrire {UI_PREFS_FILE}: {e}")
+    except Exception as e:
+        logger.error(f"ui_prefs: erreur inattendue à la sauvegarde: {e}", exc_info=True)
+
+UI_PREFS = _load_ui_prefs()
+
 APP_CONFIG   = _load_config()
 BRIEFING_DIR = str(APP_CONFIG["briefing_dir"])
 os.makedirs(BRIEFING_DIR, exist_ok=True)
@@ -86,7 +145,7 @@ class _Fmt(logging.Formatter):
         return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}] [{record.levelname:<8}] {record.getMessage()}"
 
 from logging.handlers import RotatingFileHandler as _RFH
-_fh = _RFH(LOG_FILE, maxBytes=2*1024*1024, backupCount=3, encoding="utf-8")
+_fh = _RFH(LOG_FILE, maxBytes=2*1024*1024, backupCount=2, encoding="utf-8")  # 2 × 2 MB = 4 MB max
 _fh.setLevel(logging.DEBUG)
 _ch = logging.StreamHandler(sys.stdout)
 _ch.setLevel(logging.INFO)
@@ -2039,6 +2098,75 @@ L.polyline([[38.0,124.6],[38.1,125.0],[38.3,125.5],[38.2,126.0],[38.3,126.5],[38
 
 const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#1e293b'];
 let activeColor='#3b82f6';
+
+// ── UI Prefs persistence ──────────────────────────────────────
+async function saveUiPref(patch){
+  try{
+    const r = await fetch('/api/ui-prefs',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(patch)
+    });
+    if(!r.ok) console.warn('[ui-prefs] save failed:', r.status, await r.text());
+  } catch(e){
+    console.error('[ui-prefs] save error:', e);
+  }
+}
+
+async function loadUiPrefs(){
+  console.log('[ui-prefs] chargement...');
+  try{
+    const resp = await fetch('/api/ui-prefs');
+    if(!resp.ok){ console.error('[ui-prefs] GET failed:', resp.status); return; }
+    const p = await resp.json();
+    console.log('[ui-prefs] reçu:', p);
+
+    // Couleur active
+    if(p.active_color && COLORS.includes(p.active_color)){
+      activeColor = p.active_color;
+      document.querySelectorAll('.c-swatch').forEach(s=>{
+        s.classList.toggle('sel', s.dataset.color === activeColor);
+      });
+      console.log('[ui-prefs] couleur restaurée:', activeColor);
+    }
+
+    // Fond de carte
+    if(p.layer){
+      switchLayer(p.layer);
+      const r = document.querySelector(`input[name="layer"][value="${p.layer}"]`);
+      if(r) r.checked = true;
+      console.log('[ui-prefs] layer restauré:', p.layer);
+    }
+
+    // Checkboxes
+    const chkPPT = document.getElementById('chkPPT');
+    const chkAP  = document.getElementById('chkAirports');
+    const chkRW  = document.getElementById('chkRunways');
+    const chkApN = document.getElementById('chkApName');
+
+    if(chkPPT && p.ppt_visible===false){
+      chkPPT.checked=false;
+      pptCircles.forEach(c=>{try{map.removeLayer(c)}catch(e){}});
+      document.getElementById('pptBtn').classList.remove('active');
+    }
+    if(chkAP && p.airports_visible===false){
+      chkAP.checked=false;
+      airportMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
+      document.getElementById('airportBtn').classList.remove('active');
+    }
+    if(chkRW && p.runways_visible===false){
+      chkRW.checked=false;
+      runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});
+    }
+    if(chkApN && p.ap_name_visible===true){
+      chkApN.checked=true;
+      apNameMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});
+    }
+    console.log('[ui-prefs] restauration terminée');
+  } catch(e){
+    console.error('[ui-prefs] erreur au chargement:', e);
+  }
+}
 let rulerActive=false,arrowActive=false;
 let drawMarkers=[],missionMarkers=[],aircraftMarker=null;
 let pptCircles=[],airportMarkers=[];
@@ -2288,7 +2416,7 @@ COLORS.forEach(c=>{
   const s=document.createElement('div');
   s.className='c-swatch'+(c===activeColor?' sel':'');
   s.style.background=c;
-  s.onclick=()=>{activeColor=c;document.querySelectorAll('.c-swatch').forEach(x=>x.classList.remove('sel'));s.classList.add('sel');};
+  s.dataset.color=c;s.onclick=()=>{activeColor=c;document.querySelectorAll('.c-swatch').forEach(x=>x.classList.remove('sel'));s.classList.add('sel');saveUiPref({active_color:c});};
   cGrid.appendChild(s);
 });
 document.getElementById('colorBtn').addEventListener('click',()=>document.getElementById('colorPanel').classList.toggle('open'));
@@ -2296,6 +2424,7 @@ document.getElementById('colorBtn').addEventListener('click',()=>document.getEle
 document.getElementById('layerBtn').addEventListener('click',()=>document.getElementById('layerPanel').classList.toggle('open'));
 document.querySelectorAll('input[name="layer"]').forEach(r=>r.addEventListener('change',e=>{
   switchLayer(e.target.value);
+  saveUiPref({layer:e.target.value});
 }));
 
 document.getElementById('pptBtn').addEventListener('click',function(){
@@ -2306,6 +2435,7 @@ document.getElementById('pptBtn').addEventListener('click',function(){
 document.getElementById('chkPPT').addEventListener('change',function(){
   pptCircles.forEach(c=>this.checked?c.addTo(map):map.removeLayer(c));
   document.getElementById('pptBtn').classList.toggle('active',this.checked);
+  saveUiPref({ppt_visible:this.checked});
 });
 
 document.getElementById('airportBtn').addEventListener('click',function(){
@@ -2319,6 +2449,7 @@ document.getElementById('airportBtn').addEventListener('click',function(){
 document.getElementById('chkAirports').addEventListener('change',function(){
   airportMarkers.forEach(m=>this.checked?m.addTo(map):map.removeLayer(m));
   document.getElementById('airportBtn').classList.toggle('active',this.checked);
+  saveUiPref({airports_visible:this.checked});
 });
 
 document.getElementById('uploadBtn').addEventListener('click',()=>document.getElementById('fileInput').click());
@@ -2473,7 +2604,16 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
   document.getElementById('chkRunways').addEventListener('change',function(){
     runwaysVisible=this.checked;
     runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
+    saveUiPref({runways_visible:this.checked});
   });
+
+  document.getElementById('chkApName').addEventListener('change',function(){
+    apNameMarkers.forEach(m=>{try{this.checked?m.addTo(map):map.removeLayer(m);}catch(e){}});
+    saveUiPref({ap_name_visible:this.checked});
+  });
+
+  // Charger les prefs UI après que tout est prêt
+  loadUiPrefs();
 });
 
 const RUNWAY_DATA = [
@@ -3550,6 +3690,35 @@ async def settings_save(s: SettingsModel):
     logger.info(f"Settings: {changed}" + (" — RESTART requis (port)" if needs_restart else ""))
     return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": APP_CONFIG}
 
+# ── UI Preferences (/api/ui-prefs) ──────────────────────────────
+class UiPrefsModel(BaseModel):
+    active_color:     Optional[str]  = None
+    layer:            Optional[str]  = None
+    ppt_visible:      Optional[bool] = None
+    airports_visible: Optional[bool] = None
+    runways_visible:  Optional[bool] = None
+    ap_name_visible:  Optional[bool] = None
+
+@app.get("/api/ui-prefs")
+async def ui_prefs_get():
+    return UI_PREFS
+
+@app.post("/api/ui-prefs")
+async def ui_prefs_save(p: UiPrefsModel):
+    global UI_PREFS
+    import re as _re
+    if p.active_color is not None and _re.match(r'^#[0-9a-fA-F]{6}$', p.active_color):
+        UI_PREFS["active_color"] = p.active_color
+    if p.layer is not None and p.layer in ("dark", "osm", "satellite", "terrain"):
+        UI_PREFS["layer"] = p.layer
+    for key in ("ppt_visible", "airports_visible", "runways_visible", "ap_name_visible"):
+        val = getattr(p, key)
+        if val is not None:
+            UI_PREFS[key] = val
+    _save_ui_prefs(UI_PREFS)
+    logger.info(f"ui_prefs: mise à jour → {p.dict(exclude_none=True)}")
+    return {"ok": True, "prefs": UI_PREFS}
+
 @app.get("/api/server/info")
 async def server_info():
     return {"ip": SERVER_IP, "port": SERVER_PORT, "url": f"http://{SERVER_IP}:{SERVER_PORT}"}
@@ -3732,13 +3901,13 @@ if __name__ == "__main__":
             )
             self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             self.setWindowTitle("Falcon-Pad")
-            _ico = os.path.join(IMAGES_DIR, "falcon_pad.ico")
+            _ico = os.path.join(ASSETS_DIR, "falcon_pad.ico")
             if os.path.exists(_ico):
                 self.setWindowIcon(QIcon(_ico))
             screen = QApplication.primaryScreen().availableGeometry()
             self.move((screen.width()-self.W)//2, (screen.height()-self.H)//2)
             self._logo = None
-            _lp = os.path.join(IMAGES_DIR, "logo_app.png")
+            _lp = os.path.join(ASSETS_DIR, "logo_tk.png")
             if os.path.exists(_lp):
                 px = QPixmap(_lp)
                 if not px.isNull():
