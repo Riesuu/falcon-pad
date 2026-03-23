@@ -92,15 +92,13 @@ function onElemSize(key, val) {
 }
 
 function _redrawElem(key) {
-  // Redessine l'élément concerné sans tout recharger
   switch(key) {
     case 'stpt':
     case 'fplan':
     case 'draw':
-      if(typeof loadMission === 'function') loadMission();
-      break;
     case 'ppt':
-      if(typeof loadMission === 'function') loadMission();
+      // Use cached redraw — no fetch, no setView
+      if(typeof _redrawMission === 'function') _redrawMission();
       break;
     case 'bull':
       // Redraw bullseye icon only

@@ -212,6 +212,8 @@ async function loadUiPrefs(){
       catch(e){ console.warn('[notes] restore error:',e); }
     }
     console.log('[ui-prefs] restauration terminée');
+    // Redraw mission avec les nouvelles couleurs/tailles (si données déjà en cache)
+    if(_missionCache) _redrawMission();
   }catch(e){ console.error('[ui-prefs] erreur:',e); }
 }
 let rulerActive=false,arrowActive=false;
@@ -300,9 +302,6 @@ map.on('dragstart', () => {
 // ── Bullseye ─────────────────────────────────────────────────────
 var _bullMarker = null;
 var _bullLat = null, _bullLon = null;
-// Expose pour live redraws depuis panels.js
-Object.defineProperty(window,'_bullLat',{get:()=>_bullLat,set:v=>{_bullLat=v}});
-Object.defineProperty(window,'_bullLon',{get:()=>_bullLon,set:v=>{_bullLon=v}});
 
 function _bullIcon() {
   const col = C_BULL;
@@ -640,10 +639,29 @@ setInterval(async()=>{
   }catch(e){}
 },3000);
 
-function loadMission(){
+// ── Mission data cache (évite refetch sur redraw couleurs) ──────────────
+let _missionCache = null;
+
+function _redrawMission(){
+  if(!_missionCache) return;
+  const d = _missionCache;
+  missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
+  missionMarkers=[];pptLabelMarkers=[];
+  pptCircles.forEach(p=>{try{map.removeLayer(p)}catch(e){}});pptCircles=[];
+  // Re-render depuis le cache sans fetch ni setView
+  _renderMissionData(d, true);
+}
+
+function loadMission(noSetView=false){
   missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});missionMarkers=[];pptLabelMarkers=[];
   pptCircles.forEach(p=>{try{map.removeLayer(p)}catch(e){}});pptCircles=[];
   fetch('/api/mission').then(r=>r.json()).then(d=>{
+    _missionCache = d; // cache pour redraws
+    _renderMissionData(d, noSetView);
+  }).catch(e=>console.error('[loadMission]',e));
+}
+
+function _renderMissionData(d, noSetView=false){
     if(d.flightplan?.length){
       const c=C_FPLAN;
       missionMarkers.push(L.polyline(d.flightplan.map(p=>[p.lat,p.lon]),{color:c,weight:S_DRAW,opacity:.8}).addTo(map));
@@ -666,7 +684,7 @@ function loadMission(){
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
         })}).addTo(map));
       });
-      map.setView([d.route[0].lat,d.route[0].lon],9);
+      if(!noSetView) map.setView([d.route[0].lat,d.route[0].lon],9);
     }
     if(d.threats?.length){
       const c=C_PPT;
@@ -692,7 +710,6 @@ function loadMission(){
         missionMarkers.push(pptLbl);
       });
     }
-  });
 }
 
 var apData = [];        // cache des données
@@ -804,8 +821,12 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
   // Etat initial : labels masqués
   apLabelMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
 
-  // Charger les prefs UI après que tout est prêt
-  loadUiPrefs();
+  // Charger les prefs UI puis la mission dans le bon ordre
+  loadUiPrefs().then(() => {
+    // loadMission sera appelé par le watcher ini ou manuellement
+    // mais si déjà en cache on redessine avec les bonnes couleurs
+    if(_missionCache) _redrawMission();
+  });
 });
 
 const RUNWAY_DATA = [
@@ -1139,7 +1160,7 @@ let _lastHsdLines = [];
 let _lastMkMarks  = [];
 
 function updateHsdLines(lines) {
-  _lastHsdLines = lines; // cache for live color redraws
+  _lastHsdLines = lines;
   hsdMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
   hsdMarkers = [];
   if(!lines || !lines.length) return;
@@ -1182,7 +1203,7 @@ document.getElementById('hsdBtn')?.addEventListener('click', function() {
 // ── MK Markpoints (pilot mark points, STPTs 26-30) ───────────────────
 let mkMarkers=[];
 function updateMkMarkpoints(marks){
-  _lastMkMarks = marks; // cache for live color redraws
+  _lastMkMarks = marks;
   mkMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
   mkMarkers=[];
   if(!marks||!marks.length) return;
