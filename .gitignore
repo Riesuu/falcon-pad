@@ -32,7 +32,6 @@ ENV/
 logs/
 briefing/
 config/
-data/
 {logs,config,briefing}/
 
 # ── Tests — artefacts ─────────────────────────────────────────
