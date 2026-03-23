@@ -101,9 +101,45 @@ document.getElementById('chkDMZ').addEventListener('change',function(){
 
 const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#1e293b'];
 let activeColor='#3b82f6';
+
+// ── UI Prefs persistence ──────────────────────────────────────
+async function saveUiPref(patch){
+  try{
+    const r=await fetch('/api/ui-prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+    if(!r.ok) console.warn('[ui-prefs] save failed:',r.status,await r.text());
+  }catch(e){ console.error('[ui-prefs] save error:',e); }
+}
+
+async function loadUiPrefs(){
+  console.log('[ui-prefs] chargement...');
+  try{
+    const resp=await fetch('/api/ui-prefs');
+    if(!resp.ok){ console.error('[ui-prefs] GET failed:',resp.status); return; }
+    const p=await resp.json();
+    console.log('[ui-prefs] reçu:',p);
+    if(p.active_color&&COLORS.includes(p.active_color)){
+      activeColor=p.active_color;
+      document.querySelectorAll('.c-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.color===activeColor));
+    }
+    if(p.layer){
+      switchLayer(p.layer);
+      const r=document.querySelector(`input[name="layer"][value="${p.layer}"]`);
+      if(r) r.checked=true;
+    }
+    const chkPPT=document.getElementById('chkPPT');
+    const chkAP=document.getElementById('chkAirports');
+    const chkRW=document.getElementById('chkRunways');
+    const chkApN=document.getElementById('chkApName');
+    if(chkPPT&&p.ppt_visible===false){chkPPT.checked=false;pptCircles.forEach(c=>{try{map.removeLayer(c)}catch(e){}});document.getElementById('pptBtn').classList.remove('active');}
+    if(chkAP&&p.airports_visible===false){chkAP.checked=false;airportMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});document.getElementById('airportBtn').classList.remove('active');}
+    if(chkRW&&p.runways_visible===false){chkRW.checked=false;runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});}
+    if(chkApN&&p.ap_name_visible===true){chkApN.checked=true;apNameMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});}
+    console.log('[ui-prefs] restauration terminée');
+  }catch(e){ console.error('[ui-prefs] erreur:',e); }
+}
 let rulerActive=false,arrowActive=false;
 let drawMarkers=[],missionMarkers=[],aircraftMarker=null;
-var pptCircles=[],airportMarkers=[];
+var pptCircles=[],pptLabelMarkers=[],pptLabelsVisible=true,airportMarkers=[];
 
 function makeAircraftIcon(hdg,alt,kias,realHdg){
   const displayHdg = realHdg != null ? realHdg : hdg;
@@ -413,7 +449,7 @@ COLORS.forEach(c=>{
   const s=document.createElement('div');
   s.className='c-swatch'+(c===activeColor?' sel':'');
   s.style.background=c;
-  s.onclick=()=>{activeColor=c;document.querySelectorAll('.c-swatch').forEach(x=>x.classList.remove('sel'));s.classList.add('sel');};
+  s.dataset.color=c;s.onclick=()=>{activeColor=c;document.querySelectorAll('.c-swatch').forEach(x=>x.classList.remove('sel'));s.classList.add('sel');saveUiPref({active_color:c});};
   cGrid.appendChild(s);
 });
 document.getElementById('colorBtn').addEventListener('click',()=>document.getElementById('colorPanel').classList.toggle('open'));
@@ -421,22 +457,36 @@ document.getElementById('colorBtn').addEventListener('click',()=>document.getEle
 document.getElementById('layerBtn').addEventListener('click',()=>document.getElementById('layerPanel').classList.toggle('open'));
 document.querySelectorAll('input[name="layer"]').forEach(r=>r.addEventListener('change',e=>{
   switchLayer(e.target.value);
+  saveUiPref({layer:e.target.value});
 }));
+
+document.getElementById('pptLabelBtn').addEventListener('click',function(){
+  pptLabelsVisible=!pptLabelsVisible;
+  this.classList.toggle('active',pptLabelsVisible);
+  pptLabelMarkers.forEach(m=>{try{pptLabelsVisible?m.addTo(map):map.removeLayer(m);}catch(e){}});
+});
 
 document.getElementById('pptBtn').addEventListener('click',function(){
   const v=this.classList.toggle('active');
   pptCircles.forEach(c=>v?c.addTo(map):map.removeLayer(c));
   const chk=document.getElementById('chkPPT');if(chk)chk.checked=v;
+  saveUiPref({ppt_visible:v});
 });
 // chkPPT: géré uniquement via le bouton toolbar pptBtn
 
 document.getElementById('airportBtn').addEventListener('click',function(){
   const v=this.classList.toggle('active');
-  airportMarkers.forEach(m=>v?m.addTo(map):map.removeLayer(m));
+  const apNameOn=document.getElementById('chkApName').checked;
+  airportMarkers.forEach(m=>{
+    if(!v){try{map.removeLayer(m)}catch(e){}}
+    else if(apNameMarkers.includes(m)){if(apNameOn)try{m.addTo(map)}catch(e){}}
+    else{try{m.addTo(map)}catch(e){}}
+  });
   const chk=document.getElementById('chkAirports');if(chk)chk.checked=v;
   runwaysVisible=v;
   runwayLayers.forEach(l=>{try{v?l.addTo(map):map.removeLayer(l);}catch(e){}});
   const chkR=document.getElementById('chkRunways');if(chkR)chkR.checked=v;
+  saveUiPref({airports_visible:v});
 });
 // chkAirports: géré uniquement via le bouton toolbar airportBtn
 
@@ -465,7 +515,7 @@ setInterval(async()=>{
 },3000);
 
 function loadMission(){
-  missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});missionMarkers=[];
+  missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});missionMarkers=[];pptLabelMarkers=[];
   pptCircles.forEach(p=>{try{map.removeLayer(p)}catch(e){}});pptCircles=[];
   fetch('/api/mission').then(r=>r.json()).then(d=>{
     if(d.flightplan?.length){
@@ -507,10 +557,13 @@ function loadMission(){
           nm?`<span style="color:#fca5a5;font-size:10px;font-weight:700;letter-spacing:.3px">${nm}</span>`:'',
           rng?`<span style="color:#ef4444;font-size:9px;font-family:'Consolas','Courier New',monospace">${rng}</span>`:'',
         ].filter(Boolean).join('<span style="color:rgba(239,68,68,.25);margin:0 3px;font-size:7px">▸</span>');
-        missionMarkers.push(L.marker([t.lat,t.lon],{icon:L.divIcon({
+        const pptLbl=L.marker([t.lat,t.lon],{icon:L.divIcon({
           html:`<div style="background:rgba(8,2,2,.9);border:1px solid rgba(239,68,68,.22);border-left:2px solid rgba(239,68,68,.65);border-radius:2px;padding:2px 7px;white-space:nowrap;pointer-events:none;font-family:system-ui,sans-serif;display:inline-flex;align-items:center;gap:0;box-shadow:0 2px 8px rgba(0,0,0,.5)">${parts2}</div>`,
           className:'',iconSize:[110,16],iconAnchor:[-6,8]
-        }),zIndexOffset:50}).addTo(map));
+        }),zIndexOffset:50});
+        if(pptLabelsVisible) pptLbl.addTo(map);
+        pptLabelMarkers.push(pptLbl);
+        missionMarkers.push(pptLbl);
       });
     }
   });
@@ -608,6 +661,7 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
   document.getElementById('chkRunways').addEventListener('change',function(){
     runwaysVisible=this.checked;
     runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
+    saveUiPref({runways_visible:this.checked});
   });
 
   // chkApName — afficher/masquer les labels ICAO des aéroports
@@ -615,11 +669,15 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     apLabelMarkers.forEach(m=>{
       try{ this.checked ? m.addTo(map) : map.removeLayer(m); }catch(e){}
     });
+    saveUiPref({ap_name_visible:this.checked});
   });
   // Etat initial : labels visibles si coché
   if(!document.getElementById('chkApName').checked){
     apLabelMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
   }
+
+  // Charger les prefs UI après que tout est prêt
+  loadUiPrefs();
 });
 
 const RUNWAY_DATA = [
@@ -942,3 +1000,30 @@ function updateAcmiContacts(contacts){
   });
 }
 
+
+// ── MK Markpoints (pilot mark points, STPTs 26-30) ───────────────────
+let mkMarkers=[];
+function updateMkMarkpoints(marks){
+  mkMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
+  mkMarkers=[];
+  if(!marks||!marks.length) return;
+  marks.forEach(mk=>{
+    if(mk.lat==null||mk.lon==null) return;
+    const sym=`<svg width="22" height="22" viewBox="-11 -11 22 22" xmlns="http://www.w3.org/2000/svg">
+      <line x1="-9" y1="0" x2="9" y2="0" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="0" y1="-9" x2="0" y2="9" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>`;
+    const mS=L.marker([mk.lat,mk.lon],{
+      icon:L.divIcon({html:sym,className:'',iconSize:[22,22],iconAnchor:[11,11]}),
+      zIndexOffset:150
+    }).addTo(map);
+    mkMarkers.push(mS);
+    const altFL=mk.alt>0?'FL'+String(Math.round(mk.alt/100)).padStart(3,'0'):'';
+    const lH=`<div class="dl-block"><div class="dl-callsign" style="color:#fbbf24">${mk.label}${altFL?' · '+altFL:''}</div></div>`;
+    const mL=L.marker([mk.lat,mk.lon],{
+      icon:L.divIcon({html:lH,className:'',iconSize:[90,20],iconAnchor:[-13,10]}),
+      zIndexOffset:151
+    }).addTo(map);
+    mkMarkers.push(mL);
+  });
+}

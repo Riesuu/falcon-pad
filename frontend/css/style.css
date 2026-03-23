@@ -17,6 +17,28 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 
 
 /* ═══ TOOLBAR ═════════════════════════════════════════════════════ */
+/* ═══ TOP DRAWING TOOLBAR ═══════════════════════════════════════ */
+#toolbarTop{
+  position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:1000;
+  background:rgba(4,8,16,.94);
+  backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid rgba(74,222,128,.1);
+  border-top:2px solid rgba(74,222,128,.35);
+  border-radius:3px;
+  padding:5px 8px;
+  display:flex;flex-direction:row;align-items:center;gap:3px;
+  box-shadow:0 8px 32px rgba(0,0,0,.7),inset 0 1px 0 rgba(74,222,128,.08);
+}
+#toolbarTop::before{
+  content:'';position:absolute;top:0;left:10px;right:10px;height:2px;
+  background:linear-gradient(90deg,transparent,rgba(74,222,128,.55),transparent);
+  border-radius:2px;
+}
+#toolbarTop .tool-divider-v{width:1px;height:28px;margin:0 6px;background:linear-gradient(180deg,transparent,rgba(74,222,128,.2),transparent);}
+#toolbarTop .tool-btn:hover{transform:translateY(2px);box-shadow:inset 0 2px 0 rgba(74,222,128,.45);}
+#toolbarTop .tool-btn.active{box-shadow:inset 0 2px 0 #4ade80,0 0 12px rgba(74,222,128,.12);}
+#toolbarTop .tool-btn:active{transform:translateY(3px)!important;}
+
 #toolbar{
   position:absolute;top:80px;left:20px;z-index:1000;
   background:rgba(4,8,16,.94);
@@ -694,6 +716,8 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 
 /* ── Mobile portrait (≤600px) ── */
 @media (max-width:600px) {
+  #toolbarTop{top:6px;gap:1px;padding:4px 6px;}
+  #toolbarTop .tool-btn{width:34px;height:34px;min-height:34px;min-width:34px;}
   /* Toolbar horizontal en bas */
   #toolbar{
     top:auto;bottom:80px;left:50%;transform:translateX(-50%);
@@ -756,7 +780,7 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   .brief-file-list::-webkit-scrollbar{width:8px}
   .kb-page::-webkit-scrollbar        {width:8px}
   /* Pas de sélection accidentelle */
-  #map,#tabBar,#sysBar,#toolbar{
+  #map,#tabBar,#sysBar,#toolbar,#toolbarTop{
     user-select:none;-webkit-user-select:none;
     -webkit-tap-highlight-color:transparent;
   }

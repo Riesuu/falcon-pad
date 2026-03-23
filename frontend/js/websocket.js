@@ -19,6 +19,7 @@ function connectWS(){
     }
     if(msg.type==='radar')updateRadarContacts(msg.data);
     if(msg.type==='acmi'){_lastAcmiContacts=msg.data;updateAcmiContacts(msg.data);}
+    if(msg.type==='mk_marks')updateMkMarkpoints(msg.data);
     if(msg.type==='status'){
       const on=msg.data.connected;
       document.getElementById('dot').className='dot '+(on?'on':'off');
