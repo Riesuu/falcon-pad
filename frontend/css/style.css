@@ -9,6 +9,31 @@
 .leaflet-popup-close-button{color:#94a3b8!important;font-size:16px!important;top:6px!important;right:8px!important}
 .leaflet-popup-close-button:hover{color:#e2e8f0!important}
 
+/* ═══ FULLSCREEN (tablette) ══════════════════════════════════════════ */
+@media (display-mode: fullscreen) {
+  #tabBar  { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  #sysBar  { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  #map     { bottom: 80px; }
+}
+/* Fullscreen via JS (requestFullscreen) */
+:fullscreen #tabBar,
+:-webkit-full-screen #tabBar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+:fullscreen #map,
+:-webkit-full-screen #map {
+  bottom: 80px;
+  inset-block-start: 0;
+}
+:fullscreen #toolbar,
+:-webkit-full-screen #toolbar {
+  top: 120px;
+}
+:fullscreen #toolbarTop,
+:-webkit-full-screen #toolbarTop {
+  top: 14px;
+}
+
 /* ─── Section break ─── */
 
 *{margin:0;padding:0;box-sizing:border-box}

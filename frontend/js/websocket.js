@@ -28,6 +28,12 @@ function connectWS(){
       document.getElementById('statusText').textContent=on?'BMS 4.38 CONNECTED':'NOT DETECTED';
     }
   };
+  ws.onopen=()=>{
+    console.log('[ws] connected — resyncing...');
+    // Resync state after reconnect (BMS may have restarted)
+    if(typeof loadMission==='function') loadMission();
+    if(typeof _initTheater==='function') _initTheater();
+  };
   ws.onclose=()=>setTimeout(connectWS,2000);
 }
 connectWS();

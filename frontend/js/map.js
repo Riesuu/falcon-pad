@@ -201,6 +201,16 @@ async function loadUiPrefs(){
     if(p.airports_visible===false){airportMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});document.getElementById('airportBtn')?.classList.remove('active');}
     if(p.runways_visible===false){runwaysVisible=false;document.getElementById('runwayBtn')?.classList.remove('active');runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});}
     if(p.ap_name_visible===true){document.getElementById('apNameBtn')?.classList.add('active');apLabelMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});}
+    // Restore runway offsets
+    if(p.rwy_offsets){
+      try{ rwyOffsets = JSON.parse(p.rwy_offsets); }
+      catch(e){ console.warn('[rwyOffsets] parse error:',e); }
+    }
+    // Restore annotations
+    if(p.annotations){
+      try{ _restoreNotes(JSON.parse(p.annotations)); }
+      catch(e){ console.warn('[notes] restore error:',e); }
+    }
     console.log('[ui-prefs] restauration terminée');
   }catch(e){ console.error('[ui-prefs] erreur:',e); }
 }
@@ -467,47 +477,86 @@ document.getElementById('clearArrowsBtn')?.addEventListener('click',()=>{
 });
 
 let _noteCount=0;
-function createNote(){
-  let bgColor='#0f172a',textColor='#94a3b8';
+let _notes = []; // {id, left, top, bg, tc, text}
+
+function _serializeNotes(){
+  const all=[];
+  document.querySelectorAll('.note-wrapper').forEach(w=>{
+    const body=w.querySelector('.note-body');
+    if(!body) return;
+    all.push({
+      id:   w.dataset.noteId||(_noteCount++),
+      left: w.style.left, top: w.style.top,
+      bg:   w.style.background,
+      tc:   body.style.color,
+      text: body.value||''
+    });
+  });
+  return all;
+}
+
+async function _saveNotes(){
+  try{ await saveUiPref({annotations: JSON.stringify(_serializeNotes())}); }
+  catch(e){ console.warn('[notes] save error:',e); }
+}
+
+function _restoreNotes(data){
+  if(!data||!data.length) return;
+  data.forEach(n=>{
+    const wrapper=_buildNote(n.bg||'#0f172a', n.tc||'#94a3b8');
+    wrapper.style.left=n.left||'300px';
+    wrapper.style.top=n.top||'200px';
+    wrapper.dataset.noteId=n.id||(_noteCount++);
+    const body=wrapper.querySelector('.note-body');
+    if(body) body.value=n.text||'';
+    document.body.appendChild(wrapper);
+  });
+}
+
+function _buildNote(bgColor, textColor){
   const wrapper=document.createElement('div');
   wrapper.className='note-wrapper';
-  const _no=_noteCount%8;_noteCount++;
-  wrapper.style.left=(300+_no*28)+'px';wrapper.style.top=(200+_no*28)+'px';
-  wrapper.style.background=bgColor;wrapper.style.border='1px solid rgba(74,222,128,.2)';
+  wrapper.style.background=bgColor;
+  wrapper.style.border='1px solid rgba(74,222,128,.2)';
   const header=document.createElement('div');header.className='note-header';
-  const bgPicker=document.createElement('div');bgPicker.className='note-mini-picker';bgPicker.title='Fond';
+  const bgPicker=document.createElement('div');bgPicker.className='note-mini-picker';bgPicker.title='Background';
   const bgSwatch=document.createElement('div');bgSwatch.className='swatch';bgSwatch.style.background=bgColor;
   const bgInput=document.createElement('input');bgInput.type='color';bgInput.value='#0f172a';
-  bgInput.addEventListener('input',()=>{bgColor=bgInput.value;bgSwatch.style.background=bgColor;wrapper.style.background=bgColor;});
+  bgInput.addEventListener('input',()=>{bgColor=bgInput.value;bgSwatch.style.background=bgColor;wrapper.style.background=bgColor;_saveNotes();});
   bgPicker.appendChild(bgSwatch);bgPicker.appendChild(bgInput);
-  const txPicker=document.createElement('div');txPicker.className='note-mini-picker';txPicker.title='Texte';
+  const txPicker=document.createElement('div');txPicker.className='note-mini-picker';txPicker.title='Text';
   const txSwatch=document.createElement('div');txSwatch.className='swatch';txSwatch.style.background=textColor;
   const txInput=document.createElement('input');txInput.type='color';txInput.value='#94a3b8';
-  txInput.addEventListener('input',()=>{textColor=txInput.value;txSwatch.style.background=textColor;body.style.color=textColor;});
+  txInput.addEventListener('input',()=>{textColor=txInput.value;txSwatch.style.background=textColor;const b=wrapper.querySelector('.note-body');if(b)b.style.color=textColor;_saveNotes();});
   txPicker.appendChild(txSwatch);txPicker.appendChild(txInput);
-  const txLabel=document.createElement('span');txLabel.textContent='T';txLabel.style.cssText='font-size:9px;color:rgba(255,255,255,.3);margin-right:1px;font-family:system-ui,sans-serif';
+  const txLabel=document.createElement('span');txLabel.textContent='T';txLabel.style.cssText='font-size:9px;color:rgba(255,255,255,.3);margin-right:1px';
   const colors=document.createElement('div');colors.className='note-header-colors';
   colors.appendChild(bgPicker);colors.appendChild(txLabel);colors.appendChild(txPicker);
   const closeBtn=document.createElement('button');closeBtn.className='note-close';closeBtn.innerHTML='×';closeBtn.title='Delete';
-  closeBtn.addEventListener('click',()=>wrapper.remove());
+  closeBtn.addEventListener('click',()=>{wrapper.remove();_saveNotes();});
   header.appendChild(colors);header.appendChild(closeBtn);
   const body=document.createElement('textarea');body.className='note-body';
   body.placeholder='Note…';body.style.color=textColor;
+  body.addEventListener('input', _debounce(_saveNotes, 800));
   wrapper.appendChild(header);wrapper.appendChild(body);
   let drag=false,ox=0,oy=0;
   header.addEventListener('mousedown',e=>{if(e.target===closeBtn||e.target===bgInput||e.target===txInput)return;drag=true;ox=e.clientX-wrapper.offsetLeft;oy=e.clientY-wrapper.offsetTop;e.preventDefault();});
   document.addEventListener('mousemove',e=>{if(drag){wrapper.style.left=(e.clientX-ox)+'px';wrapper.style.top=(e.clientY-oy)+'px';}});
-  document.addEventListener('mouseup',()=>{drag=false;});
-  // Touch drag (tablet)
-  header.addEventListener('touchstart',e=>{
-    if(e.target===closeBtn||e.target===bgInput||e.target===txInput)return;
-    const t=e.touches[0];drag=true;ox=t.clientX-wrapper.offsetLeft;oy=t.clientY-wrapper.offsetTop;e.preventDefault();
-  },{passive:false});
-  document.addEventListener('touchmove',e=>{
-    if(drag&&e.touches.length){wrapper.style.left=(e.touches[0].clientX-ox)+'px';wrapper.style.top=(e.touches[0].clientY-oy)+'px';e.preventDefault();}
-  },{passive:false});
-  document.addEventListener('touchend',()=>{drag=false;});
-  document.body.appendChild(wrapper);body.focus();
+  document.addEventListener('mouseup',()=>{if(drag){drag=false;_saveNotes();}});
+  return wrapper;
+}
+
+function _debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
+function createNote(){
+  const _no=_noteCount%8;_noteCount++;
+  const wrapper=_buildNote('#0f172a','#94a3b8');
+  wrapper.style.left=(300+_no*28)+'px';wrapper.style.top=(200+_no*28)+'px';
+  wrapper.dataset.noteId=Date.now();
+  document.body.appendChild(wrapper);
+  const body=wrapper.querySelector('.note-body');
+  if(body) body.focus();
+  _saveNotes();
 }
 document.getElementById('annotationBtn')?.addEventListener('click',createNote);
 
@@ -558,7 +607,18 @@ document.getElementById('fileInput')?.addEventListener('change',async e=>{
   const file=e.target.files[0];if(!file)return;
   const fd=new FormData();fd.append('file',file);
   const r=await fetch('/api/upload',{method:'POST',body:fd});
-  if(r.ok)loadMission();
+  if(r.ok){
+    loadMission();
+  } else {
+    let errMsg = 'INI import failed';
+    try{ const d=await r.json(); errMsg=d.message||d.detail||errMsg; }catch(e){}
+    const n=document.createElement('div');
+    n.className='bms-toast';
+    n.style.cssText='background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:#ef4444';
+    n.textContent='✗ '+errMsg;
+    document.body.appendChild(n);setTimeout(()=>n.remove(),4000);
+    console.error('[upload] error:', errMsg);
+  }
 });
 
 var _lastIniFile=null;
@@ -633,6 +693,7 @@ function loadMission(){
 }
 
 var apData = [];        // cache des données
+let _apNameVisible = false;  // global — contrôlé par apNameBtn
 var apNameMarkers = []; // markers "nom complet" séparés
 var apLabelMarkers= []; // markers TACAN/ICAO
 var apIconMarkers = []; // markers losange
@@ -729,7 +790,6 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
   });
 
   // apNameBtn — afficher/masquer les labels ICAO des aéroports
-  let _apNameVisible = false;
   document.getElementById('apNameBtn')?.addEventListener('click',function(){
     _apNameVisible=!_apNameVisible;
     this.classList.toggle('active',_apNameVisible);
@@ -805,9 +865,13 @@ const RUNWAY_DATA = [
 var runwayLayers = [], runwaysVisible = true;
 
 var rwyOffsets = {};
-try { rwyOffsets = JSON.parse(sessionStorage.getItem('bms_rwy_offsets')||'{}'); } catch(e){}
 
-function saveRwyOffsets(){ sessionStorage.setItem('bms_rwy_offsets', JSON.stringify(rwyOffsets)); }
+async function saveRwyOffsets(){
+  try{ await saveUiPref({rwy_offsets: JSON.stringify(rwyOffsets)}); }
+  catch(e){ console.error('[rwyOffsets] save error:', e); }
+}
+
+// rwyOffsets chargés via loadUiPrefs() au démarrage
 
 function applyOffset(latlon, icao) {
   const o = rwyOffsets[icao] || {dlat:0,dlon:0};

@@ -29,7 +29,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, H
 from fastapi.staticfiles import StaticFiles
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil
+import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil, re
 from datetime import datetime
 import app_info
 from stringdata import read_all_strings, get_mk_markpoints, get_hsd_lines, detect_theater
@@ -1071,14 +1071,20 @@ async def upload_mission(file: UploadFile = File(...)):
                                 try:    ppt_num = 56 + int(key.lower().replace("ppt_","").strip())
                                 except: ppt_num = 56 + len(threats)
                                 # Ignorer les PPTs hors du théâtre Korea (IPs hors zone, etc.)
-                                if 30.0 <= lat <= 44.0 and 120.0 <= lon <= 135.0:
+                                if in_theater_bbox(lat, lon):
                                     threats.append({"lat":lat,"lon":lon,"name":name_ppt,"range_nm":range_nm,"range_m":range_m,"num":ppt_num,"index":len(threats)})
                             else:                       route.append({"lat":lat,"lon":lon,"alt":z,"index":len(route)})
                     except: pass
+        if not route and not threats and not fplan:
+            raise HTTPException(400, "No valid steerpoints found — check theater and file format")
         mission_data = {"route":route,"threats":threats,"flightplan":fplan}
-        return {"status":"ok"}
+        logger.info(f"INI upload OK: {len(route)} WP, {len(threats)} PPT, {len(fplan)} FP")
+        return {"status":"ok","route":len(route),"threats":len(threats),"flightplan":len(fplan)}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"status":"error","message":str(e)}
+        logger.warning(f"INI upload error: {e}")
+        raise HTTPException(400, f"Parse error: {e}")
 
 #  AUTO-LOADER .INI MISSION BMS
 #  Surveille les dossiers BMS connus et charge le dernier .ini modifié
@@ -1216,11 +1222,10 @@ async def ui_prefs_get():
 @app.post("/api/ui-prefs")
 async def ui_prefs_save(p: UiPrefsModel):
     global UI_PREFS
-    import re as _re
     hex_re = r'^#[0-9a-fA-F]{6}$'
     for key in ("active_color","color_draw","color_stpt","color_fplan","color_ppt","color_bull","color_mk"):
         val = getattr(p, key)
-        if val is not None and _re.match(hex_re, val):
+        if val is not None and re.match(hex_re, val):
             UI_PREFS[key] = val
     if p.layer is not None and p.layer in ("dark","osm","satellite","terrain"):
         UI_PREFS["layer"] = p.layer
@@ -1228,6 +1233,11 @@ async def ui_prefs_save(p: UiPrefsModel):
         val = getattr(p, key)
         if val is not None:
             UI_PREFS[key] = val
+    for key in ("rwy_offsets", "annotations"):
+        val = getattr(p, key)
+        if val is not None:
+            try: json.loads(val); UI_PREFS[key] = val  # validate JSON
+            except: pass
     for key in ("color_hsd_l1","color_hsd_l2","color_hsd_l3","color_hsd_l4"):
         val = getattr(p, key)
         if val is not None and re.match(r'#[0-9a-fA-F]{6}$', val):
@@ -1237,7 +1247,7 @@ async def ui_prefs_save(p: UiPrefsModel):
         if val is not None and 0.5 <= val <= 20:
             UI_PREFS[key] = val
     _save_ui_prefs(UI_PREFS)
-    logger.info(f"ui_prefs: mise à jour → {p.dict(exclude_none=True)}")
+    logger.info(f"ui_prefs: mise à jour → {p.model_dump(exclude_none=True)}")
     return {"ok": True, "prefs": UI_PREFS}
 
 @app.get("/api/settings")
