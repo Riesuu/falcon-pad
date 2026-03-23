@@ -30,7 +30,7 @@ function toggleTRTTPanel(){
       const parts=(d.trtt_host||'127.0.0.1:42674').split(':');
       document.getElementById('trttHostInput').value=parts[0];
       document.getElementById('trttPortInput').value=parts[1]||'42674';
-      document.getElementById('trttPanelStatus').textContent=
+      const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent=
         d.connected?'● Connected — '+d.nb_contacts+' contacts':'○ Not connected';
     }).catch(()=>{});
   }
@@ -38,14 +38,14 @@ function toggleTRTTPanel(){
 async function applyTRTTConfig(){
   const host=document.getElementById('trttHostInput').value.trim();
   const port=parseInt(document.getElementById('trttPortInput').value)||42674;
-  if(!host){document.getElementById('trttPanelStatus').textContent='Enter an IP';return;}
-  document.getElementById('trttPanelStatus').textContent='Connecting…';
+  if(!host){const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Enter an IP';return;}
+  const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Connecting…';
   try{
     const r=await fetch('/api/trtt/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host,port})});
     const d=await r.json();
-    document.getElementById('trttPanelStatus').textContent=d.status==='ok'?'✓ '+d.trtt_host:'Erreur';
+    const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent=d.status==='ok'?'✓ '+d.trtt_host:'Erreur';
     setTimeout(()=>document.getElementById('trttPanel').style.display='none',1500);
-  }catch(e){document.getElementById('trttPanelStatus').textContent='Erreur: '+e.message;}
+  }catch(e){const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Erreur: '+e.message;}
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('#trttPanel')&&!e.target.closest('#trttConfigBtn'))
@@ -56,19 +56,38 @@ document.addEventListener('click',e=>{
 //  SETTINGS
 // ══════════════════════════════════════════════════════════════════
 let _settingsOpen = false;
-let _currentTheme = 'dark';
+// ── Couleurs & tailles par élément ──────────────────────────────
+const _ELEM_KEYS = ['draw','stpt','fplan','ppt','bull','mk'];
 
-function selectTheme(t, save=false) {
-  _currentTheme = t;
-  const dark  = document.getElementById('sp-theme-dark');
-  const light = document.getElementById('sp-theme-light');
-  if(dark)  dark.classList.toggle('sel',  t==='dark');
-  if(light) light.classList.toggle('sel', t==='light');
-  if (t === 'light') {
-    document.body.style.filter = 'invert(1) hue-rotate(180deg)';
-  } else {
-    document.body.style.filter = '';
+function onElemColor(key, hex) {
+  // Mettre à jour la variable globale dans map.js
+  const varMap = {draw:'C_DRAW',stpt:'C_STPT',fplan:'C_FPLAN',ppt:'C_PPT',bull:'C_BULL',mk:'C_MK'};
+  if(typeof window[varMap[key]] !== 'undefined') window[varMap[key]] = hex;
+  // Si c'est draw, sync aussi activeColor
+  if(key==='draw' && typeof activeColor!=='undefined') {
+    activeColor = hex;
+    document.querySelectorAll('.c-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.color===hex));
   }
+  saveUiPref({['color_'+key]: hex});
+}
+
+function onElemSize(key, val) {
+  const v = parseFloat(val);
+  const varMap = {draw:'S_DRAW',stpt:'S_STPT',fplan:'S_FPLAN',ppt:'S_PPT',bull:'S_BULL',mk:'S_MK'};
+  if(typeof window[varMap[key]] !== 'undefined') window[varMap[key]] = v;
+  const lbl = document.getElementById('sp-sv-'+key);
+  if(lbl) lbl.textContent = v;
+  saveUiPref({['size_'+key]: v});
+}
+
+function _syncElemControls(p) {
+  _ELEM_KEYS.forEach(k => {
+    const cp = document.getElementById('sp-c-'+k);
+    const sl = document.getElementById('sp-s-'+k);
+    const sv = document.getElementById('sp-sv-'+k);
+    if(cp && p['color_'+k]) cp.value = p['color_'+k];
+    if(sl && p['size_'+k])  { sl.value = p['size_'+k]; if(sv) sv.textContent = p['size_'+k]; }
+  });
 }
 
 async function loadSettings() {
@@ -77,8 +96,8 @@ async function loadSettings() {
     document.getElementById('sp-port').value    = d.port         || 8000;
     document.getElementById('sp-briefdir').value= d.briefing_dir || '';
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
-    selectTheme(d.theme || 'dark', false);
-    _buildAccentSwatches();
+    // Sync couleurs & tailles des éléments
+    _syncElemControls(d);
   } catch(e) {}
 }
 
@@ -108,7 +127,6 @@ async function saveSettings() {
         port:         isNaN(port)  ? null : port,
         briefing_dir: bdir         || null,
         broadcast_ms: isNaN(bcast) ? null : bcast,
-        theme:        _currentTheme,
       })
     });
     const d = await r.json();
@@ -137,35 +155,6 @@ async function saveSettings() {
 // Fermer settings si clic sur la carte
 document.getElementById('map').addEventListener('click', () => {
   if (_settingsOpen) toggleSettings();
-});
-
-// ── Accent swatches in Settings ────────────────────────────────
-function _buildAccentSwatches() {
-  const row = document.getElementById('sp-accent-row');
-  if (!row || typeof COLORS === 'undefined') return;
-  row.innerHTML = '';
-  COLORS.forEach(c => {
-    const s = document.createElement('div');
-    s.className = 'sp-accent-swatch' + (c === activeColor ? ' sel' : '');
-    s.style.cssText = `width:22px;height:22px;border-radius:3px;cursor:pointer;
-      background:${c};border:2px solid ${c===activeColor?'#fff':'transparent'};
-      transition:all .15s;flex-shrink:0;`;
-    s.onclick = () => {
-      activeColor = c;
-      // Sync main color panel
-      document.querySelectorAll('.c-swatch').forEach(x => x.classList.remove('sel'));
-      document.querySelectorAll('.c-swatch').forEach(x => {
-        if(x.dataset.color === c) x.classList.add('sel');
-      });
-      saveUiPref({active_color: c});
-      _buildAccentSwatches(); // refresh sel state
-    };
-    row.appendChild(s);
-  });
-}
-document.addEventListener('DOMContentLoaded', () => {
-  // Build accent row once DOM is ready (COLORS defined in map.js)
-  setTimeout(_buildAccentSwatches, 500);
 });
 
 // ── Horloge — BMS time prioritaire, fallback UTC ─────────────────

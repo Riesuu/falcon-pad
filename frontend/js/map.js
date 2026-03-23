@@ -95,12 +95,39 @@ const _dmzLine = L.polyline([
   [38.00,127.45],[37.97,127.75],[38.00,128.02],[38.10,128.30],
   [38.20,128.55],[38.35,128.75],[38.45,129.00],[38.55,129.20]],
   {color:'#dc2626',weight:2,opacity:.7,dashArray:'10 5'}).addTo(map);
-document.getElementById('chkDMZ').addEventListener('change',function(){
+document.getElementById('chkDMZ')?.addEventListener('change',function(){
   this.checked ? _dmzLine.addTo(map) : map.removeLayer(_dmzLine);
 });
 
 const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#1e293b'];
 let activeColor='#3b82f6';
+
+// ── Couleurs & tailles configurables (chargées depuis ui_prefs) ──
+let C_DRAW  = '#3b82f6'; let S_DRAW  = 2;    // dessin/règle/flèches
+let C_STPT  = '#e2e8f0'; let S_STPT  = 5;    // steerpoints
+let C_FPLAN = '#f59e0b'; let S_FPLAN = 4;    // flight plan
+let C_PPT   = '#ef4444'; let S_PPT   = 1.2;  // PPT cercles
+let C_BULL  = '#fbbf24'; let S_BULL  = 8;    // bullseye
+let C_MK    = '#fbbf24'; let S_MK    = 2.5;  // MK markpoints
+
+function applyUiPrefs(p) {
+  if(p.color_draw)  C_DRAW  = p.color_draw;
+  if(p.size_draw)   S_DRAW  = p.size_draw;
+  if(p.color_stpt)  C_STPT  = p.color_stpt;
+  if(p.size_stpt)   S_STPT  = p.size_stpt;
+  if(p.color_fplan) C_FPLAN = p.color_fplan;
+  if(p.size_fplan)  S_FPLAN = p.size_fplan;
+  if(p.color_ppt)   C_PPT   = p.color_ppt;
+  if(p.size_ppt)    S_PPT   = p.size_ppt;
+  if(p.color_bull)  C_BULL  = p.color_bull;
+  if(p.size_bull)   S_BULL  = p.size_bull;
+  if(p.color_mk)    C_MK    = p.color_mk;
+  if(p.size_mk)     S_MK    = p.size_mk;
+  if(p.active_color && COLORS.includes(p.active_color)) {
+    activeColor = p.active_color;
+    C_DRAW = p.active_color;
+  }
+}
 
 // ── UI Prefs persistence ──────────────────────────────────────
 async function saveUiPref(patch){
@@ -117,6 +144,7 @@ async function loadUiPrefs(){
     if(!resp.ok){ console.error('[ui-prefs] GET failed:',resp.status); return; }
     const p=await resp.json();
     console.log('[ui-prefs] reçu:',p);
+    applyUiPrefs(p);
     if(p.active_color&&COLORS.includes(p.active_color)){
       activeColor=p.active_color;
       document.querySelectorAll('.c-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.color===activeColor));
@@ -197,7 +225,7 @@ _compassBtn.addEventListener('click', function(e){
   }
 });
 
-document.getElementById('followBtn').addEventListener('click', function() {
+document.getElementById('followBtn')?.addEventListener('click', function() {
   followAircraft = !followAircraft;
   this.classList.toggle('active', followAircraft);
   this.title = followAircraft ? "Center on aircraft (active)" : "Center on aircraft (off)";
@@ -225,9 +253,10 @@ var _bullMarker = null;
 var _bullLat = null, _bullLon = null;
 
 function _bullIcon() {
-  const col = '#f97316'; // orange distinct
+  const col = C_BULL;
+  const sz = Math.round(S_BULL * 3.5); // 8→28, 4→14, 16→56
   return L.divIcon({
-    html: `<svg width="28" height="28" viewBox="0 0 28 28" style="overflow:visible">
+    html: `<svg width="${sz}" height="${sz}" viewBox="0 0 28 28" style="overflow:visible">
       <circle cx="14" cy="14" r="11" fill="none" stroke="${col}" stroke-width="1.8" opacity=".85"/>
       <circle cx="14" cy="14" r="6"  fill="none" stroke="${col}" stroke-width="1.4" opacity=".7"/>
       <circle cx="14" cy="14" r="2"  fill="${col}" opacity=".9"/>
@@ -238,7 +267,7 @@ function _bullIcon() {
       <text x="14" y="-4" text-anchor="middle"
         style="font-family:'Consolas','Courier New',monospace;font-size:9px;fill:${col};letter-spacing:1px;font-weight:700">BULL</text>
     </svg>`,
-    className:'', iconSize:[28,28], iconAnchor:[14,14]
+    className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
   });
 }
 
@@ -290,7 +319,7 @@ function updateRuler(to){
   if(!rStart)return;
   if(rLine)map.removeLayer(rLine);
   if(rLabel)map.removeLayer(rLabel);
-  rLine=L.polyline([rStart,to],{color:activeColor,weight:2,opacity:.8,dashArray:'8 4'}).addTo(map);
+  rLine=L.polyline([rStart,to],{color:activeColor,weight:S_DRAW,opacity:.8,dashArray:'8 4'}).addTo(map);
   const dist=map.distance(rStart,to);
   const nm=dist/1852,km=dist/1000;
   const φ1=rStart.lat*Math.PI/180,φ2=to.lat*Math.PI/180;
@@ -300,16 +329,14 @@ function updateRuler(to){
   const hdg=((Math.atan2(y,x)*180/Math.PI)+360)%360;
   const mid=L.latLng((rStart.lat+to.lat)/2,(rStart.lng+to.lng)/2);
   rLabel=L.marker(mid,{icon:L.divIcon({
-    className:'',iconSize:[130,60],iconAnchor:[65,30],
+    className:'',iconSize:[220,26],iconAnchor:[110,13],
     html:`<div class="ruler-label">
-      <div class="ruler-hdg">${String(Math.round(hdg)).padStart(3,'0')}° / ${String(Math.round((hdg+180)%360)).padStart(3,'0')}°</div>
-      <div class="ruler-nm" style="color:${activeColor}">${nm.toFixed(1)} NM</div>
-      <div class="ruler-km">${km.toFixed(2)} km</div>
+      <div class="ruler-line">${String(Math.round(hdg)).padStart(3,'0')}° / ${String(Math.round((hdg+180)%360)).padStart(3,'0')}° &nbsp;&#9658;&nbsp; <span style="color:${activeColor}">${nm.toFixed(1)} NM</span></div>
     </div>`
   })}).addTo(map);
 }
 function clearRuler(){[rLine,rLabel,rDot].forEach(l=>{if(l)map.removeLayer(l)});rLine=rLabel=rDot=rStart=null;}
-document.getElementById('rulerBtn').addEventListener('click',function(){
+document.getElementById('rulerBtn')?.addEventListener('click',function(){
   rulerActive=!rulerActive;arrowActive=false;
   this.classList.toggle('active',rulerActive);
   document.getElementById('arrowBtn').classList.remove('active');
@@ -343,13 +370,13 @@ function updateArrow(to){
   if(!aStart)return;
   if(aLine)map.removeLayer(aLine);
   if(aHead)map.removeLayer(aHead);
-  aLine=L.polyline([aStart,to],{color:activeColor,weight:2.5,opacity:.85}).addTo(map);
+  aLine=L.polyline([aStart,to],{color:activeColor,weight:S_DRAW,opacity:.85}).addTo(map);
   const [p1,p2]=arrowHeadPts(aStart,to,map.getZoom());
   aHead=L.polygon([to,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:.9,weight:1.5}).addTo(map);
 }
 function clearArrow(){[aLine,aHead,aDot].forEach(l=>{if(l)map.removeLayer(l)});aLine=aHead=aDot=aStart=null;}
 
-document.getElementById('arrowBtn').addEventListener('click',function(){
+document.getElementById('arrowBtn')?.addEventListener('click',function(){
   arrowActive=!arrowActive;rulerActive=false;
   this.classList.toggle('active',arrowActive);
   document.getElementById('rulerBtn').classList.remove('active');
@@ -362,7 +389,7 @@ map.on('click',e=>{
     aStart=e.latlng;
     aDot=L.circleMarker(aStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
   } else {
-    const fLine=L.polyline([aStart,e.latlng],{color:activeColor,weight:2.5,opacity:.9}).addTo(map);
+    const fLine=L.polyline([aStart,e.latlng],{color:activeColor,weight:S_DRAW,opacity:.9}).addTo(map);
     drawMarkers.push(fLine);
     const [p1,p2]=arrowHeadPts(aStart,e.latlng,map.getZoom());
     const fHead=L.polygon([e.latlng,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);
@@ -390,12 +417,12 @@ map.on('mousemove',e=>{if(arrowActive&&aStart)updateArrow(e.latlng);});
     const t=e.touches[0],rect=mc.getBoundingClientRect();
     const pt=map.containerPointToLatLng(L.point(t.clientX-rect.left,t.clientY-rect.top));
     if(rulerActive&&!arrowActive){if(!rStart){rStart=pt;rDot=L.circleMarker(rStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{clearRuler();}e.preventDefault();}
-    if(arrowActive&&!rulerActive){if(!aStart){aStart=pt;aDot=L.circleMarker(aStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{const fL=L.polyline([aStart,pt],{color:activeColor,weight:2.5,opacity:.9}).addTo(map);drawMarkers.push(fL);const[p1,p2]=arrowHeadPts(aStart,pt,map.getZoom());const fH=L.polygon([pt,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);drawMarkers.push(fH);const d=map.distance(aStart,pt)/1852;if(d>0.05){const mid=L.latLng((aStart.lat+pt.lat)/2,(aStart.lng+pt.lng)/2);const lm=L.marker(mid,{icon:L.divIcon({html:'<div class="arrow-label" style="color:'+activeColor+'">'+d.toFixed(1)+' NM</div>',className:'',iconSize:[70,20],iconAnchor:[35,20]})}).addTo(map);drawMarkers.push(lm);}clearArrow();}e.preventDefault();}
+    if(arrowActive&&!rulerActive){if(!aStart){aStart=pt;aDot=L.circleMarker(aStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{const fL=L.polyline([aStart,pt],{color:activeColor,weight:S_DRAW,opacity:.9}).addTo(map);drawMarkers.push(fL);const[p1,p2]=arrowHeadPts(aStart,pt,map.getZoom());const fH=L.polygon([pt,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);drawMarkers.push(fH);const d=map.distance(aStart,pt)/1852;if(d>0.05){const mid=L.latLng((aStart.lat+pt.lat)/2,(aStart.lng+pt.lng)/2);const lm=L.marker(mid,{icon:L.divIcon({html:'<div class="arrow-label" style="color:'+activeColor+'">'+d.toFixed(1)+' NM</div>',className:'',iconSize:[70,20],iconAnchor:[35,20]})}).addTo(map);drawMarkers.push(lm);}clearArrow();}e.preventDefault();}
   },{passive:false});
   mc.addEventListener('touchmove',function(e){if(e.touches.length!==1)return;const t=e.touches[0],rect=mc.getBoundingClientRect();const pt=map.containerPointToLatLng(L.point(t.clientX-rect.left,t.clientY-rect.top));if(rulerActive&&rStart){updateRuler(pt);e.preventDefault();}if(arrowActive&&aStart){updateArrow(pt);e.preventDefault();}},{passive:false});
 })();
 
-document.getElementById('clearArrowsBtn').addEventListener('click',()=>{
+document.getElementById('clearArrowsBtn')?.addEventListener('click',()=>{
   drawMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});drawMarkers=[];clearArrow();
 });
 
@@ -442,7 +469,7 @@ function createNote(){
   document.addEventListener('touchend',()=>{drag=false;});
   document.body.appendChild(wrapper);body.focus();
 }
-document.getElementById('annotationBtn').addEventListener('click',createNote);
+document.getElementById('annotationBtn')?.addEventListener('click',createNote);
 
 const cGrid=document.getElementById('cGrid');
 COLORS.forEach(c=>{
@@ -452,21 +479,21 @@ COLORS.forEach(c=>{
   s.dataset.color=c;s.onclick=()=>{activeColor=c;document.querySelectorAll('.c-swatch').forEach(x=>x.classList.remove('sel'));s.classList.add('sel');saveUiPref({active_color:c});};
   cGrid.appendChild(s);
 });
-document.getElementById('colorBtn').addEventListener('click',()=>document.getElementById('colorPanel').classList.toggle('open'));
+document.getElementById('colorBtn')?.addEventListener('click',()=>document.getElementById('colorPanel').classList.toggle('open'));
 
-document.getElementById('layerBtn').addEventListener('click',()=>document.getElementById('layerPanel').classList.toggle('open'));
+document.getElementById('layerBtn')?.addEventListener('click',()=>document.getElementById('layerPanel').classList.toggle('open'));
 document.querySelectorAll('input[name="layer"]').forEach(r=>r.addEventListener('change',e=>{
   switchLayer(e.target.value);
   saveUiPref({layer:e.target.value});
 }));
 
-document.getElementById('pptLabelBtn').addEventListener('click',function(){
+document.getElementById('pptLabelBtn')?.addEventListener('click',function(){
   pptLabelsVisible=!pptLabelsVisible;
   this.classList.toggle('active',pptLabelsVisible);
   pptLabelMarkers.forEach(m=>{try{pptLabelsVisible?m.addTo(map):map.removeLayer(m);}catch(e){}});
 });
 
-document.getElementById('pptBtn').addEventListener('click',function(){
+document.getElementById('pptBtn')?.addEventListener('click',function(){
   const v=this.classList.toggle('active');
   pptCircles.forEach(c=>v?c.addTo(map):map.removeLayer(c));
   const chk=document.getElementById('chkPPT');if(chk)chk.checked=v;
@@ -474,7 +501,7 @@ document.getElementById('pptBtn').addEventListener('click',function(){
 });
 // chkPPT: géré uniquement via le bouton toolbar pptBtn
 
-document.getElementById('airportBtn').addEventListener('click',function(){
+document.getElementById('airportBtn')?.addEventListener('click',function(){
   const v=this.classList.toggle('active');
   const apNameOn=document.getElementById('chkApName').checked;
   airportMarkers.forEach(m=>{
@@ -490,8 +517,8 @@ document.getElementById('airportBtn').addEventListener('click',function(){
 });
 // chkAirports: géré uniquement via le bouton toolbar airportBtn
 
-document.getElementById('uploadBtn').addEventListener('click',()=>document.getElementById('fileInput').click());
-document.getElementById('fileInput').addEventListener('change',async e=>{
+document.getElementById('uploadBtn')?.addEventListener('click',()=>document.getElementById('fileInput').click());
+document.getElementById('fileInput')?.addEventListener('change',async e=>{
   const file=e.target.files[0];if(!file)return;
   const fd=new FormData();fd.append('file',file);
   const r=await fetch('/api/upload',{method:'POST',body:fd});
@@ -519,10 +546,10 @@ function loadMission(){
   pptCircles.forEach(p=>{try{map.removeLayer(p)}catch(e){}});pptCircles=[];
   fetch('/api/mission').then(r=>r.json()).then(d=>{
     if(d.flightplan?.length){
-      const c='#f59e0b';
-      missionMarkers.push(L.polyline(d.flightplan.map(p=>[p.lat,p.lon]),{color:c,weight:2,opacity:.8}).addTo(map));
+      const c=C_FPLAN;
+      missionMarkers.push(L.polyline(d.flightplan.map(p=>[p.lat,p.lon]),{color:c,weight:S_DRAW,opacity:.8}).addTo(map));
       d.flightplan.forEach((p,i)=>{
-        missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:4,color:c,fillColor:c,fillOpacity:.85,weight:2}).addTo(map));
+        missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:S_FPLAN,color:c,fillColor:c,fillOpacity:.85,weight:2}).addTo(map));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
           html:`<div style="font-family:'Consolas','Courier New',monospace;color:${c};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
@@ -530,22 +557,22 @@ function loadMission(){
       });
     }
     if(d.route?.length){
-      const c='#e2e8f0';
+      const c=C_STPT;
       for(let i=0;i<d.route.length-1;i++)
-        missionMarkers.push(L.polyline([[d.route[i].lat,d.route[i].lon],[d.route[i+1].lat,d.route[i+1].lon]],{color:c,weight:2}).addTo(map));
+        missionMarkers.push(L.polyline([[d.route[i].lat,d.route[i].lon],[d.route[i+1].lat,d.route[i+1].lon]],{color:c,weight:S_DRAW}).addTo(map));
       d.route.forEach((p,i)=>{
-        missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:5,color:c,fillColor:c,fillOpacity:.9,weight:2}).addTo(map));
+        missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:S_STPT,color:c,fillColor:c,fillOpacity:.9,weight:2}).addTo(map));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
-          html:`<div style="font-family:'Consolas','Courier New',monospace;color:#e2e8f0;font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
+          html:`<div style="font-family:'Consolas','Courier New',monospace;color:${C_STPT};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
         })}).addTo(map));
       });
       map.setView([d.route[0].lat,d.route[0].lon],9);
     }
     if(d.threats?.length){
-      const c='#ef4444';
+      const c=C_PPT;
       d.threats.forEach(t=>{
-        const circ=L.circle([t.lat,t.lon],{radius:(t.range_m||t.range_nm*1852),color:c,fillColor:c,fillOpacity:.05,weight:1.2,dashArray:'5 4'});
+        const circ=L.circle([t.lat,t.lon],{radius:(t.range_m||t.range_nm*1852),color:c,fillColor:c,fillOpacity:.05,weight:S_PPT,dashArray:'5 4'});
         if(document.getElementById('pptBtn')?.classList.contains('active'))circ.addTo(map);
         pptCircles.push(circ);
         missionMarkers.push(L.circleMarker([t.lat,t.lon],{radius:5,color:'#fff',fillColor:c,fillOpacity:1,weight:2}).addTo(map));
@@ -658,14 +685,14 @@ fetch('/api/airports').then(r=>r.json()).then(aps=>{
     apNameMarkers.push(mLabel);
   });
 
-  document.getElementById('chkRunways').addEventListener('change',function(){
+  document.getElementById('chkRunways')?.addEventListener('change',function(){
     runwaysVisible=this.checked;
     runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
     saveUiPref({runways_visible:this.checked});
   });
 
   // chkApName — afficher/masquer les labels ICAO des aéroports
-  document.getElementById('chkApName').addEventListener('change',function(){
+  document.getElementById('chkApName')?.addEventListener('change',function(){
     apLabelMarkers.forEach(m=>{
       try{ this.checked ? m.addTo(map) : map.removeLayer(m); }catch(e){}
     });
@@ -811,7 +838,7 @@ function startCalibration() {
     _calAnchorPt = [rwy0.c[0][0]+cur.dlat, rwy0.c[0][1]+cur.dlon];
     if (window._calTmpMarker) { try{map.removeLayer(window._calTmpMarker);}catch(e){} }
     window._calTmpMarker = L.circleMarker(_calAnchorPt, {
-      radius:8, color:'#fbbf24', fillColor:'rgba(251,191,36,.3)',
+      radius:S_BULL, color:C_BULL, fillColor:C_BULL+'44',
       fillOpacity:1, weight:2, interactive:false
     }).addTo(map);
   }
@@ -868,7 +895,7 @@ try {
 var dlMarkers=[],dlVisible=true;
 // Datalink actif par défaut
 document.getElementById('radarBtn').classList.add('active');
-document.getElementById('radarBtn').addEventListener('click',()=>{
+document.getElementById('radarBtn')?.addEventListener('click',()=>{
   dlVisible=!dlVisible;
   document.getElementById('radarBtn').classList.toggle('active',dlVisible);
   dlMarkers.forEach(m=>{try{if(dlVisible)m.addTo(map);else map.removeLayer(m);}catch(e){}});
@@ -1001,6 +1028,46 @@ function updateAcmiContacts(contacts){
 }
 
 
+// ── HSD Lines L1–L4 (STPTs 31–54) ──────────────────────────────────────
+let hsdMarkers = [], hsdVisible = true;
+
+function updateHsdLines(lines) {
+  hsdMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
+  hsdMarkers = [];
+  if(!lines || !lines.length) return;
+  lines.forEach(line => {
+    if(!line.points || line.points.length < 2) return;
+    const pts = line.points.map(p => [p.lat, p.lon]);
+    const poly = L.polyline(pts, {
+      color:   line.color || '#4ade80',
+      weight:  2,
+      opacity: 0.85,
+      dashArray: '6 3',
+    });
+    if(hsdVisible) poly.addTo(map);
+    hsdMarkers.push(poly);
+    // Label at midpoint
+    const mid = pts[Math.floor(pts.length / 2)];
+    const lbl = L.marker(mid, {
+      icon: L.divIcon({
+        html: `<div style="font-family:'Consolas','Courier New',monospace;font-size:9px;font-weight:700;
+          color:${line.color};text-shadow:0 1px 4px #000;padding:1px 4px;
+          background:rgba(2,6,14,.7);border-radius:1px;white-space:nowrap">${line.line}</div>`,
+        className:'', iconSize:[24,14], iconAnchor:[12,7]
+      }),
+      zIndexOffset: 10
+    });
+    if(hsdVisible) lbl.addTo(map);
+    hsdMarkers.push(lbl);
+  });
+}
+
+document.getElementById('hsdBtn')?.addEventListener('click', function() {
+  hsdVisible = !hsdVisible;
+  this.classList.toggle('active', hsdVisible);
+  hsdMarkers.forEach(m=>{try{hsdVisible?m.addTo(map):map.removeLayer(m);}catch(e){}});
+});
+
 // ── MK Markpoints (pilot mark points, STPTs 26-30) ───────────────────
 let mkMarkers=[];
 function updateMkMarkpoints(marks){
@@ -1010,8 +1077,8 @@ function updateMkMarkpoints(marks){
   marks.forEach(mk=>{
     if(mk.lat==null||mk.lon==null) return;
     const sym=`<svg width="22" height="22" viewBox="-11 -11 22 22" xmlns="http://www.w3.org/2000/svg">
-      <line x1="-9" y1="0" x2="9" y2="0" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"/>
-      <line x1="0" y1="-9" x2="0" y2="9" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="-9" y1="0" x2="9" y2="0" stroke="${C_MK}" stroke-width="${S_MK}" stroke-linecap="round"/>
+      <line x1="0" y1="-9" x2="0" y2="9" stroke="${C_MK}" stroke-width="${S_MK}" stroke-linecap="round"/>
     </svg>`;
     const mS=L.marker([mk.lat,mk.lon],{
       icon:L.divIcon({html:sym,className:'',iconSize:[22,22],iconAnchor:[11,11]}),
@@ -1019,7 +1086,7 @@ function updateMkMarkpoints(marks){
     }).addTo(map);
     mkMarkers.push(mS);
     const altFL=mk.alt>0?'FL'+String(Math.round(mk.alt/100)).padStart(3,'0'):'';
-    const lH=`<div class="dl-block"><div class="dl-callsign" style="color:#fbbf24">${mk.label}${altFL?' · '+altFL:''}</div></div>`;
+    const lH=`<div class="dl-block"><div class="dl-callsign" style="color:${C_MK}">${mk.label}${altFL?' · '+altFL:''}</div></div>`;
     const mL=L.marker([mk.lat,mk.lon],{
       icon:L.divIcon({html:lH,className:'',iconSize:[90,20],iconAnchor:[-13,10]}),
       zIndexOffset:151

@@ -16,7 +16,6 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 #map{position:absolute;inset:0;bottom:80px}
 
 
-/* ═══ TOOLBAR ═════════════════════════════════════════════════════ */
 /* ═══ TOP TOOLBAR (dessin, centré) ══════════════════════════════ */
 #toolbarTop{
   position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:1000;
@@ -28,12 +27,18 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   padding:5px 8px;
   display:flex;flex-direction:row;align-items:center;gap:3px;
   box-shadow:0 8px 32px rgba(0,0,0,.7);
+  white-space:nowrap;
 }
-.tool-divider-v{width:1px;height:28px;margin:0 6px;background:linear-gradient(180deg,transparent,rgba(74,222,128,.2),transparent);}
+.tool-divider-v{
+  width:1px;height:28px;margin:0 6px;
+  background:linear-gradient(180deg,transparent,rgba(74,222,128,.2),transparent);
+  flex-shrink:0;
+}
 #toolbarTop .tool-btn:hover{transform:translateY(2px);box-shadow:inset 0 2px 0 rgba(74,222,128,.45);}
 #toolbarTop .tool-btn.active{box-shadow:inset 0 2px 0 #4ade80,0 0 12px rgba(74,222,128,.12);}
 #toolbarTop .tool-btn:active{transform:translateY(3px)!important;}
 
+/* ═══ TOOLBAR ═════════════════════════════════════════════════════ */
 #toolbar{
   position:absolute;top:80px;left:20px;z-index:1000;
   background:rgba(4,8,16,.94);
@@ -235,24 +240,50 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   border-top:1px solid rgba(74,222,128,.08);text-align:center;
 }
 .sp-status.show{display:block}
+/* Settings — theme + accent color */
+/* Settings — éléments couleur & taille */
+.sp-elem-row{
+  display:grid;grid-template-columns:90px 36px 1fr 28px;
+  align-items:center;gap:8px;padding:5px 0;
+  border-bottom:1px solid rgba(255,255,255,.03);
+}
+.sp-elem-row:last-child{border-bottom:none}
+.sp-elem-lbl{
+  font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
+  color:#4a6e80;letter-spacing:1px;text-transform:uppercase;
+}
+.sp-cpick{
+  width:32px;height:32px;border-radius:3px;cursor:pointer;
+  border:1px solid rgba(74,222,128,.25);background:transparent;
+  padding:1px;transition:border-color .2s;
+}
+.sp-cpick:hover{border-color:rgba(74,222,128,.7);}
+.sp-slider{
+  width:100%;height:4px;cursor:pointer;accent-color:#4ade80;
+}
+.sp-sval{
+  font-family:'Consolas','Courier New',monospace;font-size:10px;
+  color:#64748b;text-align:right;white-space:nowrap;
+}
 /* TRTT gear btn */
 #trttConfigBtn{cursor:pointer;font-size:10px;color:rgba(148,163,184,.45);user-select:none;transition:color .2s;line-height:1}
 #trttConfigBtn:hover{color:rgba(148,163,184,.6)}
 
 /* ═══ RULER LABEL ══════════════════════════════════════════════════ */
 .ruler-label{
-  display:inline-flex;flex-direction:column;align-items:flex-start;
+  display:inline-flex;align-items:center;
   background:rgba(2,6,14,.9);
   border:1px solid rgba(74,222,128,.2);
   border-left:2px solid rgba(74,222,128,.65);
-  border-radius:2px;padding:5px 12px 6px;
+  border-radius:2px;padding:4px 10px;
   pointer-events:none;white-space:nowrap;
   box-shadow:0 4px 20px rgba(0,0,0,.7);
   backdrop-filter:blur(10px);
 }
-.ruler-hdg{font-size:15px;font-weight:700;color:#4ade80;letter-spacing:2px;line-height:1.2;font-family:system-ui,sans-serif}
-.ruler-nm{font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.3;margin-top:2px;font-family:'Consolas','Courier New',monospace;letter-spacing:.5px}
-.ruler-km{font-size:9px;color:#475569;line-height:1.2;margin-top:1px;font-family:'Consolas','Courier New',monospace}
+.ruler-line{
+  font-size:13px;font-weight:700;color:#4ade80;
+  letter-spacing:1px;font-family:system-ui,sans-serif;
+}
 
 /* ═══ ARROW LABEL ══════════════════════════════════════════════════ */
 .arrow-label{

@@ -10,6 +10,10 @@
 <link rel="stylesheet" href="/static/css/style.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+<style>
+/* Masquer le bouton "Bypass filter" de leaflet-rotate */
+.leaflet-control-rotate { display: none !important; }
+</style>
 </head><body>
 <div id="map"></div>
 
@@ -68,7 +72,14 @@
       <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
     </svg>
   </button>
-  
+
+  <button class="tool-btn active" id="pptLabelBtn" title="PPT threat names">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+      <line x1="15" y1="9" x2="21" y2="9"/><line x1="15" y1="12" x2="21" y2="12"/>
+    </svg>
+  </button>
+
   <button class="tool-btn active" id="airportBtn" title="Airports">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19 4c-2 0-4 0-5.5 1.5L10 9 1.8 7.2c-.5-.1-.9.4-.8.9L3 11l3-1 .8 2.8L5 14l2 2 1.2-1.8L10 15l-1 3 3.1 1c.4.1 1-.3.9-.8z"/>
@@ -186,6 +197,53 @@
       <label class="sp-label">BROADCAST INTERVAL</label>
       <input class="sp-input" id="sp-bcast" type="number" min="50" max="2000" placeholder="200"/>
       <span class="sp-hint">Position update rate (ms). 100 = smooth, 500 = eco.</span>
+    </div>
+    <div class="sp-divider"></div>
+    <!-- Couleurs & tailles des éléments carte -->
+    <div class="sp-row">
+      <label class="sp-label">MAP ELEMENT COLORS & SIZES</label>
+
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">DRAWING</span>
+        <input type="color" class="sp-cpick" id="sp-c-draw" value="#3b82f6" oninput="onElemColor('draw',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-draw" min="1" max="8" step="0.5" value="2" oninput="onElemSize('draw',this.value)">
+        <span class="sp-sval" id="sp-sv-draw">2</span>
+      </div>
+
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">STEERPOINTS</span>
+        <input type="color" class="sp-cpick" id="sp-c-stpt" value="#e2e8f0" oninput="onElemColor('stpt',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-stpt" min="2" max="12" step="1" value="5" oninput="onElemSize('stpt',this.value)">
+        <span class="sp-sval" id="sp-sv-stpt">5</span>
+      </div>
+
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">FLIGHT PLAN</span>
+        <input type="color" class="sp-cpick" id="sp-c-fplan" value="#f59e0b" oninput="onElemColor('fplan',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-fplan" min="2" max="12" step="1" value="4" oninput="onElemSize('fplan',this.value)">
+        <span class="sp-sval" id="sp-sv-fplan">4</span>
+      </div>
+
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">PPT THREATS</span>
+        <input type="color" class="sp-cpick" id="sp-c-ppt" value="#ef4444" oninput="onElemColor('ppt',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-ppt" min="0.5" max="5" step="0.5" value="1.2" oninput="onElemSize('ppt',this.value)">
+        <span class="sp-sval" id="sp-sv-ppt">1.2</span>
+      </div>
+
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">BULLSEYE</span>
+        <input type="color" class="sp-cpick" id="sp-c-bull" value="#f97316" oninput="onElemColor('bull',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-bull" min="4" max="20" step="1" value="8" oninput="onElemSize('bull',this.value)">
+        <span class="sp-sval" id="sp-sv-bull">8</span>
+      </div>
+
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">MK MARKS</span>
+        <input type="color" class="sp-cpick" id="sp-c-mk" value="#fbbf24" oninput="onElemColor('mk',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-mk" min="1" max="6" step="0.5" value="2.5" oninput="onElemSize('mk',this.value)">
+        <span class="sp-sval" id="sp-sv-mk">2.5</span>
+      </div>
     </div>
 
   </div>
@@ -363,13 +421,6 @@
           <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS Bravo</b></td><td class="hi">265.400</td><td>Secondary</td></tr>
           <tr><td>Tanker CH11</td><td class="hi">317.175</td><td>A/R standard</td></tr>
           <tr><td>Tanker CH12</td><td class="hi">340.200</td><td>Backup</td></tr>
-          <tr style="background:rgba(96,165,250,.04)"><td>Osan Tower</td><td class="hi">126.200</td><td>RKSO</td></tr>
-          <tr style="background:rgba(96,165,250,.04)"><td>Osan Appr.</td><td class="hi">119.300</td><td>RKSO</td></tr>
-          <tr style="background:rgba(96,165,250,.04)"><td>Gunsan Tower</td><td class="hi">122.100</td><td>RKJK</td></tr>
-          <tr style="background:rgba(96,165,250,.04)"><td>Daegu Tower</td><td class="hi">126.200</td><td>RKTN</td></tr>
-          <tr style="background:rgba(96,165,250,.04)"><td>Seoul AB</td><td class="hi">126.200</td><td>RKSM</td></tr>
-          <tr style="background:rgba(96,165,250,.04)"><td>Incheon Tower</td><td class="hi">119.100</td><td>RKSI</td></tr>
-          <tr><td>ATC Centre</td><td class="hi">127.900</td><td>Seoul Centre</td></tr>
           <tr><td>SAR / CSAR</td><td class="hi">282.800</td><td>Combat SAR</td></tr>
           <tr><td>JTAC (def.)</td><td class="hi">305.000</td><td>Interop CAS</td></tr>
         </tbody>
@@ -769,7 +820,6 @@
 
 
 
-</body></html>
 <input type="file" id="fileInput" accept=".ini" style="display:none">
 <script src="/static/js/map.js"></script>
 <script src="/static/js/panels.js"></script>

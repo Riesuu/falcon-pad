@@ -5,7 +5,7 @@ falcon_pad.stringdata — Read FalconSharedMemoryAreaString for BMS 4.38.
 This module provides:
   • Generic StringData blob reader  (read_all_strings)
   • Auto theater detection          (detect_theater)
-  • NavPoint parser                 (get_steerpoints, get_dl_markpoints, get_mk_markpoints, get_ppt_threats)
+  • NavPoint parser                 (get_steerpoints, get_dl_markpoints, get_ppt_threats)
 
 NavPoint is StringIdentifier 33 (not 30!).  The format is documented in
 FlightData.h SDK — each entry has mandatory NP: block and optional O1:/O2:/PT: blocks.
@@ -352,7 +352,7 @@ def get_dl_markpoints(strings: Dict[int, List[str]],
 
 def get_mk_markpoints(strings: Dict[int, List[str]]) -> List[dict]:
     """
-    Extract pilot-created MARK points (MK type, STPTs 26–30) from StringData NavPoints.
+    Extract pilot-created MARK points (MK type, STPTs 26-30) from StringData NavPoints.
     These are markpoints set by the pilot via TMS-Right-Long on the HSD.
 
     Returns list of markpoints:
@@ -373,6 +373,55 @@ def get_mk_markpoints(strings: Dict[int, List[str]]) -> List[dict]:
             "index": len(result),
             "label": f"MK {np['index']}",
         })
+    return result
+
+
+def get_hsd_lines(strings: Dict[int, List[str]]) -> List[dict]:
+    """
+    Extract HSD lines (L1–L4 types, STPTs 31–54) from StringData NavPoints.
+
+    BMS HSD supports 4 lines (L1, L2, L3, L4), each with up to 6 points.
+    Points are grouped by line type and returned as polylines.
+
+    Returns list of lines:
+        [
+          {"line": "L1", "color": "#4ade80", "points": [{"lat":..., "lon":..., "alt":...}, ...]},
+          {"line": "L2", "color": "#60a5fa", "points": [...]},
+          ...
+        ]
+    Only lines with at least 2 points are returned (a single point is not a line).
+    """
+    # Distinct color per line — matches BMS HSD conventions
+    LINE_COLORS = {"L1": "#4ade80", "L2": "#60a5fa", "L3": "#f59e0b", "L4": "#f87171"}
+    LINE_TYPES  = set(LINE_COLORS.keys())
+
+    entries = strings.get(STRID_NAVPOINT, [])
+    if not entries:
+        return []
+
+    # Group points by line type
+    buckets: Dict[str, list] = {k: [] for k in LINE_TYPES}
+    for raw in entries:
+        np = _parse_navpoint(raw)
+        if not np or np["type"] not in LINE_TYPES:
+            continue
+        buckets[np["type"]].append({
+            "lat": np["lat"],
+            "lon": np["lon"],
+            "alt": np["alt_ft"],
+        })
+
+    result = []
+    for ltype in ["L1", "L2", "L3", "L4"]:
+        pts = buckets[ltype]
+        if len(pts) >= 2:
+            result.append({
+                "line":   ltype,
+                "color":  LINE_COLORS[ltype],
+                "points": pts,
+            })
+
+    logger.debug(f"HSD lines: {[r['line']+':'+str(len(r['points']))+'pts' for r in result]}")
     return result
 
 

@@ -27,9 +27,12 @@ BMS     : Falcon BMS 4.38 — Shared Memory SDK
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil
 from datetime import datetime
+import app_info
+from stringdata import read_all_strings, get_mk_markpoints, get_hsd_lines
 import app_info
 from typing import List, Optional, Dict
 import logging
@@ -95,6 +98,53 @@ def _save_config(cfg: dict) -> None:
     except Exception:
         pass
 
+UI_PREFS_FILE = os.path.join(_CONFIG_DIR, "ui_prefs.json")
+
+_DEFAULT_UI_PREFS = {
+    "active_color":    "#3b82f6",
+    "layer":           "dark",
+    "ppt_visible":     True,
+    "airports_visible":True,
+    "runways_visible": True,
+    "ap_name_visible": False,
+    "color_draw":  "#3b82f6",
+    "color_stpt":  "#e2e8f0",
+    "color_fplan": "#f59e0b",
+    "color_ppt":   "#ef4444",
+    "color_bull":  "#fbbf24",
+    "color_mk":    "#fbbf24",
+    "size_draw":  2,
+    "size_stpt":  5,
+    "size_fplan": 4,
+    "size_ppt":   1,
+    "size_bull":  8,
+    "size_mk":    10,
+}
+
+def _load_ui_prefs() -> dict:
+    try:
+        if os.path.exists(UI_PREFS_FILE):
+            with open(UI_PREFS_FILE, "r", encoding="utf-8") as f:
+                saved = _json.load(f)
+            prefs = dict(_DEFAULT_UI_PREFS)
+            prefs.update({k: v for k, v in saved.items() if k in _DEFAULT_UI_PREFS})
+            logger.info(f"ui_prefs: chargé depuis {UI_PREFS_FILE}")
+            return prefs
+        logger.info("ui_prefs: fichier absent — valeurs par défaut")
+    except Exception as e:
+        logger.error(f"ui_prefs: erreur chargement: {e}", exc_info=True)
+    return dict(_DEFAULT_UI_PREFS)
+
+def _save_ui_prefs(prefs: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(UI_PREFS_FILE), exist_ok=True)
+        with open(UI_PREFS_FILE, "w", encoding="utf-8") as f:
+            _json.dump(prefs, f, indent=2)
+        logger.debug(f"ui_prefs: sauvegardé → {UI_PREFS_FILE}")
+    except Exception as e:
+        logger.error(f"ui_prefs: erreur sauvegarde: {e}", exc_info=True)
+
+
 APP_CONFIG   = _load_config()
 BRIEFING_DIR = str(APP_CONFIG["briefing_dir"])
 os.makedirs(BRIEFING_DIR, exist_ok=True)
@@ -111,6 +161,7 @@ _ch.setLevel(logging.INFO)
 _fh.setFormatter(_Fmt()); _ch.setFormatter(_Fmt())
 logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _ch])
 logger = logging.getLogger(__name__)
+UI_PREFS = _load_ui_prefs()
 
 def log_sep(t=""):
     logger.info("="*60)
@@ -771,7 +822,24 @@ async def broadcast_loop() -> None:
                         try:    await ws.send_text(msg_acmi)
                         except: pass
 
-            # 4. Statut connexion
+                # 4. MK Markpoints + HSD Lines (STPTs 26-54, via StringData)
+                ptr_str = bms.shm_ptrs.get("FalconSharedMemoryArea3")
+                if ptr_str:
+                    _strings = read_all_strings(ptr_str, safe_read)
+                    # MK markpoints (26-30)
+                    mk_marks = get_mk_markpoints(_strings)
+                    msg_mk = json.dumps({"type": "mk_marks", "data": mk_marks})
+                    for ws in list(ws_clients):
+                        try:    await ws.send_text(msg_mk)
+                        except: pass
+                    # HSD Lines L1-L4 (31-54)
+                    hsd = get_hsd_lines(_strings)
+                    msg_hsd = json.dumps({"type": "hsd_lines", "data": hsd})
+                    for ws in list(ws_clients):
+                        try:    await ws.send_text(msg_hsd)
+                        except: pass
+
+            # 5. Statut connexion
             if ws_clients:
                 status_msg = json.dumps({"type": "status", "data": {"connected": bms.connected}})
                 for ws in list(ws_clients):
@@ -1119,6 +1187,54 @@ class SettingsModel(BaseModel):
     broadcast_ms: Optional[int] = None
     theme:        Optional[str] = None
 
+# ── UI Preferences (/api/ui-prefs) ──────────────────────────────
+class UiPrefsModel(BaseModel):
+    active_color:     Optional[str]   = None
+    layer:            Optional[str]   = None
+    ppt_visible:      Optional[bool]  = None
+    airports_visible: Optional[bool]  = None
+    runways_visible:  Optional[bool]  = None
+    ap_name_visible:  Optional[bool]  = None
+    color_draw:       Optional[str]   = None
+    color_stpt:       Optional[str]   = None
+    color_fplan:      Optional[str]   = None
+    color_ppt:        Optional[str]   = None
+    color_bull:       Optional[str]   = None
+    color_mk:         Optional[str]   = None
+    size_draw:        Optional[float] = None
+    size_stpt:        Optional[float] = None
+    size_fplan:       Optional[float] = None
+    size_ppt:         Optional[float] = None
+    size_bull:        Optional[float] = None
+    size_mk:          Optional[float] = None
+
+@app.get("/api/ui-prefs")
+async def ui_prefs_get():
+    return UI_PREFS
+
+@app.post("/api/ui-prefs")
+async def ui_prefs_save(p: UiPrefsModel):
+    global UI_PREFS
+    import re as _re
+    hex_re = r'^#[0-9a-fA-F]{6}$'
+    for key in ("active_color","color_draw","color_stpt","color_fplan","color_ppt","color_bull","color_mk"):
+        val = getattr(p, key)
+        if val is not None and _re.match(hex_re, val):
+            UI_PREFS[key] = val
+    if p.layer is not None and p.layer in ("dark","osm","satellite","terrain"):
+        UI_PREFS["layer"] = p.layer
+    for key in ("ppt_visible","airports_visible","runways_visible","ap_name_visible"):
+        val = getattr(p, key)
+        if val is not None:
+            UI_PREFS[key] = val
+    for key in ("size_draw","size_stpt","size_fplan","size_ppt","size_bull","size_mk"):
+        val = getattr(p, key)
+        if val is not None and 0.5 <= val <= 20:
+            UI_PREFS[key] = val
+    _save_ui_prefs(UI_PREFS)
+    logger.info(f"ui_prefs: mise à jour → {p.dict(exclude_none=True)}")
+    return {"ok": True, "prefs": UI_PREFS}
+
 @app.get("/api/settings")
 async def settings_get():
     return {**APP_CONFIG, "current_port": SERVER_PORT, "current_ip": SERVER_IP}
@@ -1144,6 +1260,17 @@ async def settings_save(s: SettingsModel):
     needs_restart = "port" in changed
     logger.info(f"Settings: {changed}" + (" — RESTART requis (port)" if needs_restart else ""))
     return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": APP_CONFIG}
+
+@app.get("/api/app/info")
+async def app_info_route():
+    return {
+        "name":    app_info.SHORT,
+        "version": app_info.VERSION,
+        "author":  app_info.AUTHOR,
+        "website": app_info.WEBSITE,
+        "github":  app_info.GITHUB,
+        "bms":     app_info.BMS,
+    }
 
 @app.get("/api/server/info")
 async def server_info():
