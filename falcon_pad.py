@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil
 from datetime import datetime
+import app_info
 from typing import List, Optional, Dict
 import logging
 
@@ -693,11 +694,8 @@ app   = FastAPI(title="Falcon-Pad", lifespan=lifespan)
 
 # ── Frontend statique ─────────────────────────────────────────────
 FRONTEND_DIR = os.path.join(app_info.BASE_DIR, "frontend")
-if os.path.isdir(FRONTEND_DIR):
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-    logger.info(f"StaticFiles monté : {FRONTEND_DIR}")
-else:
-    logger.warning(f"Dossier frontend introuvable : {FRONTEND_DIR}")
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+logger.info(f"StaticFiles monté : {FRONTEND_DIR}")
 
 # ── Middleware — accès local uniquement (localhost + LAN) ────────
 from starlette.middleware.base import BaseHTTPMiddleware

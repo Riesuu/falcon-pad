@@ -56,6 +56,20 @@ document.addEventListener('click',e=>{
 //  SETTINGS
 // ══════════════════════════════════════════════════════════════════
 let _settingsOpen = false;
+let _currentTheme = 'dark';
+
+function selectTheme(t, save=false) {
+  _currentTheme = t;
+  const dark  = document.getElementById('sp-theme-dark');
+  const light = document.getElementById('sp-theme-light');
+  if(dark)  dark.classList.toggle('sel',  t==='dark');
+  if(light) light.classList.toggle('sel', t==='light');
+  if (t === 'light') {
+    document.body.style.filter = 'invert(1) hue-rotate(180deg)';
+  } else {
+    document.body.style.filter = '';
+  }
+}
 
 async function loadSettings() {
   try {
@@ -63,6 +77,8 @@ async function loadSettings() {
     document.getElementById('sp-port').value    = d.port         || 8000;
     document.getElementById('sp-briefdir').value= d.briefing_dir || '';
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
+    selectTheme(d.theme || 'dark', false);
+    _buildAccentSwatches();
   } catch(e) {}
 }
 
@@ -92,6 +108,7 @@ async function saveSettings() {
         port:         isNaN(port)  ? null : port,
         briefing_dir: bdir         || null,
         broadcast_ms: isNaN(bcast) ? null : bcast,
+        theme:        _currentTheme,
       })
     });
     const d = await r.json();
@@ -120,6 +137,35 @@ async function saveSettings() {
 // Fermer settings si clic sur la carte
 document.getElementById('map').addEventListener('click', () => {
   if (_settingsOpen) toggleSettings();
+});
+
+// ── Accent swatches in Settings ────────────────────────────────
+function _buildAccentSwatches() {
+  const row = document.getElementById('sp-accent-row');
+  if (!row || typeof COLORS === 'undefined') return;
+  row.innerHTML = '';
+  COLORS.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'sp-accent-swatch' + (c === activeColor ? ' sel' : '');
+    s.style.cssText = `width:22px;height:22px;border-radius:3px;cursor:pointer;
+      background:${c};border:2px solid ${c===activeColor?'#fff':'transparent'};
+      transition:all .15s;flex-shrink:0;`;
+    s.onclick = () => {
+      activeColor = c;
+      // Sync main color panel
+      document.querySelectorAll('.c-swatch').forEach(x => x.classList.remove('sel'));
+      document.querySelectorAll('.c-swatch').forEach(x => {
+        if(x.dataset.color === c) x.classList.add('sel');
+      });
+      saveUiPref({active_color: c});
+      _buildAccentSwatches(); // refresh sel state
+    };
+    row.appendChild(s);
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  // Build accent row once DOM is ready (COLORS defined in map.js)
+  setTimeout(_buildAccentSwatches, 500);
 });
 
 // ── Horloge — BMS time prioritaire, fallback UTC ─────────────────
