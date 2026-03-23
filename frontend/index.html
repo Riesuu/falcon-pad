@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Falcon-Pad</title>
+<link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="/static/css/style.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+</head><body>
+<div id="map"></div>
+
+
+
+<div id="toolbar">
+  
+  <button class="tool-btn" id="uploadBtn" title="Import .ini">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+      <polyline points="13 2 13 9 20 9"/>
+      <line x1="12" y1="13" x2="12" y2="19"/><line x1="9" y1="16" x2="15" y2="16"/>
+    </svg>
+  </button>
+  
+  <button class="tool-btn" id="annotationBtn" title="Tactical note">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <path d="M12 20h9"/>
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+    </svg>
+  </button>
+  
+  <button class="tool-btn" id="rulerBtn" title="Ruler / Distance">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <rect x="2" y="7" width="20" height="10" rx="2"/>
+      <line x1="6" y1="7" x2="6" y2="10"/><line x1="10" y1="7" x2="10" y2="12"/>
+      <line x1="14" y1="7" x2="14" y2="10"/><line x1="18" y1="7" x2="18" y2="10"/>
+    </svg>
+  </button>
+  
+  <button class="tool-btn" id="arrowBtn" title="Draw arrow">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <line x1="5" y1="19" x2="19" y2="5"/>
+      <polyline points="9 5 19 5 19 15"/>
+    </svg>
+  </button>
+  
+  <button class="tool-btn danger" id="clearArrowsBtn" title="Clear drawings">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6"/><path d="M14 11v6"/>
+    </svg>
+  </button>
+  <div class="tool-divider"></div>
+  
+  <button class="tool-btn" id="colorBtn" title="Active color">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <circle cx="13.5" cy="6.5" r="1" fill="currentColor"/><circle cx="17.5" cy="10.5" r="1" fill="currentColor"/>
+      <circle cx="8.5" cy="7.5" r="1" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1" fill="currentColor"/>
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+    </svg>
+  </button>
+  <div class="tool-divider"></div>
+  
+  <button class="tool-btn active" id="pptBtn" title="PPT threat circles">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+    </svg>
+  </button>
+  
+  <button class="tool-btn active" id="airportBtn" title="Airports">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19 4c-2 0-4 0-5.5 1.5L10 9 1.8 7.2c-.5-.1-.9.4-.8.9L3 11l3-1 .8 2.8L5 14l2 2 1.2-1.8L10 15l-1 3 3.1 1c.4.1 1-.3.9-.8z"/>
+    </svg>
+  </button>
+  
+  <button class="tool-btn" id="radarBtn" title="Contacts datalink L16">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/>
+      <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
+      <line x1="12" y1="2" x2="12" y2="6"/>
+    </svg>
+  </button>
+
+  
+  <button class="tool-btn active" id="followBtn" title="Center on aircraft (active)">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9" stroke-dasharray="4 2"/>
+      <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
+      <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
+    </svg>
+  </button>
+
+  <button class="tool-btn" id="compassBtn" title="North Up (click for Track Up)">
+    <svg id="compassSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="12" r="10"/>
+      <polygon points="12,3 14,11 12,10 10,11" fill="#ef4444" stroke="none"/>
+      <polygon points="12,21 14,13 12,14 10,13" fill="currentColor" stroke="none" opacity=".35"/>
+      <text x="12" y="5.5" text-anchor="middle" fill="#ef4444" font-size="4.5" font-weight="700" font-family="system-ui" stroke="none">N</text>
+    </svg>
+  </button>
+
+  
+  <button class="tool-btn" id="layerBtn" title="Map layers">
+    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
+      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+      <polyline points="2 17 12 22 22 17"/>
+      <polyline points="2 12 12 17 22 12"/>
+    </svg>
+  </button>
+</div>
+
+<!-- SYSTEM STATUS BAR -->
+<div id="sysBar">
+  <!-- Gauche: BMS status -->
+  <div class="sys-left">
+    <div class="dot off" id="dot"></div>
+    <span class="sys-bms-tag">BMS</span>
+    <span id="statusText">NOT DETECTED</span>
+    <span id="trttConfigBtn" title="TRTT server" onclick="toggleTRTTPanel()">⚙</span>
+  </div>
+  <!-- Centre: signature -->
+  <div class="sys-center">
+    <div class="sys-sig">
+      <div class="sys-sig-line"></div>
+      <div class="sys-sig-dot"></div>
+      <span class="sys-sig-text" id="app-name">FALCON-PAD</span>
+      <span class="sys-sig-author">by RIESU</span>
+      <div class="sys-sig-dot"></div>
+      <div class="sys-sig-line r"></div>
+    </div>
+  </div>
+  <!-- Droite: IP serveur + zulu + site + settings -->
+  <div class="sys-right">
+    <span id="sysServerIp" class="sys-ip" title="Tablet/mobile URL">—</span>
+    <div class="sys-sep"></div>
+    <span id="zuluClock" class="sys-zulu">00:00:00Z</span>
+    <div class="sys-sep"></div>
+    <a href="" target="_blank" class="sys-fc" id="app-link">FALCON-PAD</a>
+    <div class="sys-sep"></div>
+    <button id="fsBtn" onclick="toggleFullscreen()" title="Fullscreen" style="cursor:pointer;background:transparent;border:none;padding:0 8px;height:100%;display:flex;align-items:center;color:rgba(74,222,128,.3);transition:color .2s;flex-shrink:0;">
+      <svg id="fsIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+        <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+      </svg>
+    </button>
+    <div class="sys-sep"></div>
+    <button id="settingsBtn" onclick="toggleSettings()" title="Settings">
+      <svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS PANEL ════════════════════════════════════════ -->
+<div id="settingsPanel">
+  <div class="sp-header">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+    <span class="sp-title">SETTINGS</span>
+    <button class="sp-close" onclick="toggleSettings()">✕</button>
+  </div>
+  <div class="sp-body">
+    <!-- Port -->
+    <div class="sp-row">
+      <label class="sp-label">LISTEN PORT</label>
+      <input class="sp-input" id="sp-port" type="number" min="1024" max="65535" placeholder="8000"/>
+      <span class="sp-hint">Valid range: 1024 – 65535. Restart required.</span>
+      <span class="sp-warn" id="sp-port-warn">⚠ Port changed — restart script to apply</span>
+    </div>
+    <div class="sp-divider"></div>
+    <!-- Dossier briefing -->
+    <div class="sp-row">
+      <label class="sp-label">BRIEFING FOLDER</label>
+      <input class="sp-input" id="sp-briefdir" type="text" placeholder="C:\temp\gpsbyriesu\briefing"/>
+      <span class="sp-hint">Absolute Windows path. Auto-created if missing.</span>
+    </div>
+    <div class="sp-divider"></div>
+    <!-- Broadcast interval -->
+    <div class="sp-row">
+      <label class="sp-label">BROADCAST INTERVAL</label>
+      <input class="sp-input" id="sp-bcast" type="number" min="50" max="2000" placeholder="200"/>
+      <span class="sp-hint">Position update rate (ms). 100 = smooth, 500 = eco.</span>
+    </div>
+
+  </div>
+  <div class="sp-status" id="sp-status"></div>
+  <div class="sp-footer">
+    <button class="sp-cancel" onclick="toggleSettings()">CANCEL</button>
+    <button class="sp-save"   onclick="saveSettings()">✓ SAVE</button>
+  </div>
+</div>
+
+<!-- COLOR PANEL -->
+<div id="colorPanel">
+  <h4>Active color</h4>
+  <div class="c-grid" id="cGrid"></div>
+</div>
+
+<!-- LAYER PANEL -->
+<div id="layerPanel">
+  <h4>Map layers</h4>
+  <div class="layer-row"><input type="radio" name="layer" id="lDark" value="dark" checked><label for="lDark">Dark</label></div>
+  <div class="layer-row"><input type="radio" name="layer" id="lOsm" value="osm"><label for="lOsm">OSM (fallback)</label></div>
+  <div class="layer-row"><input type="radio" name="layer" id="lSat" value="satellite"><label for="lSat">Satellite</label></div>
+  <div class="layer-row"><input type="radio" name="layer" id="lTerrain" value="terrain"><label for="lTerrain">Terrain</label></div>
+  <div class="tool-divider" style="margin:8px 0"></div>
+  <h4 style="margin-top:4px">Display</h4>
+  <div class="layer-row"><input type="checkbox" id="chkDMZ" checked><label for="chkDMZ">DMZ</label></div>
+  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkApName"><label for="chkApName" style="font-size:10px;color:#94a3b8">Nom base aérienne</label></div>
+  <div class="layer-row" style="padding-left:14px"><input type="checkbox" id="chkRunways" checked><label for="chkRunways" style="font-size:10px;color:#94a3b8">Runways</label></div>
+</div>
+
+<!-- TRTT PANEL -->
+<div id="trttPanel" style="display:none;position:fixed;bottom:80px;left:20px;background:rgba(4,8,16,.97);border:1px solid rgba(74,222,128,.2);border-top:2px solid rgba(74,222,128,.35);border-radius:3px;padding:12px 16px;z-index:2000;min-width:280px;backdrop-filter:blur(16px)">
+  <div style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;color:#4ade80;letter-spacing:2px;margin-bottom:10px;text-transform:uppercase">⚙ Serveur TRTT</div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input id="trttHostInput" type="text" placeholder="127.0.0.1" style="flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;outline:none">
+    <input id="trttPortInput" type="text" placeholder="42674" style="width:58px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:2px;padding:5px 9px;color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;outline:none">
+    <button onclick="applyTRTTConfig()" style="background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.3);border-radius:2px;padding:5px 12px;color:#4ade80;font-family:system-ui,sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">OK</button>
+  </div>
+  <div id="trttPanelStatus" style="font-family:'Consolas','Courier New',monospace;font-size:10px;color:#475569;margin-top:8px"></div>
+</div>
+
+
+
+<!-- CALIBRATION PANEL -->
+<div id="calPanel" style="display:none;position:fixed;top:80px;left:60px;
+  background:rgba(4,8,18,.97);border:1px solid rgba(251,191,36,.25);
+  border-top:2px solid rgba(251,191,36,.4);border-radius:3px;
+  padding:12px 14px;z-index:2000;min-width:240px;backdrop-filter:blur(16px)">
+  <div style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
+    color:#fbbf24;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">
+    ✎ Runway calibration</div>
+  <div style="font-family:'Consolas','Courier New',monospace;font-size:10px;color:#64748b;
+    margin-bottom:8px;line-height:1.5">
+    1. Select airbase<br>
+    2. Click "Calibrate"<br>
+    3. Click on the <span style="color:#fbbf24">actual threshold</span></div>
+  <select id="calIcaoSel" style="width:100%;background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.1);border-radius:2px;padding:5px 8px;
+    color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;
+    margin-bottom:8px;outline:none"></select>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <button onclick="startCalibration()"
+      style="flex:1;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);
+      border-radius:2px;padding:5px;color:#fbbf24;font-family:system-ui,sans-serif;
+      font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">CALIBRATE</button>
+    <button onclick="resetCalibration()"
+      style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
+      border-radius:2px;padding:5px 8px;color:#f87171;font-family:system-ui,sans-serif;
+      font-size:11px;cursor:pointer">RESET</button>
+    <button onclick="document.getElementById('calPanel').style.display='none'"
+      style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+      border-radius:2px;padding:5px 8px;color:#64748b;font-family:system-ui,sans-serif;
+      font-size:11px;cursor:pointer">✕</button>
+  </div>
+  <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.05)">
+    <button onclick="resetAllCalibration()"
+      style="width:100%;background:transparent;border:1px solid rgba(239,68,68,.15);
+      border-radius:2px;padding:3px;color:#64748b;font-family:system-ui,sans-serif;
+      font-size:10px;cursor:pointer">Reset all bases</button>
+  </div>
+</div>
+<!-- STATUS CALIBRATION -->
+<div id="calStatus" style="display:none;position:fixed;top:40px;left:50%;
+  transform:translateX(-50%);background:rgba(251,191,36,.15);
+  border:1px solid rgba(251,191,36,.4);border-radius:3px;
+  padding:6px 16px;z-index:3000;font-family:system-ui,sans-serif;
+  font-size:13px;font-weight:700;color:#fbbf24;letter-spacing:1px;
+  pointer-events:none"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TAB PANELS
+════════════════════════════════════════════════════════════════ -->
+
+<!-- GPS PANEL -->
+<div class="tab-panel" id="panel-gps">
+  <div class="gps-row">
+    <div class="gps-field">
+      <span class="gps-lbl">LAT</span>
+      <span class="gps-val green" id="gps-lat">—</span>
+    </div>
+    <div class="gps-field">
+      <span class="gps-lbl">LON</span>
+      <span class="gps-val green" id="gps-lon">—</span>
+    </div>
+    <div class="gps-field">
+      <span class="gps-lbl">HDG</span>
+      <span class="gps-val amber" id="gps-hdg">—</span>
+    </div>
+    <div class="gps-field">
+      <span class="gps-lbl">ALT</span>
+      <span class="gps-val white" id="gps-alt">—</span>
+    </div>
+    <div class="gps-field">
+      <span class="gps-lbl">KIAS</span>
+      <span class="gps-val white" id="gps-kias">—</span>
+    </div>
+    <div class="gps-field">
+      <span class="gps-lbl">DIST ↗ STPT</span>
+      <span class="gps-val amber" id="gps-dist">—</span>
+    </div>
+    <div class="gps-field">
+      <span class="gps-lbl">BULL</span>
+      <span class="gps-val" style="color:#f97316" id="gps-bull">—</span>
+    </div>
+  </div>
+  <div style="padding:4px 18px 4px;display:flex;align-items:center;gap:8px">
+    <span style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;color:#3d6b52;letter-spacing:1.5px;text-transform:uppercase">STEERPOINTS</span>
+    <span id="gps-steer-count" style="font-family:'Consolas','Courier New',monospace;font-size:9px;color:#3d6b52">0 WPT</span>
+  </div>
+  <div class="gps-steer-list" id="gps-steer-list">
+    <span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>
+  </div>
+</div>
+
+<!-- CHARTS PANEL -->
+<div class="tab-panel" id="panel-charts">
+  <div class="charts-header">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 3v18h18"/><polyline points="18 9 13 14 9 10 3 16"/>
+    </svg>
+    <span>FALCON CHARTS</span>
+    <span class="ext-badge">FALCONCHARTS.COM</span>
+    <button onclick="document.getElementById('panel-charts').classList.remove('open');document.querySelector('[data-tab=charts]').classList.remove('active')" style="margin-left:8px;background:transparent;border:none;cursor:pointer;color:#546e82;font-size:16px;line-height:1;padding:0 4px" title="Close">✕</button>
+  </div>
+  <iframe id="charts-frame" src="about:blank" allowfullscreen></iframe>
+</div>
+
+<!-- KNEEBOARD PANEL -->
+<div class="tab-panel" id="panel-kneeboard">
+  <div class="kb-header">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+    <span class="kb-header-title">KNEEBOARD</span>
+    <div class="kb-tabs">
+      <div class="kb-tab active" data-kbtab="chklist" style="--kt:#22d3ee" onclick="switchKbTab('chklist',this)">CHKLIST</div>
+      <div class="kb-tab"        data-kbtab="comms"    style="--kt:#4ade80" onclick="switchKbTab('comms',this)">COMMS</div>
+      <div class="kb-tab"        data-kbtab="fplan"    style="--kt:#60a5fa" onclick="switchKbTab('fplan',this)">FLIGHT PLAN</div>
+      <div class="kb-tab"        data-kbtab="notes"    style="--kt:#fbbf24" onclick="switchKbTab('notes',this)">NOTES</div>
+      <div class="kb-tab"        data-kbtab="cas"      style="--kt:#f97316" onclick="switchKbTab('cas',this)">9-LINE</div>
+      <div class="kb-tab"        data-kbtab="brevity"  style="--kt:#94a3b8" onclick="switchKbTab('brevity',this)">BREVITY</div>
+    </div>
+  </div>
+  <div class="kb-body">
+
+    <!-- ── COMMS LADDER ── -->
+    <div class="kb-page" id="kb-comms">
+      <table class="freq-table">
+        <thead><tr><th>ROLE</th><th>UHF (MHz)</th><th>VHF / REMARK</th></tr></thead>
+        <tbody>
+          <tr><td>GUARD</td><td class="hi" style="color:#ef4444">243.000</td><td style="color:#ef4444">UHF Emergency</td></tr>
+          <tr><td>GUARD VHF</td><td class="hi" style="color:#ef4444">121.500</td><td style="color:#ef4444">VHF Emergency</td></tr>
+          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS</b></td><td class="hi">268.800</td><td>Alpha — Corée BMS</td></tr>
+          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS Bravo</b></td><td class="hi">265.400</td><td>Secondary</td></tr>
+          <tr><td>Tanker CH11</td><td class="hi">317.175</td><td>A/R standard</td></tr>
+          <tr><td>Tanker CH12</td><td class="hi">340.200</td><td>Backup</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Osan Tower</td><td class="hi">126.200</td><td>RKSO</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Osan Appr.</td><td class="hi">119.300</td><td>RKSO</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Gunsan Tower</td><td class="hi">122.100</td><td>RKJK</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Daegu Tower</td><td class="hi">126.200</td><td>RKTN</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Seoul AB</td><td class="hi">126.200</td><td>RKSM</td></tr>
+          <tr style="background:rgba(96,165,250,.04)"><td>Incheon Tower</td><td class="hi">119.100</td><td>RKSI</td></tr>
+          <tr><td>ATC Centre</td><td class="hi">127.900</td><td>Seoul Centre</td></tr>
+          <tr><td>SAR / CSAR</td><td class="hi">282.800</td><td>Combat SAR</td></tr>
+          <tr><td>JTAC (def.)</td><td class="hi">305.000</td><td>Interop CAS</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── FLIGHT PLAN ── -->
+    <div class="kb-page" id="kb-fplan">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">CALLSIGN / FLIGHT</div>
+          <input class="kb-input" id="kb-callsign" placeholder="VIPER 1-1" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">PACKAGE</div>
+          <input class="kb-input" id="kb-package" placeholder="ALPHA BRAVO" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">TOT</div>
+          <input class="kb-input" id="kb-tot" placeholder="14:30Z" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">TANKER / FREQ</div>
+          <input class="kb-input" id="kb-tanker" placeholder="SHELL 1 / 317.175" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">BULLSEYE</div>
+          <input class="kb-input" id="kb-bull-val" placeholder="270/45 NM" autocomplete="off">
+        </div>
+        <div class="kb-field-group">
+          <div class="kb-field-lbl">BINGO FUEL</div>
+          <input class="kb-input" id="kb-bingo" placeholder="3500 lbs" autocomplete="off">
+        </div>
+      </div>
+      <div class="kb-field-lbl" style="margin-bottom:6px">MISSION NOTES</div>
+      <textarea class="kb-notes" id="kb-fplan-ta" placeholder="Objectif, menaces, règles d'engagement…" style="height:120px"></textarea>
+    </div>
+
+    <!-- ── NOTES LIBRES ── -->
+    <div class="kb-page" id="kb-notes">
+      <textarea class="kb-notes" id="kb-notes-ta" placeholder="Notes libres…"></textarea>
+    </div>
+
+    <!-- ── 9-LINE CAS — T.O. 1F-16-1CL-1-1 ── -->
+    <div class="kb-page" id="kb-cas">
+
+      <!-- En-tête FAC -->
+      <div class="cas-fac">FAC: " <input id="kb-fac-id" class="cas-input" style="width:90px;display:inline-block" placeholder="callsign"> , this is <input id="kb-fac-self" class="cas-input" style="width:90px;display:inline-block" placeholder="callsign"> , standing by for aircraft check-in"</div>
+
+      <!-- Pré-briefing -->
+      <div class="cas-pre-row">
+        <div class="cas-row cas-row-2" style="border-right:1px solid rgba(255,255,255,.04)">
+          <div class="cas-cell" style="border-right:none;flex:1">
+            <span class="cas-lbl">Leader Callsign / Mission</span>
+            <input id="kb-pre-1" class="cas-input" placeholder="VIPER 1-1 / MISSION ALPHA" autocomplete="off">
+          </div>
+        </div>
+        <div class="cas-row cas-row-2">
+          <div class="cas-cell" style="border-right:none;flex:1">
+            <span class="cas-lbl">Number and type of aircraft</span>
+            <input id="kb-pre-2" class="cas-input" placeholder="2× F-16C" autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Position and altitude</span>
+          <input id="kb-pre-3" class="cas-input" placeholder="037/18 NM from IP / FL150" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Ordinance</span>
+          <span class="cas-hint">Weapon (GBU-12, MK82, AGM-65, etc)</span>
+          <input id="kb-pre-4" class="cas-input" placeholder="2× GBU-12 / 20mm" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Time on station</span>
+          <span class="cas-hint">Playtime</span>
+          <input id="kb-pre-5" class="cas-input" placeholder="30 MIN" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row" style="margin-bottom:4px">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Additional Remarks</span>
+          <input id="kb-pre-6" class="cas-input" placeholder="" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-fac" style="font-size:9px">Provide friendly, enemy situation and game plan</div>
+      <div class="cas-fac">FAC: "Stand by for 9 line"</div>
+
+      <!-- 9 LIGNES -->
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">1</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">IP / BP</span>
+          <span class="cas-hint">Initial point (FW or battle position RW)</span>
+          <input id="kb-9l-1" class="cas-input" placeholder="IP ALPHA" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- Ligne 2 avec OFFSET -->
+      <div class="cas-row" style="display:grid;grid-template-columns:24px 1fr auto">
+        <span class="cas-num" style="width:auto;padding:4px 6px">2</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Heading</span>
+          <span class="cas-hint">Degrees Magnetic, IP / BP to Tgt</span>
+          <input id="kb-9l-2" class="cas-input" placeholder="090°M" autocomplete="off">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:0 12px;border-left:1px solid rgba(255,255,255,.06);flex-shrink:0">
+          <span class="cas-offset-lbl" style="padding:0;border:none;font-size:10px">OFFSET</span>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="radio" name="cas-offset" id="cas-offset-l" class="cas-radio" value="L">
+            <span class="cas-radio-lbl">Left</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="radio" name="cas-offset" id="cas-offset-r" class="cas-radio" value="R">
+            <span class="cas-radio-lbl">Right</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">3</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Distance</span>
+          <span class="cas-hint">IP / BP to Tgt in nautical miles</span>
+          <input id="kb-9l-3" class="cas-input" placeholder="4.5 NM" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">4</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Target Elevation</span>
+          <span class="cas-hint">Feet MSL (meter × 3.3 = feet)</span>
+          <input id="kb-9l-4" class="cas-input" placeholder="1250 ft MSL" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">5</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Target Description</span>
+          <span class="cas-hint">How many, what it is, degree of protection</span>
+          <input id="kb-9l-5" class="cas-input" placeholder="3× T-72, dug in, light AAA" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">6</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Target Location</span>
+          <span class="cas-hint">UMT, Latitude/longitude, visual reference, etc</span>
+          <input id="kb-9l-6" class="cas-input" placeholder="AB 123 456 / N37°30.123 E127°15.456" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- Ligne 7 avec Laser code -->
+      <div class="cas-row" style="display:grid;grid-template-columns:24px 1fr auto 1fr">
+        <span class="cas-num" style="width:auto;padding:4px 6px">7</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Type Mark</span>
+          <span class="cas-hint">WP, laser, IR pointer</span>
+          <input id="kb-9l-7" class="cas-input" placeholder="Laser" autocomplete="off">
+        </div>
+        <div style="display:flex;align-items:center;padding:0 10px;border-left:1px solid rgba(255,255,255,.06);flex-shrink:0">
+          <span class="cas-lbl" style="white-space:nowrap">Laser code</span>
+        </div>
+        <div class="cas-cell">
+          <input id="kb-9l-laser" class="cas-input" placeholder="1688" autocomplete="off" style="font-size:14px;letter-spacing:3px">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2">
+        <span class="cas-num">8</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Friendlies</span>
+          <span class="cas-hint">From target, cardinal direction and distance in meters</span>
+          <input id="kb-9l-8" class="cas-input" placeholder="N 500m" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-row cas-row-2" style="margin-bottom:4px">
+        <span class="cas-num">9</span>
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Egress</span>
+          <span class="cas-hint">Cardinal / subcardinal direction and location (CP / IP) as required</span>
+          <input id="kb-9l-9" class="cas-input" placeholder="West / RTB IP ALPHA" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-fac">FAC: "Say when ready to copy remarks"</div>
+
+      <!-- Remarks -->
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Remarks</span>
+          <span class="cas-hint">Stay above / below, No fly areas</span>
+          <input id="kb-rmk" class="cas-input" placeholder="" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Final Attack Heading</span>
+          <span class="cas-hint">Degrees Magnetic</span>
+          <input id="kb-fah" class="cas-input" placeholder="270°M" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">Threats</span>
+          <span class="cas-hint">Description, cardinal direction from target, distance in meters, type of suppression</span>
+          <input id="kb-thr" class="cas-input" placeholder="SA-13 N 2km, MANPADS SE 800m" autocomplete="off">
+        </div>
+      </div>
+      <div class="cas-row" style="margin-bottom:6px">
+        <div class="cas-cell" style="flex:1">
+          <span class="cas-lbl">TOT / TTT or "push ASAP"</span>
+          <input id="kb-tot9" class="cas-input" placeholder="14:30Z / push ASAP" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="cas-fac" style="font-size:9px">FAC: "Say when ready for amplifying information". Give pilot talk-on to TGT, bid to Small</div>
+
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button onclick="clearNineLines()" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:2px;padding:5px 14px;color:#f87171;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">CLEAR</button>
+        <button onclick="copyNineLines()" style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:2px;padding:5px 14px;color:#60a5fa;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">COPY</button>
+        <span style="font-family:system-ui,sans-serif;font-size:9px;color:#334155;margin-left:4px">* Minimum essential in limited comms environment</span>
+      </div>
+    </div>
+
+    <!-- ── BREVITY ── -->
+    <div class="kb-page" id="kb-brevity">
+      <div class="brev-grid">
+        <div class="brev-item"><div class="brev-word">BOGEY</div><div class="brev-def">Unidentified air contact</div></div>
+        <div class="brev-item"><div class="brev-word">BANDIT</div><div class="brev-def">Confirmed hostile air contact</div></div>
+        <div class="brev-item"><div class="brev-word">FRIENDLY</div><div class="brev-def">Confirmed friendly air contact</div></div>
+        <div class="brev-item"><div class="brev-word">SPIKE</div><div class="brev-def">Enemy radar lock / SAM in flight</div></div>
+        <div class="brev-item"><div class="brev-word">BLIND</div><div class="brev-def">No visual on wingman/element</div></div>
+        <div class="brev-item"><div class="brev-word">VISUAL</div><div class="brev-def">Visual contact confirmed</div></div>
+        <div class="brev-item"><div class="brev-word">BINGO</div><div class="brev-def">Minimum fuel for RTB</div></div>
+        <div class="brev-item"><div class="brev-word">WINCHESTER</div><div class="brev-def">All ordnance expended</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 1</div><div class="brev-def">Semi-active missile (AIM-7)</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 2</div><div class="brev-def">IR guided missile (AIM-9)</div></div>
+        <div class="brev-item"><div class="brev-word">FOX 3</div><div class="brev-def">Active missile (AIM-120 AMRAAM)</div></div>
+        <div class="brev-item"><div class="brev-word">GUNS</div><div class="brev-def">Gun engagement</div></div>
+        <div class="brev-item"><div class="brev-word">MERGE</div><div class="brev-def">WVR engagement</div></div>
+        <div class="brev-item"><div class="brev-word">DEFENSIVE</div><div class="brev-def">Under attack — need immediate support</div></div>
+        <div class="brev-item"><div class="brev-word">PITBULL</div><div class="brev-def">AMRAAM active — self-guiding</div></div>
+        <div class="brev-item"><div class="brev-word">SKOSH</div><div class="brev-def">AIM-120 active — range limit</div></div>
+        <div class="brev-item"><div class="brev-word">BRAA</div><div class="brev-def">Bearing / Range / Altitude / Aspect</div></div>
+        <div class="brev-item"><div class="brev-word">BULLSEYE</div><div class="brev-def">Shared nav reference point</div></div>
+        <div class="brev-item"><div class="brev-word">ANGELS</div><div class="brev-def">Altitude in thousands ft</div></div>
+        <div class="brev-item"><div class="brev-word">CHERUBS</div><div class="brev-def">Altitude in hundreds ft (&lt;1,000)</div></div>
+        <div class="brev-item"><div class="brev-word">DECLARE</div><div class="brev-def">Request contact ID from GCI</div></div>
+        <div class="brev-item"><div class="brev-word">TALLY</div><div class="brev-def">Visual on bogey/bandit confirmed</div></div>
+        <div class="brev-item"><div class="brev-word">NO JOY</div><div class="brev-def">No visual on bogey/bandit</div></div>
+        <div class="brev-item"><div class="brev-word">SNAP</div><div class="brev-def">Immediate intercept vector</div></div>
+        <div class="brev-item"><div class="brev-word">NOTCH</div><div class="brev-def">Fly perpendicular to break radar lock</div></div>
+        <div class="brev-item"><div class="brev-word">DRAG</div><div class="brev-def">Place threat on beam/tail — extend away</div></div>
+        <div class="brev-item"><div class="brev-word">PUMP</div><div class="brev-def">Abort intercept, reverse away</div></div>
+        <div class="brev-item"><div class="brev-word">MADDOG</div><div class="brev-def">AIM-120 launched without radar lock</div></div>
+      </div>
+    </div>
+
+
+    <!-- ── CHECKLIST RAMP START ── -->
+    <div class="kb-page active" id="kb-chklist">
+
+      <div class="cl-master" id="cl-master" onclick="clToggleMaster()">
+        <span class="cl-master-chevron">▶</span>
+        <span class="cl-master-title">RAMP START — BMS 4.38 SQN SOP</span>
+        <span class="cl-progress" id="cl-prog">0 / 0</span>
+        <button class="cl-reset-btn" onclick="event.stopPropagation();clReset()">RESET</button>
+      </div>
+
+      <div class="cl-master-body" id="cl-master-body">
+        <div id="cl-list"></div>
+      </div>
+    </div>
+
+    <!-- script checklist déplacé en bas -->
+
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TAB BAR — 3 groupes : NAV / DOCS / CREW
+════════════════════════════════════════════════════════════════ -->
+<div id="tabBar">
+
+  <!-- ── GROUPE NAV ── -->
+  <div class="tab-group" style="flex:1">
+    <span class="tab-group-label">NAV</span>
+    <button class="tab-btn" data-tab="gps" onclick="switchTab('gps',this)">
+      <div class="tab-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="1.8">
+          <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 2"/>
+          <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
+        </svg>
+      </div>
+      <span class="tab-label">GPS</span>
+    </button>
+  </div>
+
+  <div class="tab-group-sep" data-label="·"></div>
+
+  <!-- ── GROUPE DOCS ── -->
+  <div class="tab-group" style="flex:2">
+    <span class="tab-group-label">DOCS</span>
+    <button class="tab-btn" data-tab="charts" onclick="switchTab('charts',this)">
+      <div class="tab-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="1.8">
+          <rect x="3" y="3" width="18" height="14" rx="2"/>
+          <line x1="3" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="3" x2="9" y2="17"/>
+          <path d="M12 20l2 2 2-2" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <span class="tab-label">CHARTS</span>
+    </button>
+    <button class="tab-btn" data-tab="briefing" onclick="switchTab('briefing',this)">
+      <div class="tab-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="1.8">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+        </svg>
+      </div>
+      <span class="tab-label">BRIEFING</span>
+    </button>
+  </div>
+
+  <div class="tab-group-sep" data-label="·"></div>
+
+  <!-- ── GROUPE CREW ── -->
+  <div class="tab-group" style="flex:1">
+    <span class="tab-group-label">CREW</span>
+    <button class="tab-btn" data-tab="kneeboard" onclick="switchTab('kneeboard',this)">
+      <div class="tab-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="1.8">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/>
+        </svg>
+      </div>
+      <span class="tab-label">KNEEBOARD</span>
+    </button>
+  </div>
+
+</div>
+
+<!-- BRIEFING PANEL -->
+<div class="tab-panel" id="panel-briefing">
+  <div class="brief-header">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+    </svg>
+    <span class="brief-header-title">BRIEFING</span>
+    <span id="briefFileCount" style="font-family:'Consolas','Courier New',monospace;font-size:9px;color:#3d6b52;letter-spacing:1px">0 DOC</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <div class="brief-upload-btn" onclick="document.getElementById('briefingFileInput').click()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        IMPORT
+      </div>
+      <button onclick="document.getElementById('panel-briefing').classList.remove('open');document.querySelector('[data-tab=briefing]').classList.remove('active')" style="background:transparent;border:none;cursor:pointer;color:#546e82;font-size:16px;padding:0 4px">✕</button>
+    </div>
+  </div>
+  <input type="file" id="briefingFileInput" accept=".pdf,.png,.jpg,.jpeg,.docx" multiple onchange="briefingUpload(this.files)">
+  <div class="brief-body">
+    <!-- Sidebar -->
+    <div class="brief-sidebar">
+      <div class="brief-sidebar-hdr">DOCUMENTS</div>
+      <div class="brief-file-list" id="briefFileList">
+        <div class="brief-empty">No documents<br>Import PDF, image<br>or Word (.docx)</div>
+      </div>
+    </div>
+    <!-- Viewer -->
+    <div class="brief-viewer" id="briefViewer">
+      <div class="brief-placeholder" id="briefPlaceholder">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+        </svg>
+        <span class="brief-placeholder-txt">Select a document</span>
+      </div>
+      <iframe id="briefIframe" src="about:blank" style="display:none"></iframe>
+    </div>
+  </div>
+</div>
+
+
+
+</body></html>
+<input type="file" id="fileInput" accept=".ini" style="display:none">
+<script src="/static/js/map.js"></script>
+<script src="/static/js/panels.js"></script>
+<script src="/static/js/websocket.js"></script>
+</body></html>
