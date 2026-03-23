@@ -32,34 +32,18 @@ from datetime import datetime
 from typing import List, Optional, Dict
 import logging
 
-APP_NAME    = "Falcon-Pad"
-APP_VERSION = "0.2"
-APP_AUTHOR  = "Riesu"
-APP_CONTACT = "contact@falcon-charts.com"
-APP_WEBSITE = "https://www.falcon-charts.com"
+import app_info
 
-# ── Dossiers de base ─────────────────────────────────────────
-# Structure cible : falcon-pad/ logs/ briefing/ config/ assets/
-def _resolve_base_dir() -> str:
-    if getattr(sys, "frozen", False):
-        candidate = os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        candidate = os.path.dirname(os.path.abspath(__file__))
-    if os.path.basename(candidate).lower() == "falcon-pad":
-        return candidate
-    fp_dir = os.path.join(candidate, "falcon-pad")
-    os.makedirs(fp_dir, exist_ok=True)
-    return fp_dir
-
-_BASE_DIR    = _resolve_base_dir()
-ASSETS_DIR   = os.path.join(_BASE_DIR, "assets")
-LOG_DIR      = os.path.join(_BASE_DIR, "logs")
-BRIEFING_DIR = os.path.join(_BASE_DIR, "briefing")
-_CONFIG_DIR  = os.path.join(_BASE_DIR, "config")
-CONFIG_FILE  = os.path.join(_CONFIG_DIR, "falcon_pad_config.json")
-
-for _d in (ASSETS_DIR, LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
-    os.makedirs(_d, exist_ok=True)
+# ── Identité & chemins (source : app_info.py) ────────────────
+APP_NAME    = app_info.SHORT
+APP_VERSION = app_info.VERSION
+APP_AUTHOR  = app_info.AUTHOR
+APP_CONTACT = app_info.CONTACT
+APP_WEBSITE = app_info.WEBSITE
+IMAGES_DIR  = app_info.IMAGES_DIR
+LOG_DIR     = app_info.LOG_DIR
+BRIEFING_DIR= app_info.BRIEFING_DIR
+CONFIG_FILE = app_info.CONFIG_FILE
 
 LOG_FILE = os.path.join(LOG_DIR, f"falcon_pad_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 
@@ -3748,13 +3732,13 @@ if __name__ == "__main__":
             )
             self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             self.setWindowTitle("Falcon-Pad")
-            _ico = os.path.join(ASSETS_DIR, "falcon_pad.ico")
+            _ico = os.path.join(IMAGES_DIR, "falcon_pad.ico")
             if os.path.exists(_ico):
                 self.setWindowIcon(QIcon(_ico))
             screen = QApplication.primaryScreen().availableGeometry()
             self.move((screen.width()-self.W)//2, (screen.height()-self.H)//2)
             self._logo = None
-            _lp = os.path.join(ASSETS_DIR, "logo_tk.png")
+            _lp = os.path.join(IMAGES_DIR, "logo_app.png")
             if os.path.exists(_lp):
                 px = QPixmap(_lp)
                 if not px.isNull():
