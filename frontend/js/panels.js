@@ -64,18 +64,20 @@ function onHsdColor(key, hex) {
   const varName = 'C_HSD_' + key.toUpperCase();
   if(typeof window[varName] !== 'undefined') window[varName] = hex;
   saveUiPref({['color_hsd_'+key]: hex});
+  // Redraw HSD lines immédiatement
+  if(typeof _lastHsdLines !== 'undefined') updateHsdLines(_lastHsdLines);
 }
 
 function onElemColor(key, hex) {
-  // Mettre à jour la variable globale dans map.js
   const varMap = {draw:'C_DRAW',stpt:'C_STPT',fplan:'C_FPLAN',ppt:'C_PPT',bull:'C_BULL',mk:'C_MK'};
   if(typeof window[varMap[key]] !== 'undefined') window[varMap[key]] = hex;
-  // Si c'est draw, sync aussi activeColor
   if(key==='draw' && typeof activeColor!=='undefined') {
     activeColor = hex;
     document.querySelectorAll('.c-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.color===hex));
   }
   saveUiPref({['color_'+key]: hex});
+  // Redraw live
+  _redrawElem(key);
 }
 
 function onElemSize(key, val) {
@@ -85,6 +87,30 @@ function onElemSize(key, val) {
   const lbl = document.getElementById('sp-sv-'+key);
   if(lbl) lbl.textContent = v;
   saveUiPref({['size_'+key]: v});
+  // Redraw live
+  _redrawElem(key);
+}
+
+function _redrawElem(key) {
+  // Redessine l'élément concerné sans tout recharger
+  switch(key) {
+    case 'stpt':
+    case 'fplan':
+    case 'draw':
+      if(typeof loadMission === 'function') loadMission();
+      break;
+    case 'ppt':
+      if(typeof loadMission === 'function') loadMission();
+      break;
+    case 'bull':
+      // Redraw bullseye icon only
+      if(typeof _bullLat !== 'undefined' && _bullLat != null)
+        if(typeof updateBullseye === 'function') updateBullseye(_bullLat, _bullLon);
+      break;
+    case 'mk':
+      if(typeof _lastMkMarks !== 'undefined') updateMkMarkpoints(_lastMkMarks);
+      break;
+  }
 }
 
 function _syncElemControls(p) {

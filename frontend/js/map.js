@@ -300,6 +300,9 @@ map.on('dragstart', () => {
 // ── Bullseye ─────────────────────────────────────────────────────
 var _bullMarker = null;
 var _bullLat = null, _bullLon = null;
+// Expose pour live redraws depuis panels.js
+Object.defineProperty(window,'_bullLat',{get:()=>_bullLat,set:v=>{_bullLat=v}});
+Object.defineProperty(window,'_bullLon',{get:()=>_bullLon,set:v=>{_bullLon=v}});
 
 function _bullIcon() {
   const col = C_BULL;
@@ -1132,8 +1135,11 @@ function updateAcmiContacts(contacts){
 
 // ── HSD Lines L1–L4 (STPTs 31–54) ──────────────────────────────────────
 let hsdMarkers = [], hsdVisible = true;
+let _lastHsdLines = [];
+let _lastMkMarks  = [];
 
 function updateHsdLines(lines) {
+  _lastHsdLines = lines; // cache for live color redraws
   hsdMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
   hsdMarkers = [];
   if(!lines || !lines.length) return;
@@ -1176,6 +1182,7 @@ document.getElementById('hsdBtn')?.addEventListener('click', function() {
 // ── MK Markpoints (pilot mark points, STPTs 26-30) ───────────────────
 let mkMarkers=[];
 function updateMkMarkpoints(marks){
+  _lastMkMarks = marks; // cache for live color redraws
   mkMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
   mkMarkers=[];
   if(!marks||!marks.length) return;

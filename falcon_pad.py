@@ -27,13 +27,15 @@ BMS     : Falcon BMS 4.38 — Shared Memory SDK
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil, re
 from datetime import datetime
 import app_info
 from stringdata import read_all_strings, get_mk_markpoints, get_hsd_lines, detect_theater
-import app_info
+from theaters import (
+    bms_to_latlon, in_theater_bbox,
+    get_theater, get_theater_name, THEATER_DB
+)
 from typing import List, Optional, Dict
 import logging
 
@@ -98,53 +100,6 @@ def _save_config(cfg: dict) -> None:
     except Exception:
         pass
 
-UI_PREFS_FILE = os.path.join(_CONFIG_DIR, "ui_prefs.json")
-
-_DEFAULT_UI_PREFS = {
-    "active_color":    "#3b82f6",
-    "layer":           "dark",
-    "ppt_visible":     True,
-    "airports_visible":True,
-    "runways_visible": True,
-    "ap_name_visible": False,
-    "color_draw":  "#3b82f6",
-    "color_stpt":  "#e2e8f0",
-    "color_fplan": "#f59e0b",
-    "color_ppt":   "#ef4444",
-    "color_bull":  "#fbbf24",
-    "color_mk":    "#fbbf24",
-    "size_draw":  2,
-    "size_stpt":  5,
-    "size_fplan": 4,
-    "size_ppt":   1,
-    "size_bull":  8,
-    "size_mk":    10,
-}
-
-def _load_ui_prefs() -> dict:
-    try:
-        if os.path.exists(UI_PREFS_FILE):
-            with open(UI_PREFS_FILE, "r", encoding="utf-8") as f:
-                saved = _json.load(f)
-            prefs = dict(_DEFAULT_UI_PREFS)
-            prefs.update({k: v for k, v in saved.items() if k in _DEFAULT_UI_PREFS})
-            logger.info(f"ui_prefs: chargé depuis {UI_PREFS_FILE}")
-            return prefs
-        logger.info("ui_prefs: fichier absent — valeurs par défaut")
-    except Exception as e:
-        logger.error(f"ui_prefs: erreur chargement: {e}", exc_info=True)
-    return dict(_DEFAULT_UI_PREFS)
-
-def _save_ui_prefs(prefs: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(UI_PREFS_FILE), exist_ok=True)
-        with open(UI_PREFS_FILE, "w", encoding="utf-8") as f:
-            _json.dump(prefs, f, indent=2)
-        logger.debug(f"ui_prefs: sauvegardé → {UI_PREFS_FILE}")
-    except Exception as e:
-        logger.error(f"ui_prefs: erreur sauvegarde: {e}", exc_info=True)
-
-
 APP_CONFIG   = _load_config()
 BRIEFING_DIR = str(APP_CONFIG["briefing_dir"])
 os.makedirs(BRIEFING_DIR, exist_ok=True)
@@ -161,7 +116,60 @@ _ch.setLevel(logging.INFO)
 _fh.setFormatter(_Fmt()); _ch.setFormatter(_Fmt())
 logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _ch])
 logger = logging.getLogger(__name__)
-UI_PREFS = _load_ui_prefs()
+
+# ══════════════════════════════════════════════════════════════════
+#  UI PREFS
+# ══════════════════════════════════════════════════════════════════
+UI_PREFS_FILE = os.path.join(app_info.CONFIG_DIR, "ui_prefs.json")
+
+_DEFAULT_UI_PREFS: dict = {
+    "active_color":     "#3b82f6",
+    "layer":            "dark",
+    "ppt_visible":      True,
+    "airports_visible": True,
+    "runways_visible":  True,
+    "ap_name_visible":  False,
+    # Couleurs & tailles éléments carte
+    "color_draw":   "#3b82f6", "size_draw":  2,
+    "color_stpt":   "#e2e8f0", "size_stpt":  5,
+    "color_fplan":  "#f59e0b", "size_fplan": 4,
+    "color_ppt":    "#ef4444", "size_ppt":   1.2,
+    "color_bull":   "#f97316", "size_bull":  8,
+    "color_mk":     "#fbbf24", "size_mk":    2.5,
+    # Couleurs lignes HSD L1-L4
+    "color_hsd_l1": "#4ade80",
+    "color_hsd_l2": "#60a5fa",
+    "color_hsd_l3": "#f59e0b",
+    "color_hsd_l4": "#f87171",
+    # Calibration pistes et annotations
+    "rwy_offsets":  "{}",
+    "annotations":  "[]",
+}
+
+def _load_ui_prefs() -> dict:
+    try:
+        if os.path.exists(UI_PREFS_FILE):
+            with open(UI_PREFS_FILE, encoding="utf-8") as f:
+                saved = json.load(f)
+            prefs = dict(_DEFAULT_UI_PREFS)
+            prefs.update({k: v for k, v in saved.items() if k in _DEFAULT_UI_PREFS})
+            logger.info(f"ui_prefs: chargé depuis {UI_PREFS_FILE}")
+            return prefs
+        logger.info("ui_prefs: fichier absent — valeurs par défaut")
+        return dict(_DEFAULT_UI_PREFS)
+    except Exception as e:
+        logger.error(f"ui_prefs: erreur chargement: {e}", exc_info=True)
+        return dict(_DEFAULT_UI_PREFS)
+
+def _save_ui_prefs(prefs: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(UI_PREFS_FILE), exist_ok=True)
+        with open(UI_PREFS_FILE, "w", encoding="utf-8") as f:
+            json.dump(prefs, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.error(f"ui_prefs: erreur sauvegarde: {e}", exc_info=True)
+
+UI_PREFS: dict = _load_ui_prefs()
 
 def log_sep(t=""):
     logger.info("="*60)
@@ -197,10 +205,6 @@ FD2_BULLSEYE_X   = 0x4B0   # float,  bullseye North ft (coords BMS)
 FD2_BULLSEYE_Y   = 0x4B4   # float,  bullseye East  ft (coords BMS)
 
 # Conversion BMS → WGS84 : délégué à theaters.py (multi-théâtre)
-from theaters import (
-    bms_to_latlon, in_theater_bbox,
-    get_theater, get_theater_name, THEATER_DB
-)
 
 #  AÉROPORTS KOREA (47)
 AIRPORTS = {
@@ -729,8 +733,11 @@ app   = FastAPI(title="Falcon-Pad", lifespan=lifespan)
 
 # ── Frontend statique ─────────────────────────────────────────────
 FRONTEND_DIR = os.path.join(app_info.BASE_DIR, "frontend")
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-logger.info(f"StaticFiles monté : {FRONTEND_DIR}")
+if os.path.isdir(FRONTEND_DIR):
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+    logger.info(f"StaticFiles monté : {FRONTEND_DIR}")
+else:
+    logger.warning(f"Dossier frontend introuvable : {FRONTEND_DIR}")
 
 # ── Middleware — accès local uniquement (localhost + LAN) ────────
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -806,7 +813,7 @@ async def broadcast_loop() -> None:
                         try:    await ws.send_text(msg_acmi)
                         except: pass
 
-                # 4. MK Markpoints + HSD Lines + theater detection (via StringData)
+                # 4. MK Markpoints + HSD Lines + theater detection
                 ptr_str = bms.shm_ptrs.get("FalconSharedMemoryArea3")
                 if ptr_str:
                     _strings = read_all_strings(ptr_str, safe_read)
@@ -827,13 +834,13 @@ async def broadcast_loop() -> None:
                         for ws in list(ws_clients):
                             try:    await ws.send_text(msg_thr)
                             except: pass
-                    # MK markpoints (26-30)
+                    # MK markpoints (STPTs 26-30)
                     mk_marks = get_mk_markpoints(_strings)
                     msg_mk = json.dumps({"type": "mk_marks", "data": mk_marks})
                     for ws in list(ws_clients):
                         try:    await ws.send_text(msg_mk)
                         except: pass
-                    # HSD Lines L1-L4 (31-54)
+                    # HSD Lines L1-L4 (STPTs 31-54)
                     hsd = get_hsd_lines(_strings)
                     msg_hsd = json.dumps({"type": "hsd_lines", "data": hsd})
                     for ws in list(ws_clients):
@@ -1194,62 +1201,6 @@ class SettingsModel(BaseModel):
     broadcast_ms: Optional[int] = None
     theme:        Optional[str] = None
 
-# ── UI Preferences (/api/ui-prefs) ──────────────────────────────
-class UiPrefsModel(BaseModel):
-    active_color:     Optional[str]   = None
-    layer:            Optional[str]   = None
-    ppt_visible:      Optional[bool]  = None
-    airports_visible: Optional[bool]  = None
-    runways_visible:  Optional[bool]  = None
-    ap_name_visible:  Optional[bool]  = None
-    color_draw:       Optional[str]   = None
-    color_stpt:       Optional[str]   = None
-    color_fplan:      Optional[str]   = None
-    color_ppt:        Optional[str]   = None
-    color_bull:       Optional[str]   = None
-    color_mk:         Optional[str]   = None
-    size_draw:        Optional[float] = None
-    size_stpt:        Optional[float] = None
-    size_fplan:       Optional[float] = None
-    size_ppt:         Optional[float] = None
-    size_bull:        Optional[float] = None
-    size_mk:          Optional[float] = None
-
-@app.get("/api/ui-prefs")
-async def ui_prefs_get():
-    return UI_PREFS
-
-@app.post("/api/ui-prefs")
-async def ui_prefs_save(p: UiPrefsModel):
-    global UI_PREFS
-    hex_re = r'^#[0-9a-fA-F]{6}$'
-    for key in ("active_color","color_draw","color_stpt","color_fplan","color_ppt","color_bull","color_mk"):
-        val = getattr(p, key)
-        if val is not None and re.match(hex_re, val):
-            UI_PREFS[key] = val
-    if p.layer is not None and p.layer in ("dark","osm","satellite","terrain"):
-        UI_PREFS["layer"] = p.layer
-    for key in ("ppt_visible","airports_visible","runways_visible","ap_name_visible"):
-        val = getattr(p, key)
-        if val is not None:
-            UI_PREFS[key] = val
-    for key in ("rwy_offsets", "annotations"):
-        val = getattr(p, key)
-        if val is not None:
-            try: json.loads(val); UI_PREFS[key] = val  # validate JSON
-            except: pass
-    for key in ("color_hsd_l1","color_hsd_l2","color_hsd_l3","color_hsd_l4"):
-        val = getattr(p, key)
-        if val is not None and re.match(r'#[0-9a-fA-F]{6}$', val):
-            UI_PREFS[key] = val
-    for key in ("size_draw","size_stpt","size_fplan","size_ppt","size_bull","size_mk"):
-        val = getattr(p, key)
-        if val is not None and 0.5 <= val <= 20:
-            UI_PREFS[key] = val
-    _save_ui_prefs(UI_PREFS)
-    logger.info(f"ui_prefs: mise à jour → {p.model_dump(exclude_none=True)}")
-    return {"ok": True, "prefs": UI_PREFS}
-
 @app.get("/api/settings")
 async def settings_get():
     return {**APP_CONFIG, "current_port": SERVER_PORT, "current_ip": SERVER_IP}
@@ -1258,7 +1209,7 @@ async def settings_get():
 async def settings_save(s: SettingsModel):
     global APP_CONFIG, BRIEFING_DIR
     changed: list = []
-    if s.port is not None and 1024 <= s.port <= 65535:
+    if s.port is not None and 1024 <= s.port <= 65535 and s.port != APP_CONFIG.get("port", 8000):
         APP_CONFIG["port"] = s.port; changed.append("port")
     if s.briefing_dir is not None and s.briefing_dir.strip():
         nd = s.briefing_dir.strip()
@@ -1276,26 +1227,9 @@ async def settings_save(s: SettingsModel):
     logger.info(f"Settings: {changed}" + (" — RESTART requis (port)" if needs_restart else ""))
     return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": APP_CONFIG}
 
-@app.get("/api/theater")
-async def theater_info():
-    """Expose le théâtre actif avec ses paramètres de carte."""
-    from math import floor, log2
-    tp = get_theater()
-    lat_min, lat_max, lon_min, lon_max = tp.bbox
-    center_lat = (lat_min + lat_max) / 2
-    center_lon = (lon_min + lon_max) / 2
-    lat_span   = lat_max - lat_min
-    lon_span   = lon_max - lon_min
-    span       = max(lat_span, lon_span)
-    zoom       = 6 if span > 20 else 7 if span > 15 else 8
-    return {
-        "name":       get_theater_name(),
-        "center_lat": center_lat,
-        "center_lon": center_lon,
-        "zoom":       zoom,
-        "bbox":       {"lat_min": lat_min, "lat_max": lat_max,
-                       "lon_min": lon_min, "lon_max": lon_max},
-    }
+@app.get("/api/server/info")
+async def server_info():
+    return {"ip": SERVER_IP, "port": SERVER_PORT, "url": f"http://{SERVER_IP}:{SERVER_PORT}"}
 
 @app.get("/api/app/info")
 async def app_info_route():
@@ -1303,14 +1237,92 @@ async def app_info_route():
         "name":    app_info.SHORT,
         "version": app_info.VERSION,
         "author":  app_info.AUTHOR,
-        "website": app_info.WEBSITE,
-        "github":  app_info.GITHUB,
-        "bms":     app_info.BMS,
+        "website": getattr(app_info, "WEBSITE", ""),
+        "github":  getattr(app_info, "GITHUB", ""),
+        "bms":     getattr(app_info, "BMS", "4.38"),
     }
 
-@app.get("/api/server/info")
-async def server_info():
-    return {"ip": SERVER_IP, "port": SERVER_PORT, "url": f"http://{SERVER_IP}:{SERVER_PORT}"}
+@app.get("/api/theater")
+async def theater_info():
+    tp = get_theater()
+    lat_min, lat_max, lon_min, lon_max = tp.bbox
+    c_lat = (lat_min + lat_max) / 2
+    c_lon = (lon_min + lon_max) / 2
+    span  = max(lat_max-lat_min, lon_max-lon_min)
+    zoom  = 6 if span > 20 else 7 if span > 15 else 8
+    return {
+        "name": get_theater_name(),
+        "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
+        "bbox": {"lat_min": lat_min, "lat_max": lat_max,
+                 "lon_min": lon_min, "lon_max": lon_max},
+    }
+
+@app.get("/api/ui-prefs")
+async def ui_prefs_get():
+    return UI_PREFS
+
+class UiPrefsModel(BaseModel):
+    active_color:     Optional[str]   = None
+    layer:            Optional[str]   = None
+    ppt_visible:      Optional[bool]  = None
+    airports_visible: Optional[bool]  = None
+    runways_visible:  Optional[bool]  = None
+    ap_name_visible:  Optional[bool]  = None
+    color_draw:       Optional[str]   = None
+    size_draw:        Optional[float] = None
+    color_stpt:       Optional[str]   = None
+    size_stpt:        Optional[float] = None
+    color_fplan:      Optional[str]   = None
+    size_fplan:       Optional[float] = None
+    color_ppt:        Optional[str]   = None
+    size_ppt:         Optional[float] = None
+    color_bull:       Optional[str]   = None
+    size_bull:        Optional[float] = None
+    color_mk:         Optional[str]   = None
+    size_mk:          Optional[float] = None
+    color_hsd_l1:     Optional[str]   = None
+    color_hsd_l2:     Optional[str]   = None
+    color_hsd_l3:     Optional[str]   = None
+    color_hsd_l4:     Optional[str]   = None
+    rwy_offsets:      Optional[str]   = None
+    annotations:      Optional[str]   = None
+
+@app.post("/api/ui-prefs")
+async def ui_prefs_save(p: UiPrefsModel):
+    global UI_PREFS
+    hex_re = r'#[0-9a-fA-F]{6}$'
+    # Colors validation
+    for key in ("active_color","color_draw","color_stpt","color_fplan",
+                "color_ppt","color_bull","color_mk",
+                "color_hsd_l1","color_hsd_l2","color_hsd_l3","color_hsd_l4"):
+        val = getattr(p, key)
+        if val is not None and re.match(hex_re, val):
+            UI_PREFS[key] = val
+    # Layer
+    if p.layer is not None and p.layer in ("dark","osm","satellite","terrain"):
+        UI_PREFS["layer"] = p.layer
+    # Booleans
+    for key in ("ppt_visible","airports_visible","runways_visible","ap_name_visible"):
+        val = getattr(p, key)
+        if val is not None:
+            UI_PREFS[key] = val
+    # Sizes
+    for key in ("size_draw","size_stpt","size_fplan","size_ppt","size_bull","size_mk"):
+        val = getattr(p, key)
+        if val is not None and 0.5 <= val <= 20:
+            UI_PREFS[key] = val
+    # JSON strings (validated)
+    for key in ("rwy_offsets","annotations"):
+        val = getattr(p, key)
+        if val is not None:
+            try:
+                json.loads(val)  # validate JSON
+                UI_PREFS[key] = val
+            except Exception:
+                pass
+    _save_ui_prefs(UI_PREFS)
+    logger.debug(f"ui_prefs saved: {p.model_dump(exclude_none=True)}")
+    return {"ok": True, "prefs": UI_PREFS}
 
 @app.get("/api/acmi/status")
 async def acmi_status():
