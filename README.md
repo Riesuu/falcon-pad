@@ -31,7 +31,7 @@ netsh advfirewall firewall add rule name="Falcon-PAD" dir=in action=allow protoc
 **BMS Config** — add to `Falcon BMS User.cfg`:
 ```
 set g_bTacviewRealTime 1
-set g_bTacviewRealTimeHost 1
+
 ```
 
 ### Features
@@ -84,7 +84,7 @@ netsh advfirewall firewall add rule name="Falcon-PAD" dir=in action=allow protoc
 **Config BMS** — ajouter dans `Falcon BMS User.cfg` :
 ```
 set g_bTacviewRealTime 1
-set g_bTacviewRealTimeHost 1
+
 ```
 
 ### Fonctionnalités
