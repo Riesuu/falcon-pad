@@ -678,8 +678,8 @@ class BMSSharedMemory:
                     _bl, _bn = bms_to_latlon(bx, by)
                     bull_lat = float(_bl)
                     bull_lon = float(_bn)
-                    # Sanity check — Korea theater
-                    if not (30.0 <= bull_lat <= 45.0 and 118.0 <= bull_lon <= 135.0):
+                    # Sanity check — théâtre actif (dynamique)
+                    if not in_theater_bbox(bull_lat, bull_lon):
                         bull_lat = bull_lon = None
             except Exception:
                 pass
@@ -1168,7 +1168,7 @@ def _parse_ini_file(path: str) -> dict:
                                 name_ppt = parts[4].strip() if len(parts) > 4 else ""
                                 try:    ppt_num = 56 + int(kl.replace("ppt_", "").strip())
                                 except: ppt_num = 56 + len(threats)
-                                if 30.0 <= lat <= 44.0 and 120.0 <= lon <= 135.0:
+                                if in_theater_bbox(lat, lon):
                                     threats.append({"lat": lat, "lon": lon, "name": name_ppt,
                                                     "range_nm": range_nm, "range_m": range_m,
                                                     "num": ppt_num, "index": len(threats)})
