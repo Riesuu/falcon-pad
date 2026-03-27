@@ -68,7 +68,7 @@ CONFIG_FILE  = os.path.join(_CONFIG_DIR, "falcon_pad_config.json")
 for _d in (ASSETS_DIR, LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
     os.makedirs(_d, exist_ok=True)
 
-LOG_FILE = os.path.join(LOG_DIR, f"falcon_pad_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+LOG_FILE = os.path.join(LOG_DIR, "falcon_pad.log")
 
 # ── Config persistante ───────────────────────────────────────────
 import json as _json
@@ -88,8 +88,9 @@ def _load_config() -> dict:
             cfg = dict(_DEFAULT_CONFIG)
             cfg.update({k: v for k, v in saved.items() if k in _DEFAULT_CONFIG})
             return cfg
-    except Exception:
-        pass
+    except Exception as e:
+        import logging as _lg
+        _lg.getLogger(__name__).warning(f"config load error: {e}")
     return dict(_DEFAULT_CONFIG)
 
 def _save_config(cfg: dict) -> None:
