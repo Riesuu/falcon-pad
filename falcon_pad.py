@@ -1085,7 +1085,7 @@ async def upload_mission(file: UploadFile = File(...)):
                                 name_ppt=parts[4].strip() if len(parts)>4 else ""
                                 try:    ppt_num = 56 + int(key.lower().replace("ppt_","").strip())
                                 except: ppt_num = 56 + len(threats)
-                                # Ignorer les PPTs hors du théâtre Korea (IPs hors zone, etc.)
+                                # Ignorer les PPTs hors du théâtre actif (IPs hors zone, etc.)
                                 if in_theater_bbox(lat, lon):
                                     threats.append({"lat":lat,"lon":lon,"name":name_ppt,"range_nm":range_nm,"range_m":range_m,"num":ppt_num,"index":len(threats)})
                             else:                       route.append({"lat":lat,"lon":lon,"alt":z,"index":len(route)})
