@@ -31,7 +31,7 @@ function connectWS(){
   ws.onopen=()=>{
     console.log('[ws] connected — resyncing...');
     // Resync state after reconnect (BMS may have restarted)
-    if(typeof loadMission==='function') loadMission();
+    if(typeof loadMission==='function') loadMission(true); // noSetView on reconnect
     if(typeof _initTheater==='function') _initTheater();
   };
   ws.onclose=()=>setTimeout(connectWS,2000);

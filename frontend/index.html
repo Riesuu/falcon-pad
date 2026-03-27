@@ -234,72 +234,69 @@
       <span class="sp-hint">Position update rate (ms). 100 = smooth, 500 = eco.</span>
     </div>
     <div class="sp-divider"></div>
-    <!-- Couleurs & tailles des éléments carte -->
     <div class="sp-row">
       <label class="sp-label">MAP ELEMENT COLORS & SIZES</label>
 
+      <!-- ── STEERPOINTS ── -->
+      <div class="sp-group-label">STEERPOINTS</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">DRAWING</span>
-        <input type="color" class="sp-cpick" id="sp-c-draw" value="#3b82f6" oninput="onElemColor('draw',this.value)">
-        <input type="range" class="sp-slider" id="sp-s-draw" min="1" max="8" step="0.5" value="2" oninput="onElemSize('draw',this.value)">
-        <span class="sp-sval" id="sp-sv-draw">2</span>
-      </div>
-
-      <div class="sp-elem-row">
-        <span class="sp-elem-lbl">STEERPOINTS</span>
+        <span class="sp-elem-lbl">Ligne</span>
         <input type="color" class="sp-cpick" id="sp-c-stpt" value="#e2e8f0" oninput="onElemColor('stpt',this.value)">
-        <input type="range" class="sp-slider" id="sp-s-stpt" min="2" max="12" step="1" value="5" oninput="onElemSize('stpt',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-stpt_line" min="1" max="10" step="0.5" value="2" oninput="onElemSize('stpt_line',this.value)">
+        <span class="sp-sval" id="sp-sv-stpt_line">2</span>
+      </div>
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">Points</span>
+        <div></div>
+        <input type="range" class="sp-slider" id="sp-s-stpt" min="2" max="30" step="1" value="5" oninput="onElemSize('stpt',this.value)">
         <span class="sp-sval" id="sp-sv-stpt">5</span>
       </div>
 
+      <!-- ── FLIGHT PLAN ── -->
+      <div class="sp-group-label">FLIGHT PLAN</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">FLIGHT PLAN</span>
+        <span class="sp-elem-lbl">Ligne</span>
         <input type="color" class="sp-cpick" id="sp-c-fplan" value="#f59e0b" oninput="onElemColor('fplan',this.value)">
-        <input type="range" class="sp-slider" id="sp-s-fplan" min="2" max="12" step="1" value="4" oninput="onElemSize('fplan',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-fplan_line" min="1" max="10" step="0.5" value="2" oninput="onElemSize('fplan_line',this.value)">
+        <span class="sp-sval" id="sp-sv-fplan_line">2</span>
+      </div>
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">Points</span>
+        <div></div>
+        <input type="range" class="sp-slider" id="sp-s-fplan" min="2" max="30" step="1" value="4" oninput="onElemSize('fplan',this.value)">
         <span class="sp-sval" id="sp-sv-fplan">4</span>
       </div>
 
+      <!-- ── PPT THREATS ── -->
+      <div class="sp-group-label">PPT THREATS</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">PPT THREATS</span>
+        <span class="sp-elem-lbl">Cercle</span>
         <input type="color" class="sp-cpick" id="sp-c-ppt" value="#ef4444" oninput="onElemColor('ppt',this.value)">
-        <input type="range" class="sp-slider" id="sp-s-ppt" min="0.5" max="5" step="0.5" value="1.2" oninput="onElemSize('ppt',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-ppt" min="0.5" max="10" step="0.5" value="1.2" oninput="onElemSize('ppt',this.value)">
         <span class="sp-sval" id="sp-sv-ppt">1.2</span>
       </div>
-
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">BULLSEYE</span>
-        <input type="color" class="sp-cpick" id="sp-c-bull" value="#f97316" oninput="onElemColor('bull',this.value)">
-        <input type="range" class="sp-slider" id="sp-s-bull" min="4" max="20" step="1" value="8" oninput="onElemSize('bull',this.value)">
-        <span class="sp-sval" id="sp-sv-bull">8</span>
+        <span class="sp-elem-lbl">Point</span>
+        <div></div>
+        <input type="range" class="sp-slider" id="sp-s-ppt_dot" min="2" max="20" step="1" value="5" oninput="onElemSize('ppt_dot',this.value)">
+        <span class="sp-sval" id="sp-sv-ppt_dot">5</span>
       </div>
 
+      <!-- ── AUTRES ── -->
+      <div class="sp-group-label">AUTRES</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">MK MARKS</span>
+        <span class="sp-elem-lbl">Bullseye</span>
+        <input type="color" class="sp-cpick" id="sp-c-bull" value="#f97316" oninput="onElemColor('bull',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-bull" min="4" max="50" step="1" value="8" oninput="onElemSize('bull',this.value)">
+        <span class="sp-sval" id="sp-sv-bull">8</span>
+      </div>
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">MK Marks</span>
         <input type="color" class="sp-cpick" id="sp-c-mk" value="#fbbf24" oninput="onElemColor('mk',this.value)">
-        <input type="range" class="sp-slider" id="sp-s-mk" min="1" max="6" step="0.5" value="2.5" oninput="onElemSize('mk',this.value)">
+        <input type="range" class="sp-slider" id="sp-s-mk" min="1" max="15" step="0.5" value="2.5" oninput="onElemSize('mk',this.value)">
         <span class="sp-sval" id="sp-sv-mk">2.5</span>
       </div>
 
-      <div class="sp-elem-row">
-        <span class="sp-elem-lbl">HSD L1</span>
-        <input type="color" class="sp-cpick" id="sp-c-hsd-l1" value="#4ade80" oninput="onHsdColor('l1',this.value)">
-        <span class="sp-sval" style="grid-column:3/5">Line 1</span>
-      </div>
-      <div class="sp-elem-row">
-        <span class="sp-elem-lbl">HSD L2</span>
-        <input type="color" class="sp-cpick" id="sp-c-hsd-l2" value="#60a5fa" oninput="onHsdColor('l2',this.value)">
-        <span class="sp-sval" style="grid-column:3/5">Line 2</span>
-      </div>
-      <div class="sp-elem-row">
-        <span class="sp-elem-lbl">HSD L3</span>
-        <input type="color" class="sp-cpick" id="sp-c-hsd-l3" value="#f59e0b" oninput="onHsdColor('l3',this.value)">
-        <span class="sp-sval" style="grid-column:3/5">Line 3</span>
-      </div>
-      <div class="sp-elem-row">
-        <span class="sp-elem-lbl">HSD L4</span>
-        <input type="color" class="sp-cpick" id="sp-c-hsd-l4" value="#f87171" oninput="onHsdColor('l4',this.value)">
-        <span class="sp-sval" style="grid-column:3/5">Line 4</span>
-      </div>
     </div>
 
   </div>

@@ -57,7 +57,7 @@ document.addEventListener('click',e=>{
 // ══════════════════════════════════════════════════════════════════
 let _settingsOpen = false;
 // ── Couleurs & tailles par élément ──────────────────────────────
-const _ELEM_KEYS = ['draw','stpt','fplan','ppt','bull','mk'];
+const _ELEM_KEYS = ['stpt','fplan','ppt','bull','mk'];
 const _HSD_KEYS  = ['l1','l2','l3','l4'];
 
 function onHsdColor(key, hex) {
@@ -65,7 +65,7 @@ function onHsdColor(key, hex) {
   if(typeof window[varName] !== 'undefined') window[varName] = hex;
   saveUiPref({['color_hsd_'+key]: hex});
   // Redraw HSD lines immédiatement
-  if(typeof _lastHsdLines !== 'undefined') updateHsdLines(_lastHsdLines);
+  if(typeof _lastHsdLines !== 'undefined' && typeof updateHsdLines === 'function') updateHsdLines(_lastHsdLines);
 }
 
 function onElemColor(key, hex) {
@@ -76,8 +76,8 @@ function onElemColor(key, hex) {
     document.querySelectorAll('.c-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.color===hex));
   }
   saveUiPref({['color_'+key]: hex});
-  // Redraw live
-  _redrawElem(key);
+  // Couleur : mise à jour directe des layers existants (pas de redraw)
+  if(typeof window._setMapColor === 'function') window._setMapColor(key, hex);
 }
 
 function onElemSize(key, val) {
@@ -87,8 +87,8 @@ function onElemSize(key, val) {
   const lbl = document.getElementById('sp-sv-'+key);
   if(lbl) lbl.textContent = v;
   saveUiPref({['size_'+key]: v});
-  // Redraw live
-  _redrawElem(key);
+  // Taille : recréation nécessaire
+  if(typeof window._setMapSize === 'function') window._setMapSize(key, v);
 }
 
 function _redrawElem(key) {
@@ -140,6 +140,7 @@ async function loadSettings() {
 function toggleSettings() {
   _settingsOpen = !_settingsOpen;
   document.getElementById('settingsPanel').classList.toggle('open', _settingsOpen);
+  if(typeof window._setSettingsOpen === 'function') window._setSettingsOpen(_settingsOpen);
   if (_settingsOpen) loadSettings();
 }
 
@@ -714,17 +715,19 @@ function buildGpsSteers(route) {
   });
 }
 
-// Hook into existing updateAircraft and loadMission
-const _origUpdateAircraft = updateAircraft;
-window.updateAircraft = function(d) {
-  _origUpdateAircraft(d);
-  _lastAircraftData = d;
-  if (_activeTab === 'gps') refreshGpsPanel();
-};
+// Hook into existing updateAircraft and loadMission (map.js doit être chargé avant)
+if(typeof updateAircraft !== 'undefined') {
+  const _origUpdateAircraft = updateAircraft;
+  window.updateAircraft = function(d) {
+    _origUpdateAircraft(d);
+    _lastAircraftData = d;
+    if (_activeTab === 'gps') refreshGpsPanel();
+  };
+}
 
-const _origLoadMission = loadMission;
-window.loadMission = function() {
-  _origLoadMission();
+const _origLoadMission = typeof loadMission !== 'undefined' ? loadMission : ()=>{};
+window.loadMission = function(noSetView=false) {
+  _origLoadMission(noSetView);
   // Rebuild steerpoints after data loads
   setTimeout(() => {
     fetch('/api/mission').then(r=>r.json()).then(md => {
@@ -753,7 +756,7 @@ map.on('click', () => {
       console.log('[INIT] ini/status attempt',attempt+1,':',JSON.stringify(s));
       if(s.loaded&&s.mtime&&s.mtime!==_lastIniMtime){
         _lastIniFile=s.file;_lastIniMtime=s.mtime;
-        loadMission();
+        loadMission(true);
         console.log('[INIT] Mission loaded:',s.file,'mtime:',s.mtime);
         return;
       }

@@ -134,7 +134,10 @@ const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82
 let activeColor='#3b82f6';
 
 // ── Couleurs & tailles configurables (chargées depuis ui_prefs) ──
-let C_DRAW  = '#3b82f6'; let S_DRAW  = 2;    // dessin/règle/flèches
+let C_DRAW  = '#3b82f6';
+let S_STPT_LINE  = 2;   // épaisseur lignes steerpoints
+let S_FPLAN_LINE = 2;   // épaisseur lignes flight plan
+// outils dessin (règle/flèches) : poids fixe 2
 // HSD line colors (L1-L4) — valeurs par défaut cohérentes avec stringdata.py
 let C_HSD_L1 = '#4ade80';  // vert
 let C_HSD_L2 = '#60a5fa';  // bleu
@@ -142,7 +145,7 @@ let C_HSD_L3 = '#f59e0b';  // ambre
 let C_HSD_L4 = '#f87171';  // rouge
 let C_STPT  = '#e2e8f0'; let S_STPT  = 5;    // steerpoints
 let C_FPLAN = '#f59e0b'; let S_FPLAN = 4;    // flight plan
-let C_PPT   = '#ef4444'; let S_PPT   = 1.2;  // PPT cercles
+let C_PPT   = '#ef4444'; let S_PPT   = 1.2; let S_PPT_DOT = 5;  // PPT
 let C_BULL  = '#fbbf24'; let S_BULL  = 8;    // bullseye
 let C_MK    = '#fbbf24'; let S_MK    = 2.5;  // MK markpoints
 
@@ -152,7 +155,8 @@ function applyUiPrefs(p) {
   if(p.color_hsd_l3) C_HSD_L3 = p.color_hsd_l3;
   if(p.color_hsd_l4) C_HSD_L4 = p.color_hsd_l4;
   if(p.color_draw)  C_DRAW  = p.color_draw;
-  if(p.size_draw)   S_DRAW  = p.size_draw;
+  if(p.size_stpt_line)  S_STPT_LINE  = p.size_stpt_line;
+  if(p.size_fplan_line) S_FPLAN_LINE = p.size_fplan_line;
   if(p.color_stpt)  C_STPT  = p.color_stpt;
   if(p.size_stpt)   S_STPT  = p.size_stpt;
   if(p.color_fplan) C_FPLAN = p.color_fplan;
@@ -371,7 +375,7 @@ function updateRuler(to){
   if(!rStart)return;
   if(rLine)map.removeLayer(rLine);
   if(rLabel)map.removeLayer(rLabel);
-  rLine=L.polyline([rStart,to],{color:activeColor,weight:S_DRAW,opacity:.8,dashArray:'8 4'}).addTo(map);
+  rLine=L.polyline([rStart,to],{color:activeColor,weight:2,opacity:.8,dashArray:'8 4'}).addTo(map);
   const dist=map.distance(rStart,to);
   const nm=dist/1852,km=dist/1000;
   const φ1=rStart.lat*Math.PI/180,φ2=to.lat*Math.PI/180;
@@ -422,7 +426,7 @@ function updateArrow(to){
   if(!aStart)return;
   if(aLine)map.removeLayer(aLine);
   if(aHead)map.removeLayer(aHead);
-  aLine=L.polyline([aStart,to],{color:activeColor,weight:S_DRAW,opacity:.85}).addTo(map);
+  aLine=L.polyline([aStart,to],{color:activeColor,weight:2,opacity:.85}).addTo(map);
   const [p1,p2]=arrowHeadPts(aStart,to,map.getZoom());
   aHead=L.polygon([to,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:.9,weight:1.5}).addTo(map);
 }
@@ -441,7 +445,7 @@ map.on('click',e=>{
     aStart=e.latlng;
     aDot=L.circleMarker(aStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
   } else {
-    const fLine=L.polyline([aStart,e.latlng],{color:activeColor,weight:S_DRAW,opacity:.9}).addTo(map);
+    const fLine=L.polyline([aStart,e.latlng],{color:activeColor,weight:2,opacity:.9}).addTo(map);
     drawMarkers.push(fLine);
     const [p1,p2]=arrowHeadPts(aStart,e.latlng,map.getZoom());
     const fHead=L.polygon([e.latlng,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);
@@ -469,7 +473,7 @@ map.on('mousemove',e=>{if(arrowActive&&aStart)updateArrow(e.latlng);});
     const t=e.touches[0],rect=mc.getBoundingClientRect();
     const pt=map.containerPointToLatLng(L.point(t.clientX-rect.left,t.clientY-rect.top));
     if(rulerActive&&!arrowActive){if(!rStart){rStart=pt;rDot=L.circleMarker(rStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{clearRuler();}e.preventDefault();}
-    if(arrowActive&&!rulerActive){if(!aStart){aStart=pt;aDot=L.circleMarker(aStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{const fL=L.polyline([aStart,pt],{color:activeColor,weight:S_DRAW,opacity:.9}).addTo(map);drawMarkers.push(fL);const[p1,p2]=arrowHeadPts(aStart,pt,map.getZoom());const fH=L.polygon([pt,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);drawMarkers.push(fH);const d=map.distance(aStart,pt)/1852;if(d>0.05){const mid=L.latLng((aStart.lat+pt.lat)/2,(aStart.lng+pt.lng)/2);const lm=L.marker(mid,{icon:L.divIcon({html:'<div class="arrow-label" style="color:'+activeColor+'">'+d.toFixed(1)+' NM</div>',className:'',iconSize:[70,20],iconAnchor:[35,20]})}).addTo(map);drawMarkers.push(lm);}clearArrow();}e.preventDefault();}
+    if(arrowActive&&!rulerActive){if(!aStart){aStart=pt;aDot=L.circleMarker(aStart,{radius:5,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);}else{const fL=L.polyline([aStart,pt],{color:activeColor,weight:2,opacity:.9}).addTo(map);drawMarkers.push(fL);const[p1,p2]=arrowHeadPts(aStart,pt,map.getZoom());const fH=L.polygon([pt,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);drawMarkers.push(fH);const d=map.distance(aStart,pt)/1852;if(d>0.05){const mid=L.latLng((aStart.lat+pt.lat)/2,(aStart.lng+pt.lng)/2);const lm=L.marker(mid,{icon:L.divIcon({html:'<div class="arrow-label" style="color:'+activeColor+'">'+d.toFixed(1)+' NM</div>',className:'',iconSize:[70,20],iconAnchor:[35,20]})}).addTo(map);drawMarkers.push(lm);}clearArrow();}e.preventDefault();}
   },{passive:false});
   mc.addEventListener('touchmove',function(e){if(e.touches.length!==1)return;const t=e.touches[0],rect=mc.getBoundingClientRect();const pt=map.containerPointToLatLng(L.point(t.clientX-rect.left,t.clientY-rect.top));if(rulerActive&&rStart){updateRuler(pt);e.preventDefault();}if(arrowActive&&aStart){updateArrow(pt);e.preventDefault();}},{passive:false});
 })();
@@ -610,7 +614,7 @@ document.getElementById('fileInput')?.addEventListener('change',async e=>{
   const fd=new FormData();fd.append('file',file);
   const r=await fetch('/api/upload',{method:'POST',body:fd});
   if(r.ok){
-    loadMission();
+    loadMission(true); // noSetView — garder la vue courante
   } else {
     let errMsg = 'INI import failed';
     try{ const d=await r.json(); errMsg=d.message||d.detail||errMsg; }catch(e){}
@@ -630,7 +634,7 @@ setInterval(async()=>{
     const s=await(await fetch('/api/ini/status')).json();
     if(s.loaded&&s.mtime&&s.mtime!==_lastIniMtime){
       _lastIniFile=s.file;_lastIniMtime=s.mtime;
-      loadMission();
+      loadMission(true); // noSetView
       console.log('[INI] Auto-loaded:',s.file,'mtime:',s.mtime);
       const n=document.createElement('div');n.className='bms-toast';
       n.textContent='✦ MISSION LOADED — '+s.file;
@@ -639,18 +643,114 @@ setInterval(async()=>{
   }catch(e){}
 },3000);
 
-// ── Mission data cache (évite refetch sur redraw couleurs) ──────────────
+// ── Mission data cache ───────────────────────────────────────────────────
 let _missionCache = null;
 
-function _redrawMission(){
+function _redrawMission() {
+  // Re-render mission depuis le cache sans fetch ni setView
   if(!_missionCache) return;
   const d = _missionCache;
   missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});
   missionMarkers=[];pptLabelMarkers=[];
   pptCircles.forEach(p=>{try{map.removeLayer(p)}catch(e){}});pptCircles=[];
-  // Re-render depuis le cache sans fetch ni setView
   _renderMissionData(d, true);
 }
+
+function _applyColorLive(key, hex) {
+  switch(key) {
+    case 'draw':
+      C_DRAW = hex; activeColor = hex;
+      break;
+    case 'stpt':
+      C_STPT = hex;
+      missionMarkers.forEach(m => {
+        if(m._fpType==='stpt') try{m.setStyle({color:hex,fillColor:hex});}catch(e){}
+        if(m._fpType==='stpt_line') try{m.setStyle({color:hex});}catch(e){}
+      });
+      break;
+    case 'fplan':
+      C_FPLAN = hex;
+      missionMarkers.forEach(m => {
+        if(m._fpType==='fplan') try{m.setStyle({color:hex,fillColor:hex});}catch(e){}
+        if(m._fpType==='fplan_line') try{m.setStyle({color:hex});}catch(e){}
+      });
+      break;
+    case 'ppt':
+      C_PPT = hex;
+      pptCircles.forEach(c=>{try{c.setStyle({color:hex,fillColor:hex});}catch(e){}});
+      missionMarkers.forEach(m=>{if(m._fpType==='ppt')try{m.setStyle({fillColor:hex});}catch(e){}});
+      break;
+    case 'ppt':
+      C_PPT = hex;
+      pptCircles.forEach(c=>{try{c.setStyle({color:hex,fillColor:hex});}catch(e){}});
+      missionMarkers.forEach(m=>{if(m._fpType==='ppt')try{m.setStyle({fillColor:hex});}catch(e){}});
+      break;
+    case 'bull':
+      C_BULL = hex;
+      if(_bullLat!=null) updateBullseye(_bullLat,_bullLon);
+      break;
+    case 'mk':
+      C_MK = hex;
+      if(_lastMkMarks) updateMkMarkpoints(_lastMkMarks);
+      break;
+  }
+}
+
+function _applySizeLive(key) {
+  switch(key) {
+    case 'stpt_line':
+      missionMarkers.forEach(m=>{if(m._fpType==='stpt_line')try{m.setStyle({weight:S_STPT_LINE});}catch(e){}});
+      break;
+    case 'stpt':
+      missionMarkers.forEach(m=>{if(m._fpType==='stpt')try{m.setRadius(S_STPT);}catch(e){}});
+      break;
+    case 'fplan_line':
+      missionMarkers.forEach(m=>{if(m._fpType==='fplan_line')try{m.setStyle({weight:S_FPLAN_LINE});}catch(e){}});
+      break;
+    case 'fplan':
+      missionMarkers.forEach(m=>{if(m._fpType==='fplan')try{m.setRadius(S_FPLAN);}catch(e){}});
+      break;
+    case 'ppt':
+      pptCircles.forEach(c=>{try{c.setStyle({weight:S_PPT});}catch(e){}});
+      break;
+    case 'ppt_dot':
+      missionMarkers.forEach(m=>{if(m._fpType==='ppt')try{m.setRadius(S_PPT_DOT);}catch(e){}});
+      break;
+    case 'bull':
+      if(_bullLat!=null) updateBullseye(_bullLat,_bullLon);
+      break;
+    case 'mk':
+      if(_lastMkMarks) updateMkMarkpoints(_lastMkMarks);
+      break;
+  }
+}
+
+// ── Expose setters to panels.js (let vars not accessible via window) ─────
+window._setMapColor = _applyColorLive;
+window._setMapSize  = function(key, v) {
+  switch(key) {
+    case 'stpt':       S_STPT       = v; break;
+    case 'stpt_line':  S_STPT_LINE  = v; break;
+    case 'fplan':      S_FPLAN      = v; break;
+    case 'fplan_line': S_FPLAN_LINE = v; break;
+    case 'ppt':        S_PPT        = v; break;
+    case 'ppt_dot':    S_PPT_DOT    = v; break;
+    case 'bull':       S_BULL       = v; break;
+    case 'mk':         S_MK         = v; break;
+  }
+  _applySizeLive(key);
+};
+window._setHsdColor = function(key, hex) {
+  switch(key) {
+    case 'l1': C_HSD_L1 = hex; break;
+    case 'l2': C_HSD_L2 = hex; break;
+    case 'l3': C_HSD_L3 = hex; break;
+    case 'l4': C_HSD_L4 = hex; break;
+  }
+  if(_lastHsdLines && _lastHsdLines.length) updateHsdLines(_lastHsdLines);
+};
+var _settingsPanelOpen = false;
+window._setSettingsOpen = v => { _settingsPanelOpen = v; };
 
 function loadMission(noSetView=false){
   missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});missionMarkers=[];pptLabelMarkers=[];
@@ -664,9 +764,9 @@ function loadMission(noSetView=false){
 function _renderMissionData(d, noSetView=false){
     if(d.flightplan?.length){
       const c=C_FPLAN;
-      missionMarkers.push(L.polyline(d.flightplan.map(p=>[p.lat,p.lon]),{color:c,weight:S_DRAW,opacity:.8}).addTo(map));
+      const _fl=L.polyline(d.flightplan.map(p=>[p.lat,p.lon]),{color:c,weight:S_FPLAN_LINE,opacity:.8});_fl._fpType='fplan_line';_fl.addTo(map);missionMarkers.push(_fl);
       d.flightplan.forEach((p,i)=>{
-        missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:S_FPLAN,color:c,fillColor:c,fillOpacity:.85,weight:2}).addTo(map));
+        const _fm=L.circleMarker([p.lat,p.lon],{radius:S_FPLAN,color:c,fillColor:c,fillOpacity:.85,weight:2});_fm._fpType='fplan';_fm.addTo(map);missionMarkers.push(_fm);
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
           html:`<div style="font-family:'Consolas','Courier New',monospace;color:${c};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
@@ -675,10 +775,11 @@ function _renderMissionData(d, noSetView=false){
     }
     if(d.route?.length){
       const c=C_STPT;
-      for(let i=0;i<d.route.length-1;i++)
-        missionMarkers.push(L.polyline([[d.route[i].lat,d.route[i].lon],[d.route[i+1].lat,d.route[i+1].lon]],{color:c,weight:S_DRAW}).addTo(map));
+      for(let i=0;i<d.route.length-1;i++){
+        const _sl=L.polyline([[d.route[i].lat,d.route[i].lon],[d.route[i+1].lat,d.route[i+1].lon]],{color:c,weight:S_STPT_LINE});_sl._fpType='stpt_line';_sl.addTo(map);missionMarkers.push(_sl);
+      }
       d.route.forEach((p,i)=>{
-        missionMarkers.push(L.circleMarker([p.lat,p.lon],{radius:S_STPT,color:c,fillColor:c,fillOpacity:.9,weight:2}).addTo(map));
+        const _sm=L.circleMarker([p.lat,p.lon],{radius:S_STPT,color:c,fillColor:c,fillOpacity:.9,weight:2});_sm._fpType='stpt';_sm.addTo(map);missionMarkers.push(_sm);
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
           html:`<div style="font-family:'Consolas','Courier New',monospace;color:${C_STPT};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[16,12],iconAnchor:[-5,6]
@@ -692,7 +793,7 @@ function _renderMissionData(d, noSetView=false){
         const circ=L.circle([t.lat,t.lon],{radius:(t.range_m||t.range_nm*1852),color:c,fillColor:c,fillOpacity:.05,weight:S_PPT,dashArray:'5 4'});
         if(document.getElementById('pptBtn')?.classList.contains('active'))circ.addTo(map);
         pptCircles.push(circ);
-        missionMarkers.push(L.circleMarker([t.lat,t.lon],{radius:5,color:'#fff',fillColor:c,fillOpacity:1,weight:2}).addTo(map));
+        const _pm=L.circleMarker([t.lat,t.lon],{radius:S_PPT_DOT,color:'#fff',fillColor:c,fillOpacity:1,weight:2});_pm._fpType='ppt';_pm.addTo(map);missionMarkers.push(_pm);
         const nm=t.name?t.name.trim():'';
         const rng=t.range_nm>0?t.range_nm+'NM':'';
         const pptNum=(t.num!==undefined)?t.num:t.index;
