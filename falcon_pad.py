@@ -130,12 +130,17 @@ _DEFAULT_UI_PREFS: dict = {
     "runways_visible":  True,
     "ap_name_visible":  False,
     # Couleurs & tailles éléments carte
-    "color_draw":   "#3b82f6", "size_draw":  2,
+    "color_draw":   "#3b82f6",
     "color_stpt":   "#e2e8f0", "size_stpt":  5,
+    "size_stpt_line": 2,
     "color_fplan":  "#f59e0b", "size_fplan": 4,
-    "color_ppt":    "#ef4444", "size_ppt":   1.2,
+    "size_fplan_line": 2,
+    "color_ppt":    "#ef4444", "size_ppt":   1.2, "size_ppt_dot":   5,
     "color_bull":   "#f97316", "size_bull":  8,
     "color_mk":     "#fbbf24", "size_mk":    2.5,
+    "size_stpt_line":  2,
+    "size_fplan_line": 2,
+    "size_ppt_dot":    5,
     # Couleurs lignes HSD L1-L4
     "color_hsd_l1": "#4ade80",
     "color_hsd_l2": "#60a5fa",
@@ -155,8 +160,10 @@ def _load_ui_prefs() -> dict:
             prefs.update({k: v for k, v in saved.items() if k in _DEFAULT_UI_PREFS})
             logger.info(f"ui_prefs: chargé depuis {UI_PREFS_FILE}")
             return prefs
-        logger.info("ui_prefs: fichier absent — valeurs par défaut")
-        return dict(_DEFAULT_UI_PREFS)
+        logger.info("ui_prefs: fichier absent — création avec valeurs par défaut")
+        defaults = dict(_DEFAULT_UI_PREFS)
+        _save_ui_prefs(defaults)   # crée le fichier tout de suite
+        return defaults
     except Exception as e:
         logger.error(f"ui_prefs: erreur chargement: {e}", exc_info=True)
         return dict(_DEFAULT_UI_PREFS)
@@ -733,11 +740,11 @@ app   = FastAPI(title="Falcon-Pad", lifespan=lifespan)
 
 # ── Frontend statique ─────────────────────────────────────────────
 FRONTEND_DIR = os.path.join(app_info.BASE_DIR, "frontend")
-if os.path.isdir(FRONTEND_DIR):
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-    logger.info(f"StaticFiles monté : {FRONTEND_DIR}")
-else:
-    logger.warning(f"Dossier frontend introuvable : {FRONTEND_DIR}")
+if not os.path.isdir(FRONTEND_DIR):
+    # Fallback: même dossier que le script
+    FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+logger.info(f"StaticFiles monté : {FRONTEND_DIR}")
 
 # ── Middleware — accès local uniquement (localhost + LAN) ────────
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -1280,6 +1287,9 @@ class UiPrefsModel(BaseModel):
     size_bull:        Optional[float] = None
     color_mk:         Optional[str]   = None
     size_mk:          Optional[float] = None
+    size_stpt_line:   Optional[float] = None
+    size_fplan_line:  Optional[float] = None
+    size_ppt_dot:     Optional[float] = None
     color_hsd_l1:     Optional[str]   = None
     color_hsd_l2:     Optional[str]   = None
     color_hsd_l3:     Optional[str]   = None
@@ -1307,9 +1317,9 @@ async def ui_prefs_save(p: UiPrefsModel):
         if val is not None:
             UI_PREFS[key] = val
     # Sizes
-    for key in ("size_draw","size_stpt","size_fplan","size_ppt","size_bull","size_mk"):
+    for key in ("size_draw","size_stpt","size_stpt_line","size_fplan","size_fplan_line","size_ppt","size_ppt_dot","size_bull","size_mk"):
         val = getattr(p, key)
-        if val is not None and 0.5 <= val <= 20:
+        if val is not None and 0.5 <= val <= 50:
             UI_PREFS[key] = val
     # JSON strings (validated)
     for key in ("rwy_offsets","annotations"):
