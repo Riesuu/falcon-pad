@@ -57,7 +57,7 @@ document.addEventListener('click',e=>{
 // ══════════════════════════════════════════════════════════════════
 let _settingsOpen = false;
 // ── Couleurs & tailles par élément ──────────────────────────────
-const _ELEM_KEYS = ['stpt','fplan','ppt','bull','mk'];
+const _ELEM_KEYS = ['stpt','fplan','ppt'];
 const _HSD_KEYS  = ['l1','l2','l3','l4'];
 
 function onHsdColor(key, hex) {
@@ -69,7 +69,7 @@ function onHsdColor(key, hex) {
 }
 
 function onElemColor(key, hex) {
-  const varMap = {draw:'C_DRAW',stpt:'C_STPT',fplan:'C_FPLAN',ppt:'C_PPT',bull:'C_BULL',mk:'C_MK'};
+  const varMap = {draw:'C_DRAW',stpt:'C_STPT',fplan:'C_FPLAN',ppt:'C_PPT'};
   if(typeof window[varMap[key]] !== 'undefined') window[varMap[key]] = hex;
   if(key==='draw' && typeof activeColor!=='undefined') {
     activeColor = hex;
@@ -82,7 +82,7 @@ function onElemColor(key, hex) {
 
 function onElemSize(key, val) {
   const v = parseFloat(val);
-  const varMap = {draw:'S_DRAW',stpt:'S_STPT',fplan:'S_FPLAN',ppt:'S_PPT',bull:'S_BULL',mk:'S_MK'};
+  const varMap = {draw:'S_DRAW',stpt:'S_STPT',fplan:'S_FPLAN',ppt:'S_PPT'};
   if(typeof window[varMap[key]] !== 'undefined') window[varMap[key]] = v;
   const lbl = document.getElementById('sp-sv-'+key);
   if(lbl) lbl.textContent = v;
@@ -99,14 +99,6 @@ function _redrawElem(key) {
     case 'ppt':
       // Use cached redraw — no fetch, no setView
       if(typeof _redrawMission === 'function') _redrawMission();
-      break;
-    case 'bull':
-      // Redraw bullseye icon only
-      if(typeof _bullLat !== 'undefined' && _bullLat != null)
-        if(typeof updateBullseye === 'function') updateBullseye(_bullLat, _bullLon);
-      break;
-    case 'mk':
-      if(typeof _lastMkMarks !== 'undefined') updateMkMarkpoints(_lastMkMarks);
       break;
   }
 }

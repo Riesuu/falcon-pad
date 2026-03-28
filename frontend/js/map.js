@@ -163,10 +163,6 @@ function applyUiPrefs(p) {
   if(p.size_fplan)  S_FPLAN = p.size_fplan;
   if(p.color_ppt)   C_PPT   = p.color_ppt;
   if(p.size_ppt)    S_PPT   = p.size_ppt;
-  if(p.color_bull)  C_BULL  = p.color_bull;
-  if(p.size_bull)   S_BULL  = p.size_bull;
-  if(p.color_mk)    C_MK    = p.color_mk;
-  if(p.size_mk)     S_MK    = p.size_mk;
   if(p.active_color && COLORS.includes(p.active_color)) {
     activeColor = p.active_color;
     C_DRAW = p.active_color;
@@ -685,14 +681,6 @@ function _applyColorLive(key, hex) {
       pptCircles.forEach(c=>{try{c.setStyle({color:hex,fillColor:hex});}catch(e){}});
       missionMarkers.forEach(m=>{if(m._fpType==='ppt')try{m.setStyle({fillColor:hex});}catch(e){}});
       break;
-    case 'bull':
-      C_BULL = hex;
-      if(_bullLat!=null) updateBullseye(_bullLat,_bullLon);
-      break;
-    case 'mk':
-      C_MK = hex;
-      if(_lastMkMarks) updateMkMarkpoints(_lastMkMarks);
-      break;
   }
 }
 
@@ -716,12 +704,6 @@ function _applySizeLive(key) {
     case 'ppt_dot':
       missionMarkers.forEach(m=>{if(m._fpType==='ppt')try{m.setRadius(S_PPT_DOT);}catch(e){}});
       break;
-    case 'bull':
-      if(_bullLat!=null) updateBullseye(_bullLat,_bullLon);
-      break;
-    case 'mk':
-      if(_lastMkMarks) updateMkMarkpoints(_lastMkMarks);
-      break;
   }
 }
 
@@ -735,8 +717,6 @@ window._setMapSize  = function(key, v) {
     case 'fplan_line': S_FPLAN_LINE = v; break;
     case 'ppt':        S_PPT        = v; break;
     case 'ppt_dot':    S_PPT_DOT    = v; break;
-    case 'bull':       S_BULL       = v; break;
-    case 'mk':         S_MK         = v; break;
   }
   _applySizeLive(key);
 };

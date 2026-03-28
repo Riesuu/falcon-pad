@@ -137,8 +137,6 @@ _DEFAULT_UI_PREFS: dict = {
     "color_fplan":  "#f59e0b", "size_fplan": 4,
     "size_fplan_line": 2,
     "color_ppt":    "#ef4444", "size_ppt":   1.2, "size_ppt_dot":   5,
-    "color_bull":   "#f97316", "size_bull":  8,
-    "color_mk":     "#fbbf24", "size_mk":    2.5,
     "size_stpt_line":  2,
     "size_fplan_line": 2,
     "size_ppt_dot":    5,
@@ -1284,10 +1282,6 @@ class UiPrefsModel(BaseModel):
     size_fplan:       Optional[float] = None
     color_ppt:        Optional[str]   = None
     size_ppt:         Optional[float] = None
-    color_bull:       Optional[str]   = None
-    size_bull:        Optional[float] = None
-    color_mk:         Optional[str]   = None
-    size_mk:          Optional[float] = None
     size_stpt_line:   Optional[float] = None
     size_fplan_line:  Optional[float] = None
     size_ppt_dot:     Optional[float] = None
@@ -1304,7 +1298,7 @@ async def ui_prefs_save(p: UiPrefsModel):
     hex_re = r'#[0-9a-fA-F]{6}$'
     # Colors validation
     for key in ("active_color","color_draw","color_stpt","color_fplan",
-                "color_ppt","color_bull","color_mk",
+                "color_ppt",
                 "color_hsd_l1","color_hsd_l2","color_hsd_l3","color_hsd_l4"):
         val = getattr(p, key)
         if val is not None and re.match(hex_re, val):
@@ -1318,7 +1312,7 @@ async def ui_prefs_save(p: UiPrefsModel):
         if val is not None:
             UI_PREFS[key] = val
     # Sizes
-    for key in ("size_draw","size_stpt","size_stpt_line","size_fplan","size_fplan_line","size_ppt","size_ppt_dot","size_bull","size_mk"):
+    for key in ("size_draw","size_stpt","size_stpt_line","size_fplan","size_fplan_line","size_ppt","size_ppt_dot"):
         val = getattr(p, key)
         if val is not None and 0.5 <= val <= 50:
             UI_PREFS[key] = val
