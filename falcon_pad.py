@@ -37,7 +37,7 @@ from stringdata import (read_all_strings, get_mk_markpoints, get_hsd_lines,
 from theaters import (
     bms_to_latlon, in_theater_bbox,
     get_theater, get_theater_name, THEATER_DB,
-    detect_theater_from_coords_multi
+    detect_theater_from_coords_multi, is_theater_detected
 )
 from typing import List, Optional, Dict
 import logging
@@ -135,14 +135,9 @@ _DEFAULT_UI_PREFS: dict = {
     "ap_name_visible":  False,
     # Couleurs & tailles éléments carte
     "color_draw":   "#3b82f6",
-    "color_stpt":   "#e2e8f0", "size_stpt":  5,
-    "size_stpt_line": 2,
-    "color_fplan":  "#f59e0b", "size_fplan": 4,
-    "size_fplan_line": 2,
-    "color_ppt":    "#ef4444", "size_ppt":   1.2, "size_ppt_dot":   5,
-    "size_stpt_line":  2,
-    "size_fplan_line": 2,
-    "size_ppt_dot":    5,
+    "color_stpt":   "#e2e8f0", "size_stpt":  5, "size_stpt_line": 2,
+    "color_fplan":  "#f59e0b", "size_fplan": 4, "size_fplan_line": 2,
+    "color_ppt":    "#ef4444", "size_ppt":   1.2, "size_ppt_dot":  5,
     # Couleurs lignes HSD L1-L4
     "color_hsd_l1": "#4ade80",
     "color_hsd_l2": "#60a5fa",
@@ -452,8 +447,11 @@ def _trtt_client_loop():
                         alt_m = float(alt_s) if alt_s else 0.0
                         hdg = float(yaw_s) % 360.0 if yaw_s else 0.0
 
-                        # Sanity check Corée / zone BMS
-                        if not (20 <= lat <= 50 and 110 <= lon <= 145):
+                        # Sanity check : coordonnées dans le bbox du théâtre actif
+                        _tp = get_theater()
+                        _lat_min, _lat_max, _lon_min, _lon_max = _tp.bbox
+                        if not (_lat_min - 5 <= lat <= _lat_max + 5 and
+                                _lon_min - 5 <= lon <= _lon_max + 5):
                             continue
 
                         with _acmi_lock:
@@ -515,6 +513,7 @@ def get_acmi_contacts(own_lat=None, own_lon=None) -> list:
 # ── Lecture mémoire sécurisée (ReadProcessMemory) ────────────────
 # ctypes.from_address() peut segfaulter — ReadProcessMemory retourne False
 _k32 = _rpm = _hproc = None
+_DD_CANDIDATES = None   # (base, offset) une fois trouvé, False si introuvable
 
 def _init_safe_mem():
     global _k32, _rpm, _hproc
@@ -991,6 +990,8 @@ async def ws_endpoint(websocket: WebSocket):
 
 @app.get("/api/airports")
 async def get_airports():
+    if not is_theater_detected():
+        return []
     return _load_airports(get_theater_name())
 
 @app.get("/api/ini/status")
@@ -1012,7 +1013,6 @@ async def get_mission(): return mission_data
 
 @app.post("/api/upload")
 async def upload_mission(file: UploadFile = File(...)):
-    global mission_data
     try:
         content = (await file.read()).decode("latin-1")
         cfg = configparser.RawConfigParser(); cfg.optionxform = str  # type: ignore[assignment]
@@ -1073,7 +1073,7 @@ async def upload_mission(file: UploadFile = File(...)):
                     except: pass
         if not route and not threats and not fplan:
             raise HTTPException(400, "No valid steerpoints found — check theater and file format")
-        mission_data = {"route":route,"threats":threats,"flightplan":fplan}
+        mission_data.clear(); mission_data.update({"route":route,"threats":threats,"flightplan":fplan})
         logger.info(f"INI upload OK: {len(route)} WP, {len(threats)} PPT, {len(fplan)} FP")
         return {"status":"ok","route":len(route),"threats":len(threats),"flightplan":len(fplan)}
     except HTTPException:
@@ -1127,7 +1127,6 @@ def _find_latest_ini() -> tuple[str, float]:
 
 def _parse_ini_file(path: str) -> dict:
     """Parse un .ini BMS et retourne mission_data."""
-    global mission_data
     try:
         with open(path, encoding="latin-1") as f:
             raw = f.read()
@@ -1177,7 +1176,7 @@ def _parse_ini_file(path: str) -> dict:
                                 route.append({"lat": lat, "lon": lon, "alt": z, "index": len(route)})
                     except: pass
         result = {"route": route, "threats": threats, "flightplan": fplan}
-        mission_data = result
+        mission_data.clear(); mission_data.update(result)
         logger.info(f"INI auto-chargé: {os.path.basename(path)} — {len(route)} steerpoints, {len(threats)} PPT")
         return result
     except Exception as e:
@@ -1256,6 +1255,8 @@ async def app_info_route():
 
 @app.get("/api/theater")
 async def theater_info():
+    if not is_theater_detected():
+        return {}
     tp = get_theater()
     lat_min, lat_max, lon_min, lon_max = tp.bbox
     c_lat = (lat_min + lat_max) / 2

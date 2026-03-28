@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python -c \":*)",
-      "WebFetch(domain:forum.falcon-bms.com)"
+      "WebFetch(domain:forum.falcon-bms.com)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, r''c:\\\\Users\\\\Lyes\\\\Documents\\\\00_DEV''\\); import theaters; print\\(''theaters OK —'', list\\(theaters.THEATER_DB.keys\\(\\)\\)\\)\")"
     ]
   }
 }

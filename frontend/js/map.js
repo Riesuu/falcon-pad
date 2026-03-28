@@ -58,11 +58,77 @@ const map = L.map('map',{preferCanvas:true,zoomControl:true,rotate:true,rotateCo
 // ── Theater management ────────────────────────────────────────────────────
 let _currentTheater = null;
 
+async function loadAirports() {
+  // Clear existing airport markers
+  [...apIconMarkers, ...apLabelMarkers].forEach(m => { try { map.removeLayer(m); } catch(e) {} });
+  apIconMarkers.length = 0; apLabelMarkers.length = 0;
+  airportMarkers.length = 0; apNameMarkers.length = 0; apData = [];
+
+  try {
+    const aps = await (await fetch('/api/airports')).json();
+    apData = aps;
+    const apNameOn = _apNameVisible;
+    aps.forEach(ap => {
+      const isNK = ap.icao.startsWith('KP-') || ap.icao.startsWith('ZK');
+      const col = isNK ? 'rgba(248,113,113,.85)' : 'rgba(96,165,250,.85)';
+      const sz = 13;
+      const sym = `<svg width="${sz}" height="${sz}" viewBox="0 0 13 13" style="cursor:pointer">
+        <polygon points="6.5,1 12,6.5 6.5,12 1,6.5" fill="${col}" stroke="rgba(0,0,0,.7)" stroke-width="1.5"/>
+      </svg>`;
+      const mIcon = L.marker([ap.lat, ap.lon], {
+        icon: L.divIcon({html: sym, className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]}),
+        zIndexOffset: 10
+      }).addTo(map);
+      mIcon.bindPopup(buildApPopup(ap), {className:'', maxWidth:320, closeButton:true, offset:L.point(0,-6)});
+      apIconMarkers.push(mIcon);
+
+      const apIcao = ap.icao.startsWith('KP-') ? ap.name : ap.icao;
+      const labelHtml = `<div style="pointer-events:none;line-height:1.2">
+        <div style="font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
+          color:${col};letter-spacing:.8px;text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);
+          white-space:nowrap">${apIcao}</div>
+      </div>`;
+      const mLabel = L.marker([ap.lat, ap.lon], {
+        icon: L.divIcon({html: labelHtml, className:'', iconSize:[160,26], iconAnchor:[-8,6]}),
+        zIndexOffset: -100, interactive: true
+      });
+      if(apNameOn) mLabel.addTo(map);
+      mLabel.on('click', e => {
+        if(rulerActive) {
+          L.DomEvent.stopPropagation(e);
+          if(!rStart) {
+            rStart = L.latLng(ap.lat, ap.lon);
+            rDot = L.circleMarker(rStart, {radius:4, color:'#fff', fillColor:activeColor, fillOpacity:1, weight:2}).addTo(map);
+          } else { clearRuler(); }
+        } else { mIcon.openPopup(); }
+      });
+      mIcon.on('click', e => {
+        if(rulerActive) {
+          L.DomEvent.stopPropagation(e);
+          if(!rStart) {
+            rStart = L.latLng(ap.lat, ap.lon);
+            rDot = L.circleMarker(rStart, {radius:4, color:'#fff', fillColor:activeColor, fillOpacity:1, weight:2}).addTo(map);
+          } else { clearRuler(); }
+        } else { mIcon.openPopup(); }
+      });
+      apLabelMarkers.push(mLabel);
+      airportMarkers.push(mIcon, mLabel);
+      apNameMarkers.push(mLabel);
+    });
+
+    // Respect visibility toggle
+    if(!document.getElementById('airportBtn')?.classList.contains('active')) {
+      apIconMarkers.forEach(m => { try { map.removeLayer(m); } catch(e) {} });
+    }
+  } catch(e) { console.warn('[airports] load failed:', e); }
+}
+
 function updateTheater(data) {
   if(!data || !data.name) return;
   if(_currentTheater === data.name) return; // no change
   _currentTheater = data.name;
   console.log('[theater] switched to:', data.name);
+  loadAirports();
   // Re-center map on new theater
   if(!followAircraft) {
     map.setView([data.center_lat, data.center_lon], data.zoom);
@@ -75,7 +141,6 @@ function updateTheater(data) {
     const d = await (await fetch('/api/theater')).json();
     if(d && d.name) {
       _currentTheater = d.name;
-      // Only set view if no aircraft position yet
       if(!window._hasAircraftPos) {
         map.setView([d.center_lat, d.center_lon], d.zoom);
       }
@@ -676,11 +741,6 @@ function _applyColorLive(key, hex) {
       pptCircles.forEach(c=>{try{c.setStyle({color:hex,fillColor:hex});}catch(e){}});
       missionMarkers.forEach(m=>{if(m._fpType==='ppt')try{m.setStyle({fillColor:hex});}catch(e){}});
       break;
-    case 'ppt':
-      C_PPT = hex;
-      pptCircles.forEach(c=>{try{c.setStyle({color:hex,fillColor:hex});}catch(e){}});
-      missionMarkers.forEach(m=>{if(m._fpType==='ppt')try{m.setStyle({fillColor:hex});}catch(e){}});
-      break;
   }
 }
 
@@ -831,81 +891,25 @@ function buildApPopup(ap) {
   return `<div class="ap-popup">${line1}${line2}</div>`;
 }
 
-fetch('/api/airports').then(r=>r.json()).then(aps=>{
-  apData = aps;
-  aps.forEach(ap=>{
-    const isNK=ap.icao.startsWith('KP-')||ap.icao.startsWith('ZK');
-    const col=isNK?'rgba(248,113,113,.85)':'rgba(96,165,250,.85)';
-    const sz = 13;
-    const sym=`<svg width="${sz}" height="${sz}" viewBox="0 0 13 13" style="cursor:pointer">
-      <polygon points="6.5,1 12,6.5 6.5,12 1,6.5" fill="${col}" stroke="rgba(0,0,0,.7)" stroke-width="1.5"/>
-    </svg>`;
-    const mIcon=L.marker([ap.lat,ap.lon],{
-      icon:L.divIcon({html:sym,className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]}),
-      zIndexOffset:10
-    }).addTo(map);
-    mIcon.bindPopup(buildApPopup(ap),{
-      className:'',maxWidth:320,closeButton:true,
-      offset:L.point(0,-6)
-    });
-    apIconMarkers.push(mIcon);
+document.getElementById('runwayBtn')?.addEventListener('click',function(){
+  runwaysVisible=!runwaysVisible;
+  this.classList.toggle('active',runwaysVisible);
+  runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
+  saveUiPref({runways_visible:runwaysVisible});
+});
 
-    const apIcao = ap.icao.startsWith('KP-') ? ap.name : ap.icao;
-    const labelHtml = `<div style="pointer-events:none;line-height:1.2">
-      <div style="font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
-        color:${col};letter-spacing:.8px;text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);
-        white-space:nowrap">${apIcao}</div>
-    </div>`;
-    const mLabel=L.marker([ap.lat,ap.lon],{
-      icon:L.divIcon({html:labelHtml,className:'',iconSize:[160,26],iconAnchor:[-8,6]}),
-      zIndexOffset:-100,interactive:true
-    }).addTo(map);
-    mLabel.on('click',e=>{
-      if(rulerActive){
-        L.DomEvent.stopPropagation(e);
-        if(!rStart){
-          rStart=L.latLng(ap.lat,ap.lon);
-          rDot=L.circleMarker(rStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
-        } else { clearRuler(); }
-      } else { mIcon.openPopup(); }
-    });
-    mIcon.on('click',e=>{
-      if(rulerActive){
-        L.DomEvent.stopPropagation(e);
-        if(!rStart){
-          rStart=L.latLng(ap.lat,ap.lon);
-          rDot=L.circleMarker(rStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
-        } else { clearRuler(); }
-      } else { mIcon.openPopup(); }
-    });
-    apLabelMarkers.push(mLabel);
-    airportMarkers.push(mIcon,mLabel);
-    apNameMarkers.push(mLabel);
+document.getElementById('apNameBtn')?.addEventListener('click',function(){
+  _apNameVisible=!_apNameVisible;
+  this.classList.toggle('active',_apNameVisible);
+  apLabelMarkers.forEach(m=>{
+    try{ _apNameVisible ? m.addTo(map) : map.removeLayer(m); }catch(e){}
   });
+  saveUiPref({ap_name_visible:_apNameVisible});
+});
 
-  document.getElementById('runwayBtn')?.addEventListener('click',function(){
-    runwaysVisible=!runwaysVisible;
-    this.classList.toggle('active',runwaysVisible);
-    runwayLayers.forEach(l=>{try{runwaysVisible?l.addTo(map):map.removeLayer(l);}catch(e){}});
-    saveUiPref({runways_visible:runwaysVisible});
-  });
-
-  // apNameBtn — afficher/masquer les labels ICAO des aéroports
-  document.getElementById('apNameBtn')?.addEventListener('click',function(){
-    _apNameVisible=!_apNameVisible;
-    this.classList.toggle('active',_apNameVisible);
-    apLabelMarkers.forEach(m=>{
-      try{ _apNameVisible ? m.addTo(map) : map.removeLayer(m); }catch(e){}
-    });
-    saveUiPref({ap_name_visible:_apNameVisible});
-  });
-  // Etat initial : labels masqués
-  apLabelMarkers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});
-
-  // Charger les prefs UI puis la mission dans le bon ordre
+// Chargement initial des airports + prefs UI
+loadAirports().then(() => {
   loadUiPrefs().then(() => {
-    // loadMission sera appelé par le watcher ini ou manuellement
-    // mais si déjà en cache on redessine avec les bonnes couleurs
     if(_missionCache) _redrawMission();
   });
 });
