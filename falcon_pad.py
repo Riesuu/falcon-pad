@@ -215,56 +215,37 @@ FD2_BULLSEYE_Y   = 0x4B4   # float,  bullseye East  ft (coords BMS)
 
 # Conversion BMS → WGS84 : délégué à theaters.py (multi-théâtre)
 
-#  AÉROPORTS KOREA (47)
-AIRPORTS = {
-    "RKJK": (35.906389, 126.615833, "Gunsan AB",      "75X"),
-    "RKSO": (37.090556, 127.030000, "Osan AB",         "94X"),
-    "RKSG": (36.961111, 127.030556, "Pyeongtaek",      "19X"),
-    "RKSW": (37.239167, 127.005556, "Suwon AB",        "22X"),
-    "RKTN": (35.894167, 128.658611, "Daegu AB",        "125X"),
-    "RKTU": (36.716944, 127.499167, "Cheongju AB",     "42X"),
-    "RKJJ": (35.126389, 126.808889, "Gwangju AB",      "91X"),
-    "RKTH": (35.987778, 129.419444, "Pohang AB",       "72X"),
-    "RKSM": (37.444722, 127.113889, "Seoul AB",        "46X"),
-    "RKTP": (36.703889, 126.485278, "Seosan AB",       "52X"),
-    "RKSI": (37.469444, 126.450556, "Incheon",         "85X"),
-    "RKSS": (37.558333, 126.790833, "Gimpo",           "83X"),
-    "RKPK": (35.179444, 128.938056, "Gimhae/Busan",   "117X"),
-    "RKNY": (38.061111, 128.669167, "Yangyang",        "43X"),
-    "RKNN": (37.753611, 128.943889, "Gangneung",       "056X"),
-    "RKNW": (37.438056, 127.960556, "Wonju",           "60Y"),
-    "RKND": (38.142778, 128.598611, "Sokcho",          "43X"),
-    "RKPS": (35.088333, 128.070833, "Sacheon",         "37X"),
-    "RKJB": (34.991389, 126.382778, "Muan",            "65X"),
-    "RKTI": (36.635000, 127.498611, "Jungwon",         "05X"),
-    "RKTY": (36.633333, 128.350000, "Yecheon",         "026X"),
-    "ZKPY": (39.224167, 125.670278, "Pyongyang",       "51X"),
-    "ZKWS": (39.166667, 127.486111, "Wonsan",          "54X"),
-    "ZKUJ": (40.050000, 124.533333, "Uiju",            "55X"),
-    "ZKTS": (39.283333, 127.366667, "Toksan",          "53X"),
-    "KP-0011": (39.066667, 125.600000, "Mirim",        "59X"),
-    "KP-0018": (39.800000, 125.900000, "Kaechon",      ""),
-    "KP-0020": (38.666667, 125.783333, "Hwangju",      ""),
-    "KP-0021": (39.433333, 125.933333, "Sunchon",      ""),
-    "KP-0023": (39.816667, 124.916667, "Onchon",       ""),
-    "KP-0030": (39.900000, 124.933333, "Panghyon",     ""),
-    "KP-0032": (41.383333, 129.450000, "Orang",        ""),
-    "KP-0008": (39.745833, 127.473333, "Sondok",       ""),
-    "KP-0015": (38.816667, 126.400000, "Koksan",       ""),
-    "KP-0019": (39.150000, 125.883333, "Hyon-Ni",      ""),
-    "KP-0035": (38.683333, 125.366667, "Hwangsuwon",   ""),
-    "KP-0039": (38.700000, 125.550000, "Kwail",        ""),
-    "KP-0050": (38.033333, 125.366667, "Ongjin",       ""),
-    "KP-0053": (41.566667, 126.266667, "Manpo",        ""),
-    "KP-0059": (40.316667, 128.633333, "Iwon",         ""),
-    "KP-0006": (39.783333, 124.716667, "Taechon",      ""),
-    "KP-0005": (38.250000, 126.650000, "Taetan",       ""),
-    "KP-0029": (42.066667, 128.400000, "Samjiyon",     ""),
-    "RJOI":   (34.143889, 132.235556, "Iwakuni",       "126X"),
-    "RJOA":   (34.436111, 132.919444, "Hiroshima",     "024X"),
-    "RJOW":   (34.676111, 131.789722, "Iwami",         "57X"),
-    "RJDC":   (33.930000, 131.278611, "Yamaguchi",     ""),
+# ── Airports : chargement dynamique par théâtre ──────────────────
+_AIRPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "airports")
+_airport_cache: dict = {}
+
+# Mapping nom théâtre → fichier JSON (lowercase key)
+_THEATER_AIRPORT_FILES: dict = {
+    "korea":     "korea.json",
+    "korea kto": "korea.json",
+    "balkans":   "balkans.json",
+    "israel":    "israel.json",
+    "aegean":    "aegean.json",
+    "iberia":    "iberia.json",
+    "nordic":    "nordic.json",
 }
+
+def _load_airports(theater_name: str) -> list:
+    key = theater_name.lower()
+    if key in _airport_cache:
+        return _airport_cache[key]
+    filename = _THEATER_AIRPORT_FILES.get(key)
+    if not filename:
+        return []
+    path = os.path.join(_AIRPORTS_DIR, filename)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        _airport_cache[key] = data
+        return data
+    except Exception as e:
+        logger.warning(f"airports: impossible de charger {path}: {e}")
+        return []
 
 #  SHARED MEMORY BMS 4.38 — OFFSETS CORRECTS
 #
@@ -1008,69 +989,9 @@ async def ws_endpoint(websocket: WebSocket):
         if websocket in ws_clients: ws_clients.remove(websocket)
 
 
-AP_EXTRA = {
-    "RKSO": {"freq":"126.2","ils":[{"rwy":"36L","freq":"108.7","crs":"355"},{"rwy":"18R","freq":"110.3","crs":"175"}]},
-    "RKJK": {"freq":"122.1","ils":[{"rwy":"18","freq":"109.1","crs":"183"},{"rwy":"36","freq":"110.1","crs":"003"}]},
-    "RKTN": {"freq":"126.2","ils":[{"rwy":"32","freq":"108.3","crs":"323"},{"rwy":"14","freq":"109.5","crs":"143"}]},
-    "RKJJ": {"freq":"123.3","ils":[{"rwy":"24","freq":"108.9","crs":"241"},{"rwy":"06","freq":"109.9","crs":"061"}]},
-    "RKSM": {"freq":"126.2","ils":[{"rwy":"09","freq":"110.5","crs":"085"},{"rwy":"27","freq":"108.5","crs":"265"}]},
-    "RKSW": {"freq":"126.2","ils":[{"rwy":"09","freq":"108.1","crs":"092"},{"rwy":"27","freq":"109.3","crs":"272"}]},
-    "RKTU": {"freq":"126.2","ils":[{"rwy":"06","freq":"108.7","crs":"059"},{"rwy":"24","freq":"110.7","crs":"239"}]},
-    "RKTH": {"freq":"123.3","ils":[{"rwy":"09","freq":"108.3","crs":"093"},{"rwy":"27","freq":"109.7","crs":"273"}]},
-    "RKSI": {"freq":"119.1","ils":[{"rwy":"33L","freq":"110.1","crs":"328"},{"rwy":"15R","freq":"109.5","crs":"148"}]},
-    "RKSS": {"freq":"118.1","ils":[{"rwy":"14L","freq":"108.9","crs":"142"},{"rwy":"32R","freq":"110.3","crs":"322"}]},
-    "RKPK": {"freq":"118.8","ils":[{"rwy":"36L","freq":"108.5","crs":"358"},{"rwy":"18R","freq":"109.9","crs":"178"}]},
-    "RKNY": {"freq":"126.2","ils":[{"rwy":"33","freq":"108.3","crs":"326"},{"rwy":"15","freq":"109.1","crs":"146"}]},
-    "RKNN": {"freq":"126.2","ils":[{"rwy":"06","freq":"108.7","crs":"063"},{"rwy":"24","freq":"110.5","crs":"243"}]},
-    "RKNW": {"freq":"126.2","ils":[{"rwy":"03","freq":"108.9","crs":"033"},{"rwy":"21","freq":"109.3","crs":"213"}]},
-    "RKPS": {"freq":"126.2","ils":[{"rwy":"04","freq":"108.3","crs":"037"},{"rwy":"22","freq":"109.5","crs":"217"}]},
-    "RKJB": {"freq":"118.1","ils":[{"rwy":"01","freq":"108.5","crs":"011"},{"rwy":"19","freq":"110.1","crs":"191"}]},
-    "RKTI": {"freq":"126.2","ils":[{"rwy":"27","freq":"108.7","crs":"276"},{"rwy":"09","freq":"109.7","crs":"096"}]},
-    "RKTY": {"freq":"126.2","ils":[{"rwy":"18","freq":"108.9","crs":"184"},{"rwy":"36","freq":"110.3","crs":"004"}]},
-    "RKSG": {"freq":"126.2","ils":[{"rwy":"18","freq":"108.3","crs":"182"},{"rwy":"36","freq":"109.9","crs":"002"}]},
-    "RKTP": {"freq":"126.2","ils":[{"rwy":"03","freq":"108.5","crs":"032"},{"rwy":"21","freq":"109.1","crs":"212"}]},
-    "RJOI": {"freq":"126.2","ils":[{"rwy":"07","freq":"108.3","crs":"072"},{"rwy":"25","freq":"110.7","crs":"252"}]},
-    "RJOW": {"freq":"122.8","ils":[{"rwy":"17","freq":"108.9","crs":"168"},{"rwy":"35","freq":"109.5","crs":"348"}]},
-    "RJOA": {"freq":"118.7","ils":[{"rwy":"10","freq":"109.1","crs":"100"},{"rwy":"28","freq":"110.3","crs":"280"}]},
-    "RKND": {"freq":"126.2","ils":[{"rwy":"07","freq":"108.5","crs":"073"},{"rwy":"25","freq":"109.3","crs":"253"}]},
-    # Bases NK — fréquences approximatives BMS
-    "ZKPY": {"freq":"126.2","ils":[{"rwy":"17","freq":"108.3","crs":"173"},{"rwy":"35","freq":"109.5","crs":"353"}]},
-    "ZKWS": {"freq":"126.2","ils":[{"rwy":"18","freq":"108.7","crs":"183"},{"rwy":"36","freq":"110.1","crs":"003"}]},
-    "ZKUJ": {"freq":"126.2","ils":[{"rwy":"05","freq":"108.9","crs":"049"},{"rwy":"23","freq":"109.7","crs":"229"}]},
-    "ZKTS": {"freq":"126.2","ils":[{"rwy":"05","freq":"108.5","crs":"052"},{"rwy":"23","freq":"109.3","crs":"232"}]},
-    "KP-0011":{"freq":"126.2","ils":[{"rwy":"17","freq":"108.3","crs":"172"},{"rwy":"35","freq":"109.5","crs":"352"}]},
-    "KP-0018":{"freq":"126.2","ils":[{"rwy":"18","freq":"108.7","crs":"184"},{"rwy":"36","freq":"110.1","crs":"004"}]},
-    "KP-0020":{"freq":"126.2","ils":[{"rwy":"18","freq":"108.9","crs":"181"},{"rwy":"36","freq":"109.7","crs":"001"}]},
-    "KP-0021":{"freq":"126.2","ils":[{"rwy":"18","freq":"108.3","crs":"183"},{"rwy":"36","freq":"110.3","crs":"003"}]},
-    "KP-0023":{"freq":"126.2","ils":[{"rwy":"18","freq":"108.5","crs":"182"},{"rwy":"36","freq":"109.1","crs":"002"}]},
-    "KP-0030":{"freq":"126.2","ils":[{"rwy":"17","freq":"108.7","crs":"174"},{"rwy":"35","freq":"109.9","crs":"354"}]},
-    "KP-0032":{"freq":"126.2","ils":[]},
-    "KP-0008":{"freq":"126.2","ils":[{"rwy":"18","freq":"108.3","crs":"183"},{"rwy":"36","freq":"109.5","crs":"003"}]},
-    "KP-0015":{"freq":"126.2","ils":[]},
-    "KP-0019":{"freq":"126.2","ils":[]},
-    "KP-0035":{"freq":"126.2","ils":[]},
-    "KP-0039":{"freq":"126.2","ils":[]},
-    "KP-0050":{"freq":"126.2","ils":[]},
-    "KP-0053":{"freq":"126.2","ils":[]},
-    "KP-0059":{"freq":"126.2","ils":[]},
-    "KP-0006":{"freq":"126.2","ils":[]},
-    "KP-0005":{"freq":"126.2","ils":[{"rwy":"03","freq":"108.5","crs":"032"},{"rwy":"21","freq":"109.1","crs":"212"}]},
-    "KP-0029":{"freq":"126.2","ils":[]},
-    "RJDC":   {"freq":"122.8","ils":[{"rwy":"07","freq":"108.3","crs":"072"},{"rwy":"25","freq":"109.5","crs":"252"}]},
-}
-
 @app.get("/api/airports")
 async def get_airports():
-    result = []
-    for k, v in AIRPORTS.items():
-        extra = AP_EXTRA.get(k, {})
-        result.append({
-            "icao": k, "name": v[2], "lat": v[0], "lon": v[1],
-            "tacan": v[3],
-            "freq": extra.get("freq", ""),
-            "ils":  extra.get("ils", []),
-        })
-    return result
+    return _load_airports(get_theater_name())
 
 @app.get("/api/ini/status")
 async def ini_status():
