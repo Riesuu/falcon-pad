@@ -62,7 +62,7 @@ _reg("Israel",    lon0=35.0,   k0=0.9996, FE=500000.0, FN=-3113000.0,
      bbox=(27.0, 37.0, 29.0,  42.0))
 _reg("Aegean",    lon0=24.0,   k0=0.9996, FE=500000.0, FN=0.0,
      bbox=(33.0, 43.0, 18.0,  32.0))
-_reg("HTO",       lon0=27.0,   k0=0.9996, FE=500000.0, FN=0.0,
+_reg("Hellas",    lon0=27.0,   k0=0.9996, FE=500000.0, FN=-3699000.0,
      bbox=(30.0, 44.0, 18.0,  33.0))
 _reg("Iberia",    lon0=-4.0,   k0=0.9996, FE=500000.0, FN=0.0,
      bbox=(34.0, 45.0, -12.0,  5.0))
@@ -74,7 +74,7 @@ _reg("Nordic",    lon0=18.0,   k0=0.9996, FE=500000.0, FN=0.0,
 #  ACTIVE THEATER STATE
 # ═══════════════════════════════════════════════════════════════════════════
 
-_active_theater: TheaterParams = THEATER_DB["korea"]
+_active_theater: TheaterParams = THEATER_DB["korea"]  # default before BMS loads
 _active_theater_name: str = "Korea"
 _theater_detected: bool = False   # True once BMS has explicitly set a theater
 

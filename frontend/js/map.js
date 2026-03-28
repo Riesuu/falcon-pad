@@ -120,6 +120,7 @@ async function loadAirports() {
     if(!document.getElementById('airportBtn')?.classList.contains('active')) {
       apIconMarkers.forEach(m => { try { map.removeLayer(m); } catch(e) {} });
     }
+    renderRunways();
   } catch(e) { console.warn('[airports] load failed:', e); }
 }
 
@@ -260,8 +261,6 @@ async function loadUiPrefs(){
       if(r) r.checked=true;
     }
 
-    const chkRW=null; // moved to runwayBtn
-    const chkApN=null; // moved to apNameBtn
     if(p.ppt_visible===false){pptCircles.forEach(c=>{try{map.removeLayer(c)}catch(e){}});document.getElementById('pptBtn')?.classList.remove('active');}
     if(p.airports_visible===false){airportMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});document.getElementById('airportBtn')?.classList.remove('active');}
     if(p.runways_visible===false){runwaysVisible=false;document.getElementById('runwayBtn')?.classList.remove('active');runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});}
@@ -438,7 +437,7 @@ function updateRuler(to){
   if(rLabel)map.removeLayer(rLabel);
   rLine=L.polyline([rStart,to],{color:activeColor,weight:2,opacity:.8,dashArray:'8 4'}).addTo(map);
   const dist=map.distance(rStart,to);
-  const nm=dist/1852,km=dist/1000;
+  const nm=dist/1852;
   const φ1=rStart.lat*Math.PI/180,φ2=to.lat*Math.PI/180;
   const dλ=(to.lng-rStart.lng)*Math.PI/180;
   const y=Math.sin(dλ)*Math.cos(φ2);
@@ -651,7 +650,10 @@ document.getElementById('pptLabelBtn')?.addEventListener('click',function(){
 
 document.getElementById('pptBtn')?.addEventListener('click',function(){
   const v=this.classList.toggle('active');
-  pptCircles.forEach(c=>v?c.addTo(map):map.removeLayer(c));
+  pptCircles.forEach(c=>{
+    if(!v) { try{map.removeLayer(c)}catch(e){} }
+    else if(!pptLabelMarkers.includes(c) || pptLabelsVisible) { try{c.addTo(map)}catch(e){} }
+  });
   saveUiPref({ppt_visible:v});
 });
 
@@ -829,11 +831,16 @@ function _renderMissionData(d, noSetView=false){
     }
     if(d.threats?.length){
       const c=C_PPT;
+      const pptOn = document.getElementById('pptBtn')?.classList.contains('active');
       d.threats.forEach(t=>{
         const circ=L.circle([t.lat,t.lon],{radius:(t.range_m||t.range_nm*1852),color:c,fillColor:c,fillOpacity:.05,weight:S_PPT,dashArray:'5 4'});
-        if(document.getElementById('pptBtn')?.classList.contains('active'))circ.addTo(map);
+        if(pptOn) circ.addTo(map);
         pptCircles.push(circ);
-        const _pm=L.circleMarker([t.lat,t.lon],{radius:S_PPT_DOT,color:'#fff',fillColor:c,fillOpacity:1,weight:2});_pm._fpType='ppt';_pm.addTo(map);missionMarkers.push(_pm);
+
+        const _pm=L.circleMarker([t.lat,t.lon],{radius:S_PPT_DOT,color:'#fff',fillColor:c,fillOpacity:1,weight:2});_pm._fpType='ppt';
+        if(pptOn) _pm.addTo(map);
+        pptCircles.push(_pm);  // tracked with circles so pptBtn toggles it
+
         const nm=t.name?t.name.trim():'';
         const rng=t.range_nm>0?t.range_nm+'NM':'';
         const pptNum=(t.num!==undefined)?t.num:t.index;
@@ -846,9 +853,9 @@ function _renderMissionData(d, noSetView=false){
           html:`<div style="background:rgba(8,2,2,.9);border:1px solid rgba(239,68,68,.22);border-left:2px solid rgba(239,68,68,.65);border-radius:2px;padding:2px 7px;white-space:nowrap;pointer-events:none;font-family:system-ui,sans-serif;display:inline-flex;align-items:center;gap:0;box-shadow:0 2px 8px rgba(0,0,0,.5)">${parts2}</div>`,
           className:'',iconSize:[110,16],iconAnchor:[-6,8]
         }),zIndexOffset:50});
-        if(pptLabelsVisible) pptLbl.addTo(map);
+        if(pptOn && pptLabelsVisible) pptLbl.addTo(map);
         pptLabelMarkers.push(pptLbl);
-        missionMarkers.push(pptLbl);
+        pptCircles.push(pptLbl);  // tracked with circles so pptBtn toggles it
       });
     }
 }
@@ -987,24 +994,34 @@ function applyOffset(latlon, icao) {
   return [latlon[0]+o.dlat, latlon[1]+o.dlon];
 }
 
+// Compute 4 runway corners from center point, heading, length and width (all in metres)
+function _computeRwyCorners(lat, lon, hdg_deg, len_m, wid_m) {
+  const rad = hdg_deg * Math.PI / 180;
+  const cosLat = Math.cos(lat * Math.PI / 180);
+  const mLat = 1 / 111320;
+  const mLon = 1 / (111320 * cosLat);
+  const hl = len_m / 2, hw = wid_m / 2;
+  const aLat = Math.cos(rad) * mLat, aLon = Math.sin(rad) * mLon;   // along-runway unit
+  const pLat = -Math.sin(rad) * mLat, pLon = Math.cos(rad) * mLon;  // perpendicular unit
+  return [
+    [lat - aLat*hl + pLat*hw, lon - aLon*hl + pLon*hw],
+    [lat - aLat*hl - pLat*hw, lon - aLon*hl - pLon*hw],
+    [lat + aLat*hl - pLat*hw, lon + aLon*hl - pLon*hw],
+    [lat + aLat*hl + pLat*hw, lon + aLon*hl + pLon*hw],
+  ];
+}
+
 function renderRunways() {
   runwayLayers.forEach(l => { try { map.removeLayer(l); } catch(e){} });
   runwayLayers = [];
 
-  RUNWAY_DATA.forEach(r => {
-    const isNK = r.icao.startsWith('KP-') || r.icao.startsWith('ZK');
-    const col     = isNK ? 'rgba(248,113,113,.75)' : 'rgba(148,185,220,.8)';
-    const fillCol = isNK ? 'rgba(220,60,60,.18)'   : 'rgba(120,160,200,.15)';
-
-    const corners = r.c.map(pt => applyOffset(pt, r.icao));
-
+  function _drawRwyPoly(corners, col, fillCol) {
     const poly = L.polygon(corners, {
       color: col, fillColor: fillCol, fillOpacity: 1,
       weight: 2, interactive: false,
     });
     if (runwaysVisible) poly.addTo(map);
     runwayLayers.push(poly);
-
     const midA = [(corners[0][0]+corners[1][0])/2, (corners[0][1]+corners[1][1])/2];
     const midB = [(corners[2][0]+corners[3][0])/2, (corners[2][1]+corners[3][1])/2];
     const axis = L.polyline([midA, midB], {
@@ -1013,6 +1030,36 @@ function renderRunways() {
     });
     if (runwaysVisible) axis.addTo(map);
     runwayLayers.push(axis);
+  }
+
+  // ── Korea: hardcoded precise corners (only when theater is Korea) ─────────
+  if (_currentTheater && _currentTheater.toLowerCase().startsWith('korea')) {
+    RUNWAY_DATA.forEach(r => {
+      const isNK = r.icao.startsWith('KP-') || r.icao.startsWith('ZK');
+      const col     = isNK ? 'rgba(248,113,113,.75)' : 'rgba(148,185,220,.8)';
+      const fillCol = isNK ? 'rgba(220,60,60,.18)'   : 'rgba(120,160,200,.15)';
+      _drawRwyPoly(r.c.map(pt => applyOffset(pt, r.icao)), col, fillCol);
+    });
+  }
+
+  // ── Other theaters: compute from ILS course in airport data ───────────────
+  const koreaIcaos = new Set(RUNWAY_DATA.map(r => r.icao));
+  const seenKeys   = new Set();
+  const col = 'rgba(148,185,220,.8)', fillCol = 'rgba(120,160,200,.15)';
+  (apData || []).forEach(ap => {
+    if (koreaIcaos.has(ap.icao) || !ap.ils || ap.ils.length === 0) return;
+    ap.ils.forEach(ils => {
+      const crs = parseFloat(ils.crs);
+      if (isNaN(crs)) return;
+      // Deduplicate: both ends of the same runway share a normalised heading
+      const normHdg = crs >= 180 ? crs - 180 : crs;
+      const key = `${ap.icao}:${normHdg.toFixed(0)}`;
+      if (seenKeys.has(key)) return;
+      seenKeys.add(key);
+      const corners = _computeRwyCorners(ap.lat, ap.lon, crs, 2500, 45)
+        .map(pt => applyOffset(pt, ap.icao));
+      _drawRwyPoly(corners, col, fillCol);
+    });
   });
 }
 
@@ -1207,7 +1254,6 @@ function updateAcmiContacts(contacts){
   contacts.forEach(c=>{
     if(c.lat==null||c.lon==null)return;
     // camp=3 (unknown) traité comme allié en solo — BMS injecte les couleurs tardivement
-    const camp = c.camp === 2 ? 2 : 1;
     const col = '#4ade80'; // vert allié (ennemis exclus côté serveur)
     const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({
       html:dlSym(1,col,sz),className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]

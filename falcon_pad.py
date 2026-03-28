@@ -129,7 +129,7 @@ UI_PREFS_FILE = os.path.join(app_info.CONFIG_DIR, "ui_prefs.json")
 _DEFAULT_UI_PREFS: dict = {
     "active_color":     "#3b82f6",
     "layer":            "dark",
-    "ppt_visible":      True,
+    "ppt_visible":      False,
     "airports_visible": True,
     "runways_visible":  True,
     "ap_name_visible":  False,
@@ -216,13 +216,14 @@ _airport_cache: dict = {}
 
 # Mapping nom théâtre → fichier JSON (lowercase key)
 _THEATER_AIRPORT_FILES: dict = {
-    "korea":     "korea.json",
-    "korea kto": "korea.json",
-    "balkans":   "balkans.json",
-    "israel":    "israel.json",
-    "aegean":    "aegean.json",
-    "iberia":    "iberia.json",
-    "nordic":    "nordic.json",
+    "korea":        "korea.json",
+    "korea kto":    "korea.json",
+    "balkans":      "balkans.json",
+    "israel":       "israel.json",
+    "aegean":       "aegean.json",
+    "iberia":       "iberia.json",
+    "nordic":       "nordic.json",
+    "hellas":       "hto.json",
 }
 
 def _load_airports(theater_name: str) -> list:
