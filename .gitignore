@@ -1,0 +1,55 @@
+# ═══════════════════════════════════════════════════════════════
+#  Falcon-Pad — .gitignore
+# ═══════════════════════════════════════════════════════════════
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+MANIFEST
+
+# ── Environnements virtuels ───────────────────────────────────
+.venv/
+venv/
+env/
+.env
+ENV/
+
+# ── PyInstaller (.exe) ────────────────────────────────────────
+*.spec
+*.exe
+*.exe.bak
+
+# ── Runtime — dossiers générés au démarrage ───────────────────
+logs/
+briefing/
+config/
+{logs,config,briefing}/
+
+# ── Tests — artefacts ─────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.log
+
+# ── Éditeurs / IDE ────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS ────────────────────────────────────────────────────────
+desktop.ini
+ehthumbs.db
