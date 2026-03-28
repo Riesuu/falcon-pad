@@ -9,7 +9,7 @@ from stringdata import (
     get_dl_markpoints, get_mk_markpoints, get_hsd_lines,
     detect_theater, STRID_NAVPOINT, STRID_THR_NAME,
 )
-from conftest import _encode_navpoint, _encode_strings_blob, make_reader
+from tests.conftest import _encode_navpoint, _encode_strings_blob, make_reader
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

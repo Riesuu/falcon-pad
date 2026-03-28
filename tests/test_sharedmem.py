@@ -24,21 +24,21 @@ class TestSafeRead:
 
     def test_reader_returns_bytes(self):
         """Un reader valide doit retourner des bytes."""
-        from conftest import make_reader
+        from tests.conftest import make_reader
         data = b"\x01\x02\x03\x04"
         reader = make_reader(data)
         result = reader(0, 4)
         assert result == b"\x01\x02\x03\x04"
 
     def test_reader_out_of_bounds_returns_none(self):
-        from conftest import make_reader
+        from tests.conftest import make_reader
         data = b"\x01\x02"
         reader = make_reader(data)
         result = reader(0, 10)  # demande plus que disponible
         assert result is None
 
     def test_reader_partial_read(self):
-        from conftest import make_reader
+        from tests.conftest import make_reader
         data = b"\xAA\xBB\xCC\xDD\xEE"
         reader = make_reader(data)
         result = reader(2, 2)
@@ -50,7 +50,7 @@ class TestReadAllStrings:
 
     def test_header_too_short(self):
         from stringdata import read_all_strings
-        from conftest import make_reader
+        from tests.conftest import make_reader
         # Blob trop court pour le header (< 12 bytes)
         blob = b"\x00" * 8
         result = read_all_strings(0, make_reader(blob))
@@ -58,7 +58,7 @@ class TestReadAllStrings:
 
     def test_zero_strings(self):
         from stringdata import read_all_strings
-        from conftest import make_reader
+        from tests.conftest import make_reader
         # Header valide mais 0 strings
         blob = struct.pack("<III", 3, 0, 0)
         result = read_all_strings(0, make_reader(blob))
@@ -66,7 +66,7 @@ class TestReadAllStrings:
 
     def test_too_many_strings_rejected(self):
         from stringdata import read_all_strings
-        from conftest import make_reader
+        from tests.conftest import make_reader
         # no_strings = 600 > 500 → rejeté
         blob = struct.pack("<III", 3, 600, 100)
         result = read_all_strings(0, make_reader(blob))
@@ -74,7 +74,7 @@ class TestReadAllStrings:
 
     def test_valid_single_string(self):
         from stringdata import read_all_strings, STRID_THR_NAME
-        from conftest import _encode_strings_blob, make_reader
+        from tests.conftest import _encode_strings_blob, make_reader
         blob, _ = _encode_strings_blob([(STRID_THR_NAME, "Korea")])
         strings = read_all_strings(0, make_reader(blob))
         assert STRID_THR_NAME in strings

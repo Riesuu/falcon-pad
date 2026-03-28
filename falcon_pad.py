@@ -1,775 +1,86 @@
 # -*- coding: utf-8 -*-
 """
 Falcon-Pad — Tactical companion app for Falcon BMS
-Copyright (C) 2024  Riesu <contact@falcon-charts.com>
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
----
-Falcon-Pad by Riesu
-Contact : contact@falcon-charts.com
-Website : https://www.falcon-charts.com
-GitHub  : https://github.com/riesu/falcon-pad
-BMS     : Falcon BMS 4.38 — Shared Memory SDK
+Copyright (C) 2024  Riesu <contact@falcon-charts.com>  GNU GPL v3
 """
 
-from pydantic import BaseModel
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
-import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, re, socket as _socket
-from datetime import datetime
-import app_info
-from stringdata import (read_all_strings, get_mk_markpoints, get_hsd_lines,
-                        detect_theater, get_campaign_dir,
-                        get_steerpoints, get_ppt_threats)
-from theaters import (
-    bms_to_latlon, in_theater_bbox,
-    get_theater, get_theater_name, THEATER_DB,
-    detect_theater_from_coords_multi, is_theater_detected
-)
-from typing import List, Optional, Dict
+# ── stdlib / framework ────────────────────────────────────────────────────────
+import asyncio
+import configparser
+import json
 import logging
+import os
+import re
+import sys
+import time as _time
+from contextlib import asynccontextmanager
+from typing import List, Optional
 
-APP_NAME    = "Falcon-Pad"
-APP_VERSION = "0.3"
-APP_AUTHOR  = "Riesu"
-APP_CONTACT = "contact@falcon-charts.com"
-APP_WEBSITE = "https://www.falcon-charts.com"
+import uvicorn
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as _StarResp
 
-# ── Dossiers de base ─────────────────────────────────────────
-# Structure cible : falcon-pad/ logs/ briefing/ config/ assets/
-def _resolve_base_dir() -> str:
-    if getattr(sys, "frozen", False):
-        candidate = os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        candidate = os.path.dirname(os.path.abspath(__file__))
-    if os.path.basename(candidate).lower() == "falcon-pad":
-        return candidate
-    fp_dir = os.path.join(candidate, "falcon-pad")
-    os.makedirs(fp_dir, exist_ok=True)
-    return fp_dir
+# ── falcon-pad modules ────────────────────────────────────────────────────────
+import app_info
+import config
+import ui_prefs
+import airports
+import radar
+import trtt
+import mission
+from sharedmem import BMSSharedMemory, safe_read
+from stringdata import (detect_theater, get_campaign_dir, get_hsd_lines,
+                        get_mk_markpoints, get_ppt_threats, get_steerpoints,
+                        read_all_strings)
+from theaters import (detect_theater_from_coords_multi,
+                      get_theater, get_theater_name, is_theater_detected)
 
-_BASE_DIR    = _resolve_base_dir()
-ASSETS_DIR   = os.path.join(_BASE_DIR, "assets")
-LOG_DIR      = os.path.join(_BASE_DIR, "logs")
-BRIEFING_DIR = os.path.join(_BASE_DIR, "briefing")
-_CONFIG_DIR  = os.path.join(_BASE_DIR, "config")
-CONFIG_FILE  = os.path.join(_CONFIG_DIR, "falcon_pad_config.json")
-
-for _d in (ASSETS_DIR, LOG_DIR, BRIEFING_DIR, _CONFIG_DIR):
-    os.makedirs(_d, exist_ok=True)
-
-LOG_FILE = os.path.join(LOG_DIR, "falcon_pad.log")
-
-# ── Config persistante ───────────────────────────────────────────
-import json as _json
-
-_DEFAULT_CONFIG = {
-    "port":          8000,
-    "briefing_dir":  BRIEFING_DIR,
-    "broadcast_ms":  200,
-    "theme":         "dark",
-}
-
-def _load_config() -> dict:
-    try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                saved = _json.load(f)
-            cfg = dict(_DEFAULT_CONFIG)
-            cfg.update({k: v for k, v in saved.items() if k in _DEFAULT_CONFIG})
-            return cfg
-    except Exception as e:
-        import logging as _lg
-        _lg.getLogger(__name__).warning(f"config load error: {e}")
-    return dict(_DEFAULT_CONFIG)
-
-def _save_config(cfg: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            _json.dump(cfg, f, indent=2)
-    except Exception:
-        pass
-
-APP_CONFIG   = _load_config()
-BRIEFING_DIR = str(APP_CONFIG["briefing_dir"])
-os.makedirs(BRIEFING_DIR, exist_ok=True)
-
-class _Fmt(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        return f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}] [{record.levelname:<8}] {record.getMessage()}"
-
-from logging.handlers import RotatingFileHandler as _RFH
-_fh = _RFH(LOG_FILE, maxBytes=2*1024*1024, backupCount=3, encoding="utf-8")
-_fh.setLevel(logging.DEBUG)
-_ch = logging.StreamHandler(sys.stdout)
-_ch.setLevel(logging.INFO)
-_fh.setFormatter(_Fmt()); _ch.setFormatter(_Fmt())
-logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _ch])
 logger = logging.getLogger(__name__)
 
-# ══════════════════════════════════════════════════════════════════
-#  UI PREFS
-# ══════════════════════════════════════════════════════════════════
-UI_PREFS_FILE = os.path.join(app_info.CONFIG_DIR, "ui_prefs.json")
-
-_DEFAULT_UI_PREFS: dict = {
-    "active_color":     "#3b82f6",
-    "layer":            "dark",
-    "ppt_visible":      False,
-    "airports_visible": True,
-    "runways_visible":  True,
-    "ap_name_visible":  False,
-    # Couleurs & tailles éléments carte
-    "color_draw":   "#3b82f6",
-    "color_stpt":   "#e2e8f0", "size_stpt":  5, "size_stpt_line": 2,
-    "color_fplan":  "#f59e0b", "size_fplan": 4, "size_fplan_line": 2,
-    "color_ppt":    "#ef4444", "size_ppt":   1.2, "size_ppt_dot":  5,
-    # Couleurs lignes HSD L1-L4
-    "color_hsd_l1": "#4ade80",
-    "color_hsd_l2": "#60a5fa",
-    "color_hsd_l3": "#f59e0b",
-    "color_hsd_l4": "#f87171",
-    # Calibration pistes et annotations
-    "rwy_offsets":  "{}",
-    "annotations":  "[]",
-}
-
-def _load_ui_prefs() -> dict:
-    try:
-        if os.path.exists(UI_PREFS_FILE):
-            with open(UI_PREFS_FILE, encoding="utf-8") as f:
-                saved = json.load(f)
-            prefs = dict(_DEFAULT_UI_PREFS)
-            prefs.update({k: v for k, v in saved.items() if k in _DEFAULT_UI_PREFS})
-            logger.info(f"ui_prefs: chargé depuis {UI_PREFS_FILE}")
-            return prefs
-        logger.info("ui_prefs: fichier absent — création avec valeurs par défaut")
-        defaults = dict(_DEFAULT_UI_PREFS)
-        _save_ui_prefs(defaults)   # crée le fichier tout de suite
-        return defaults
-    except Exception as e:
-        logger.error(f"ui_prefs: erreur chargement: {e}", exc_info=True)
-        return dict(_DEFAULT_UI_PREFS)
-
-def _save_ui_prefs(prefs: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(UI_PREFS_FILE), exist_ok=True)
-        with open(UI_PREFS_FILE, "w", encoding="utf-8") as f:
-            json.dump(prefs, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        logger.error(f"ui_prefs: erreur sauvegarde: {e}", exc_info=True)
-
-UI_PREFS: dict = _load_ui_prefs()
-
-def log_sep(t=""):
-    logger.info("="*60)
-    if t: logger.info(f"  {t}"); logger.info("="*60)
-
-#  OFFSETS SHARED MEMORY — calculés depuis FlightData.h SDK BMS 4.38
-#
-#  FlightData ("FalconSharedMemoryArea") :
-#    +0x000  float  x              Ownship North (ft)
-#    +0x004  float  y              Ownship East  (ft)
-#    +0x008  float  z              Ownship Down  (ft)
-#    +0x034  float  kias           IAS (knots)
-#    +0x0BC  float  currentHeading Cap vrai HSI (degrés, 0-360)
-#
-#  FlightData2 ("FalconSharedMemoryArea2") :
-#    +0x014  float  AAUZ           Altitude baro (ft)
-#    +0x408  float  latitude       Latitude WGS84 (degrés)
-#    +0x40C  float  longitude      Longitude WGS84 (degrés)
-#
-#  Fichiers .ini BMS :
-#    col1 = North (ft), col2 = East (ft)   [confirmé par Wonju target_0≈RKNW]
-
-# Offsets FlightData
-FD_CURRENT_HDG  = 0x0BC   # float, degrés vrais 0-360
-FD_KIAS         = 0x034   # float, knots
-
-# Offsets FlightData2
-FD2_AAUZ         = 0x014   # float,  altitude baro ft
-FD2_CURRENT_TIME = 0x02C   # int,    heure BMS en secondes depuis minuit (0-86400)
-FD2_LAT          = 0x408   # float,  latitude degrés WGS84
-FD2_LON          = 0x40C   # float,  longitude degrés WGS84
-FD2_BULLSEYE_X   = 0x4B0   # float,  bullseye North ft (coords BMS)
-FD2_BULLSEYE_Y   = 0x4B4   # float,  bullseye East  ft (coords BMS)
-
-# Conversion BMS → WGS84 : délégué à theaters.py (multi-théâtre)
-
-# ── Airports : chargement dynamique par théâtre ──────────────────
-_AIRPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "airports")
-_airport_cache: dict = {}
-
-# Mapping nom théâtre → fichier JSON (lowercase key)
-_THEATER_AIRPORT_FILES: dict = {
-    "korea":        "korea.json",
-    "korea kto":    "korea.json",
-    "balkans":      "balkans.json",
-    "israel":       "israel.json",
-    "aegean":       "aegean.json",
-    "iberia":       "iberia.json",
-    "nordic":       "nordic.json",
-    "hellas":       "hto.json",
-}
-
-def _load_airports(theater_name: str) -> list:
-    key = theater_name.lower()
-    if key in _airport_cache:
-        return _airport_cache[key]
-    filename = _THEATER_AIRPORT_FILES.get(key)
-    if not filename:
-        return []
-    path = os.path.join(_AIRPORTS_DIR, filename)
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        _airport_cache[key] = data
-        return data
-    except Exception as e:
-        logger.warning(f"airports: impossible de charger {path}: {e}")
-        return []
-
-#  SHARED MEMORY BMS 4.38 — OFFSETS CORRECTS
-#
-#  FalconSharedMemoryArea  = FlightData  (taille ~0x800)
-#  FalconSharedMemoryArea2 = FlightData2 (taille ~0x900)
-#
-#  FlightData (source : BMS 4.38 SDK / FlightData.h) :
-#    +0x000  float  x          (BMS east, pieds)
-#    +0x004  float  y          (BMS north, pieds)
-#    +0x008  float  z          (altitude MSL, pieds, négatif)
-#    +0x010  float  roll       (rad)
-#    +0x014  float  pitch      (rad)
-#    +0x018  float  yaw        (cap vrai, rad) ← HEADING
-#
-#  FlightData2 :
-#    +0x000  float  x          (BMS east, pieds)  — même que FD
-#    +0x004  float  y          (BMS north, pieds)
-#    +0x008  float  z          (altitude)
-#    +0x184  double latitude   (rad WGS84) ← LAT
-#    +0x18C  double longitude  (rad WGS84) ← LON
-
-
-#  TACVIEW REAL-TIME TELEMETRY (TRTT) CLIENT
-#  Protocole TCP documenté par Tacview — utilisé par OpenRadar (UOAF)
-#  BMS config: set g_bTacviewRealTime 1 / set g_nTacviewPort 42674
-#  Handshake: BMS envoie "XtraLib.Stream.0\nTacview.RealTimeTelemetry.0\nHost\n\0"
-#             Client répond "XtraLib.Stream.0\nTacview.RealTimeTelemetry.0\nClient\n0\0"
-#  Ensuite: stream ACMI 2.x texte UTF-8 continu
-import threading, time as _time
-
-TRTT_HOST = "127.0.0.1"
-TRTT_PORT = 42674
-TRTT_CLIENT_NAME = "BMS-GPS-Riesu"
-
-_acmi_contacts: dict = {}
-_acmi_lock = threading.Lock()
-_acmi_thread = None
-_acmi_running = False
-_acmi_connected = False  # pour le status UI
-
-def _parse_trtt_color(color_str: str) -> int:
-    c = color_str.lower()
-    if 'blue' in c:  return 1
-    if 'red' in c:   return 2
-    return 3
-
-def _parse_trtt_type(type_str: str) -> str:
-    t = type_str.lower()
-    if 'fixedwing' in t or 'rotorcraft' in t: return 'air'
-    if 'ground' in t:  return 'ground'
-    if 'weapon' in t or 'missile' in t or 'projectile' in t: return 'weapon'
-    if 'sea' in t or 'ship' in t: return 'sea'
-    if 'navaid' in t or 'bullseye' in t: return 'navaid'
-    return 'other'
-
-def _trtt_client_loop():
-    global _acmi_running, _acmi_connected
-    obj_props: dict = {}
-    ref_lon = ref_lat = 0.0
-    buf = ""
-    sock: _socket.socket | None = None   # init explicite — évite "possibly unbound"
-
-    while _acmi_running:
-        try:
-            sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-            sock.settimeout(5.0)
-            logger.info(f"TRTT: connexion à {TRTT_HOST}:{TRTT_PORT}...")
-            sock.connect((TRTT_HOST, TRTT_PORT))
-            sock.settimeout(10.0)
-
-            # ── Handshake ────────────────────────────────────────
-            # Recevoir le handshake host (jusqu'au \0)
-            hs = b""
-            while b"\x00" not in hs:
-                chunk = sock.recv(256)
-                if not chunk:
-                    raise ConnectionError("Handshake host incomplet")
-                hs += chunk
-
-            # Envoyer le handshake client
-            client_hs = (
-                "XtraLib.Stream.0\n"
-                "Tacview.RealTimeTelemetry.0\n"
-                f"{TRTT_CLIENT_NAME}\n"
-                "0\x00"
-            ).encode('utf-8')
-            sock.sendall(client_hs)
-            _acmi_connected = True
-            sock.settimeout(30.0)
-            buf = ""
-            obj_props = {}
-            ref_lon = ref_lat = 0.0
-
-            # ── Stream ACMI ──────────────────────────────────────
-            while _acmi_running:
-                try:
-                    data = sock.recv(65536)
-                except _socket.timeout:
-                    logger.warning("TRTT: timeout recv — BMS toujours connecté?")
-                    continue
-                if not data:
-                    raise ConnectionError("BMS a fermé la connexion TRTT")
-                buf += data.decode('utf-8', errors='replace')
-
-                # Traiter lignes complètes
-                while '\n' in buf:
-                    line, buf = buf.split('\n', 1)
-                    line = line.strip()
-                    if not line or line.startswith('//'):
-                        continue
-                    if line.startswith('FileType') or line.startswith('FileVersion'):
-                        continue
-
-                    # Global object (id=0): références et métadonnées
-                    if line.startswith('0,'):
-                        for part in line[2:].split(','):
-                            if '=' in part:
-                                k, v = part.split('=', 1)
-                                if k == 'ReferenceLongitude':
-                                    try: ref_lon = float(v)
-                                    except: pass
-                                elif k == 'ReferenceLatitude':
-                                    try: ref_lat = float(v)
-                                    except: pass
-                        continue
-
-                    # Suppression: -hexid
-                    if line.startswith('-'):
-                        obj_id = line[1:].strip()
-                        with _acmi_lock:
-                            _acmi_contacts.pop(obj_id, None)
-                        obj_props.pop(obj_id, None)
-                        continue
-
-                    # Timestamp: #47.13
-                    if line.startswith('#'):
-                        continue
-
-                    # Objet: hexid,prop=val,...
-                    if ',' not in line:
-                        continue
-
-                    try:
-                        obj_id, rest = line.split(',', 1)
-                        obj_id = obj_id.strip()
-                        if not obj_id or obj_id == '0':
-                            continue
-
-                        props = {}
-                        # Parser correctement (les virgules peuvent être échappées)
-                        i, start_i = 0, 0
-                        chars = rest
-                        while i <= len(chars):
-                            if i == len(chars) or (chars[i] == ',' and (i == 0 or chars[i-1] != '\\')):
-                                part = chars[start_i:i]
-                                if '=' in part:
-                                    k, v = part.split('=', 1)
-                                    props[k.strip()] = v.strip()
-                                start_i = i + 1
-                            i += 1
-
-                        # Mémoriser propriétés permanentes
-                        if obj_id not in obj_props:
-                            obj_props[obj_id] = {'name':'','color':3,'acmi_type':'other','pilot':''}
-                        p = obj_props[obj_id]
-                        if 'Name'   in props: p['name']      = props['Name']
-                        if 'Color'  in props: p['color']     = _parse_trtt_color(props['Color'])
-                        # Coalition=Allies/Enemies comme fallback si Color absent
-                        if 'Coalition' in props and p['color'] == 3:
-                            co = props['Coalition'].lower()
-                            if 'allies' in co:  p['color'] = 1
-                            elif 'enemies' in co: p['color'] = 2
-                        if 'Type'   in props: p['acmi_type'] = _parse_trtt_type(props['Type'])
-                        if 'Pilot'  in props: p['pilot']     = props['Pilot']
-                        if 'Group'  in props and not p['name']: p['name'] = props['Group']
-
-                        # Filtrer: on veut uniquement l'air (pas weapons, navaid, sol)
-                        at = p.get('acmi_type', 'other')
-                        if at in ('weapon', 'navaid', 'other'):
-                            continue
-
-                        # Position T=lon|lat|alt|roll|pitch|yaw|...
-                        if 'T' not in props:
-                            continue
-                        coords = props['T'].split('|')
-                        if len(coords) < 2:
-                            continue
-                        lon_s = coords[0]
-                        lat_s = coords[1]
-                        alt_s = coords[2] if len(coords) > 2 else ''
-                        yaw_s = coords[5] if len(coords) > 5 else ''
-
-                        # Coordonnées relatives si vide = pas de changement de pos
-                        if not lon_s or not lat_s:
-                            # Garder l'entrée existante avec mise à jour timestamp
-                            with _acmi_lock:
-                                if obj_id in _acmi_contacts:
-                                    _acmi_contacts[obj_id]['_ts'] = _time.time()
-                            continue
-
-                        lon = float(lon_s) + ref_lon
-                        lat = float(lat_s) + ref_lat
-                        alt_m = float(alt_s) if alt_s else 0.0
-                        hdg = float(yaw_s) % 360.0 if yaw_s else 0.0
-
-                        # Sanity check : coordonnées dans le bbox du théâtre actif
-                        _tp = get_theater()
-                        _lat_min, _lat_max, _lon_min, _lon_max = _tp.bbox
-                        if not (_lat_min - 5 <= lat <= _lat_max + 5 and
-                                _lon_min - 5 <= lon <= _lon_max + 5):
-                            continue
-
-                        with _acmi_lock:
-                            _acmi_contacts[obj_id] = {
-                                'lat':      round(lat, 5),
-                                'lon':      round(lon, 5),
-                                'alt':      round(alt_m * 3.28084),  # m → ft
-                                'camp':     p['color'],
-                                'callsign': p['name'] or p['pilot'] or obj_id,
-                                'pilot':    p['pilot'],
-                                'type_name': at,
-                                'heading':  hdg,
-                                'speed':    round(float(props['IAS']) * 1.944) if props.get('IAS') else 0,
-                                '_ts':      _time.time(),
-                            }
-                    except Exception as ex:
-                        logger.debug(f"TRTT parse: {ex} ({line[:80]!r})")
-
-        except Exception as ex:
-            _acmi_connected = False
-            with _acmi_lock:
-                _acmi_contacts.clear()
-            logger.debug(f"TRTT déconnecté: {ex} — retry dans 5s")
-            try:
-                if sock is not None:
-                    sock.close()
-            except: pass
-            _time.sleep(5)
-
-    _acmi_connected = False
-    logger.info("TRTT client arrêté")
-
-def start_acmi_reader():
-    global _acmi_thread, _acmi_running
-    if _acmi_thread and _acmi_thread.is_alive():
-        return
-    _acmi_running = True
-    _acmi_thread = threading.Thread(target=_trtt_client_loop, daemon=True)
-    _acmi_thread.start()
-    logger.info(f"TRTT client démarré → {TRTT_HOST}:{TRTT_PORT}")
-    logger.info("  (BMS User.cfg requis: set g_bTacviewRealTime 1)")
-
-def get_acmi_contacts(own_lat=None, own_lon=None) -> list:
-    now = _time.time()
-    with _acmi_lock:
-        contacts = list(_acmi_contacts.items())
-    result = []
-    for _, c in contacts:
-        # Ignorer stale (>30s sans update — objet détruit)
-        if now - c.get('_ts', 0) > 30.0:
-            continue
-        if own_lat and own_lon:
-            if abs(c['lat'] - own_lat) < 0.002 and abs(c['lon'] - own_lon) < 0.002:
-                continue
-        result.append({k: v for k, v in c.items() if k != '_ts'})
-    return result
-
-
-# ── Lecture mémoire sécurisée (ReadProcessMemory) ────────────────
-# ctypes.from_address() peut segfaulter — ReadProcessMemory retourne False
-_k32 = _rpm = _hproc = None
-_DD_CANDIDATES = None   # (base, offset) une fois trouvé, False si introuvable
-
-def _init_safe_mem():
-    global _k32, _rpm, _hproc
-    try:
-        _k32  = ctypes.WinDLL("kernel32", use_last_error=True)
-        _rpm  = _k32.ReadProcessMemory
-        _rpm.argtypes = [ctypes.c_void_p, ctypes.c_void_p,
-                         ctypes.c_void_p, ctypes.c_size_t,
-                         ctypes.POINTER(ctypes.c_size_t)]
-        _rpm.restype  = ctypes.c_bool
-        _hproc = _k32.GetCurrentProcess()
-        logger.info(f"SafeMemReader OK — hproc={_hproc}")
-    except Exception as e:
-        logger.error(f"SafeMemReader init FAILED: {e}")
-
-def safe_read(addr: int, size: int):
-    if not _rpm or not addr: return None
-    try:
-        buf  = (ctypes.c_char * size)()
-        read = ctypes.c_size_t(0)
-        ok   = _rpm(_hproc, ctypes.c_void_p(addr), buf, size, ctypes.byref(read))
-        return bytes(buf) if ok and read.value == size else None
-    except Exception: return None
-
-def safe_float(addr: int):
-    b = safe_read(addr, 4)
-    return struct.unpack('<f', b)[0] if b else None
-
-def safe_int32(addr: int):
-    b = safe_read(addr, 4)
-    return struct.unpack('<i', b)[0] if b else None
-
-class BMSSharedMemory:
-    def __init__(self):
-        self.ptr1 = None
-        self.ptr2 = None
-        self.shm_ptrs = {}
-        self.connected = False
-        self._connect()
-
-    def _connect(self):
-        try:
-            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            OpenMap = k32.OpenFileMappingW
-            OpenMap.argtypes = [ctypes.c_uint32, ctypes.c_bool, ctypes.c_wchar_p]
-            OpenMap.restype  = ctypes.c_void_p
-            MapView = k32.MapViewOfFile
-            MapView.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
-                                ctypes.c_uint32, ctypes.c_uint32, ctypes.c_size_t]
-            MapView.restype  = ctypes.c_void_p
-
-            FILE_MAP_READ = 0x0004
-            # Zones connues BMS 4.x
-            SHM_NAMES = [
-                "FalconSharedMemoryArea",
-                "FalconSharedMemoryArea2",
-                "FalconSharedMemoryArea3",
-                "FalconSharedMemoryAreaString",
-                "FalconSharedOSBMemoryArea",
-                "FalconSharedIntellivibeMemoryArea",
-                "FalconSharedDrawingMemoryArea",
-                "FalconSharedCallsignMemoryArea",
-                "FalconSharedTrafficMemoryArea",
-            ]
-            self.shm_ptrs = {}
-            for name in SHM_NAMES:
-                h = OpenMap(FILE_MAP_READ, False, name)
-                if h:
-                    p = MapView(h, FILE_MAP_READ, 0, 0, 0)
-                    if p:
-                        self.shm_ptrs[name] = p
-                        logger.info(f"  SHM {name} = 0x{p:X}")
-            # ptr1/ptr2 compatibilité
-            self.ptr1 = self.shm_ptrs.get("FalconSharedMemoryArea")
-            self.ptr2 = self.shm_ptrs.get("FalconSharedMemoryArea2")
-
-            if self.ptr1 and self.ptr2:
-                self.connected = True
-                logger.info(f"SHM connectee: {len(self.shm_ptrs)} zones ouvertes")
-                _init_safe_mem()
-            else:
-                self.shm_ptrs = {}
-                self.ptr1 = self.ptr2 = None
-                self.connected = False
-                logger.debug("BMS non détecté — retry dans 5s")
-        except Exception as e:
-            self.shm_ptrs = {}
-            self.ptr1 = self.ptr2 = None
-            self.connected = False
-            logger.error(f"Shared Memory error: {e}", exc_info=True)
-
-    def try_reconnect(self):
-        if not self.connected:
-            self._connect()
-            if self.connected:
-                global _DD_CANDIDATES
-                _DD_CANDIDATES = None  # forcer re-scan DrawingData
-        return self.connected
-
-    def get_position(self) -> Optional[Dict]:
-        if not self.ptr1 or not self.ptr2: return None
-        hdg  = safe_float(self.ptr1 + FD_CURRENT_HDG)
-        kias = safe_float(self.ptr1 + FD_KIAS)
-        z    = safe_float(self.ptr1 + 0x008)
-        lat  = safe_float(self.ptr2 + FD2_LAT)
-        lon  = safe_float(self.ptr2 + FD2_LON)
-        if None in (hdg, kias, z, lat, lon):
-            logger.warning("get_position: safe_read echoue")
-            return None
-        # Assertions de type — Pylance ne narrowe pas via "None in tuple"
-        assert hdg  is not None
-        assert kias is not None
-        assert z    is not None
-        assert lat  is not None
-        assert lon  is not None
-        hdg_f  = float(hdg)
-        kias_f = float(kias)
-        z_f    = float(z)
-        lat_f  = float(lat)
-        lon_f  = float(lon)
-        alt    = abs(z_f)
-        hdg_f  = hdg_f % 360.0
-        # Heure BMS (secondes depuis minuit)
-        bms_time: Optional[int] = None
-        raw_t = safe_read(self.ptr2 + FD2_CURRENT_TIME, 4)
-        if raw_t:
-            try:
-                bms_time = int(struct.unpack('<i', raw_t)[0])
-                if bms_time < 0 or bms_time > 86400:
-                    bms_time = None
-            except Exception:
-                bms_time = None
-
-        # Bullseye (coords BMS North/East ft → WGS84)
-        bull_lat: Optional[float] = None
-        bull_lon: Optional[float] = None
-        raw_bx = safe_read(self.ptr2 + FD2_BULLSEYE_X, 4)
-        raw_by = safe_read(self.ptr2 + FD2_BULLSEYE_Y, 4)
-        if raw_bx and raw_by:
-            try:
-                bx = struct.unpack('<f', raw_bx)[0]
-                by = struct.unpack('<f', raw_by)[0]
-                if abs(bx) > 10 and abs(by) > 10:
-                    _bl, _bn = bms_to_latlon(bx, by)
-                    bull_lat = float(_bl)
-                    bull_lon = float(_bn)
-                    # Sanity check — théâtre actif (dynamique)
-                    if not in_theater_bbox(bull_lat, bull_lon):
-                        bull_lat = bull_lon = None
-            except Exception:
-                pass
-
-        logger.debug(f"lat={lat_f:.4f} lon={lon_f:.4f} hdg={hdg_f:.1f} alt={alt:.0f}ft kias={kias_f:.0f}kt bms_t={bms_time} bull=({bull_lat},{bull_lon})")
-        if -90 <= lat_f <= 90 and -180 <= lon_f <= 180 and not (lat_f == 0.0 and lon_f == 0.0):
-            return {"lat": lat_f, "lon": lon_f, "heading": round(hdg_f, 1),
-                    "altitude": round(alt), "kias": round(kias_f),
-                    "bms_time": bms_time,
-                    "bull_lat": round(bull_lat, 5) if bull_lat is not None else None,
-                    "bull_lon": round(bull_lon, 5) if bull_lon is not None else None,
-                    "connected": True}
-        return None
-
-
-#  APP
-bms   = BMSSharedMemory()
-from contextlib import asynccontextmanager
-
-# ── Détection IP locale automatique ─────────────────────────────
-import socket as _sock_ip
-def _get_local_ip() -> str:
-    s: _sock_ip.socket | None = None
-    try:
-        s = _sock_ip.socket(_sock_ip.AF_INET, _sock_ip.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip: str = s.getsockname()[0]
-        return ip
-    except Exception:
-        return "0.0.0.0"
-    finally:
-        if s is not None:
-            s.close()
-
-SERVER_IP   = _get_local_ip()
-SERVER_PORT = int(APP_CONFIG["port"])
-
-@asynccontextmanager
-async def lifespan(_a):
-    asyncio.create_task(broadcast_loop())
-    asyncio.create_task(_ini_watcher_loop())
-    start_acmi_reader()
-    log_sep(f"{APP_NAME} v{APP_VERSION} — by {APP_AUTHOR}")
-    logger.info(f"  Contact  : {APP_CONTACT}")
-    logger.info(f"  Website  : {APP_WEBSITE}")
-    logger.info(f"  License  : GNU GPL v3")
-    logger.info(f"  Log      : {LOG_FILE}")
-    logger.info(f"  Briefing : {BRIEFING_DIR}")
-    logger.info(f"  Config   : {CONFIG_FILE}")
-    logger.info(f"  BMS      : {'CONNECTE' if bms.connected else 'NON DETECTE'}")
-    logger.info(f"  Local    : http://localhost:{SERVER_PORT}       ← PC")
-    logger.info(f"  Réseau   : http://{SERVER_IP}:{SERVER_PORT}  ← Tablette/Mobile")
-    logger.info(f"  Sécurité : LAN uniquement (RFC-1918 + localhost)")
-    log_sep()
-    yield
-    log_sep("ARRET")
-
-app   = FastAPI(title="Falcon-Pad", lifespan=lifespan)
-
-# ── Frontend statique ─────────────────────────────────────────────
+# ── Derived paths / constants ─────────────────────────────────────────────────
+ASSETS_DIR   = os.path.join(app_info.BASE_DIR, "assets")
 FRONTEND_DIR = os.path.join(app_info.BASE_DIR, "frontend")
 if not os.path.isdir(FRONTEND_DIR):
-    # Fallback: même dossier que le script
     FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
-logger.info(f"StaticFiles monté : {FRONTEND_DIR}")
 
-# ── Middleware — accès local uniquement (localhost + LAN) ────────
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response as _StarResponse
 
-def _is_local(ip: str) -> bool:
-    """Autorise uniquement localhost et réseaux privés RFC-1918."""
-    return (
-        ip in ("127.0.0.1", "::1", "localhost") or
-        ip.startswith("10.")          or
-        ip.startswith("192.168.")     or
-        (ip.startswith("172.") and
-         any(ip.startswith(f"172.{i}.") for i in range(16, 32)))
-    )
+def _get_local_ip() -> str:
+    import socket as _s
+    try:
+        with _s.socket(_s.AF_INET, _s.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return "0.0.0.0"
 
-class _LocalOnlyMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        client_ip = request.client.host if request.client else ""
-        if not _is_local(client_ip):
-            return _StarResponse("Accès refusé — réseau local uniquement", status_code=403)
-        return await call_next(request)
 
-app.add_middleware(_LocalOnlyMiddleware)
+SERVER_IP   = _get_local_ip()
+SERVER_PORT = int(config.APP_CONFIG["port"])
+
+# ── BMS shared memory singleton ───────────────────────────────────────────────
+bms = BMSSharedMemory()
+
+# ── WebSocket clients ─────────────────────────────────────────────────────────
 ws_clients: List[WebSocket] = []
-mission_data = {"route": [], "threats": [], "flightplan": []}
 
-# ── DrawingData constants (BMS 4.38 — FalconSharedMemoryArea) ───
-DRAWING_ENTITY_SIZE: int = 40   # bytes per OSBEntity
-DRAWING_ENTITY_MAX:  int = 150  # max entities in DrawingData array
-
-# ── Helper broadcast ─────────────────────────────────────────────
+# ── Broadcast helpers ─────────────────────────────────────────────────────────
 async def _broadcast(msg: str) -> None:
-    """Envoie msg à tous les WS connectés, retire les connexions mortes."""
-    dead: list = []
+    dead = []
     for ws in list(ws_clients):
-        try:    await ws.send_text(msg)
-        except: dead.append(ws)
+        try:
+            await ws.send_text(msg)
+        except Exception:
+            dead.append(ws)
     for ws in dead:
-        if ws in ws_clients: ws_clients.remove(ws)
+        if ws in ws_clients:
+            ws_clients.remove(ws)
+
 
 def _theater_msg() -> str:
-    """Construit le message JSON 'theater' depuis le théâtre actif."""
     tp = get_theater()
     lat_min, lat_max, lon_min, lon_max = tp.bbox
     c_lat = (lat_min + lat_max) / 2
@@ -783,455 +94,287 @@ def _theater_msg() -> str:
                  "lon_min": lon_min, "lon_max": lon_max},
     }})
 
-# ── Broadcast loop — pousse les données BMS à tous les WS ────────
-_bms_last_reconnect: float = 0.0
+
+# ── Broadcast loop ────────────────────────────────────────────────────────────
+_bms_last_reconnect = 0.0
 _BMS_RECONNECT_INTERVAL = 5.0
+_bms_campaign_dir = ""
+
 
 async def broadcast_loop() -> None:
-    """Tâche asyncio : lit BMS et diffuse position + radar toutes les N ms."""
-    global _bms_last_reconnect, _bms_campaign_dir, mission_data
+    global _bms_last_reconnect, _bms_campaign_dir
     while True:
         try:
             if not bms.connected:
-                _now = _time.time()
-                if _now - _bms_last_reconnect >= _BMS_RECONNECT_INTERVAL:
-                    _bms_last_reconnect = _now
+                now = _time.time()
+                if now - _bms_last_reconnect >= _BMS_RECONNECT_INTERVAL:
+                    _bms_last_reconnect = now
+                    was = bms.connected
                     bms.try_reconnect()
+                    if not was and bms.connected:
+                        radar.reset()
+
             pos = bms.get_position() if bms.connected else None
 
-            # 4. Lecture SHM strings (toujours si BMS connecté, indépendant des WS clients)
-            ptr_str = None; _thr_changed = False; _mk_marks = []; _hsd = []
+            ptr_str = None
+            _thr_changed = False
+            _mk_marks: list = []
+            _hsd: list = []
             if bms.connected:
                 ptr_str = (bms.shm_ptrs.get("FalconSharedMemoryAreaString")
                            or bms.shm_ptrs.get("FalconSharedMemoryArea3"))
                 if ptr_str:
                     _strings = read_all_strings(ptr_str, safe_read)
-                    # Update campaign dir from shared memory
                     _cd = get_campaign_dir(_strings)
                     if _cd:
                         _bms_campaign_dir = _cd
-                    # Detect theater
                     _thr_changed = detect_theater(_strings)
-                    # Route + PPT threats depuis NavPoint SHM (ID 33)
                     _shm_route   = get_steerpoints(_strings)
                     _shm_threats = get_ppt_threats(_strings)
-                    if _shm_route or _shm_threats:
-                        _new_mission = {
-                            "route":     _shm_route,
-                            "threats":   _shm_threats,
-                            "flightplan": mission_data.get("flightplan", []),
-                        }
-                        if _new_mission != mission_data:
-                            mission_data.clear()
-                            mission_data.update(_new_mission)
-                            if ws_clients:
-                                msg_mission = json.dumps({"type": "mission", "data": mission_data})
-                                for ws in list(ws_clients):
-                                    try:    await ws.send_text(msg_mission)
-                                    except: pass
-                    # MK markpoints + HSD lines
+                    if (_shm_route or _shm_threats) and ws_clients:
+                        mission.update_from_shm(_shm_route, _shm_threats)
+                        await _broadcast(json.dumps({"type": "mission", "data": mission.mission_data}))
                     _mk_marks = get_mk_markpoints(_strings)
                     _hsd      = get_hsd_lines(_strings)
 
             if pos and ws_clients:
-                # 1. Position ownship
                 await _broadcast(json.dumps({"type": "aircraft", "data": pos}))
-
-                # 2. Contacts radar/datalink BMS (DrawingData — no god mode)
-                own_lat = pos.get("lat"); own_lon = pos.get("lon")
-                radar_c = get_radar_contacts(
-                    bms.ptr1, own_lat=own_lat, own_lon=own_lon,
-                    ptr2=bms.ptr2 if bms.ptr2 else 0
+                own_lat = pos.get("lat")
+                own_lon = pos.get("lon")
+                radar_c = radar.get_contacts(
+                    bms.shm_ptrs, bms.ptr1,
+                    own_lat=own_lat, own_lon=own_lon,
+                    ptr2=bms.ptr2 or 0,
                 ) if bms.ptr1 else []
                 await _broadcast(json.dumps({"type": "radar", "data": radar_c}))
-
-                # 3. Contacts ACMI/TRTT coalition
-                acmi_c = get_acmi_contacts(own_lat=own_lat, own_lon=own_lon)
+                acmi_c = trtt.get_contacts(own_lat=own_lat, own_lon=own_lon)
                 if acmi_c:
                     await _broadcast(json.dumps({"type": "acmi", "data": acmi_c}))
-
-                # Theater + MK markpoints + HSD lines — broadcast si données dispo
                 if bms.connected and ptr_str:
                     if _thr_changed:
                         await _broadcast(_theater_msg())
                     await _broadcast(json.dumps({"type": "mk_marks", "data": _mk_marks}))
                     await _broadcast(json.dumps({"type": "hsd_lines", "data": _hsd}))
 
-            # 5. Statut connexion
             if ws_clients:
                 await _broadcast(json.dumps({"type": "status", "data": {"connected": bms.connected}}))
 
         except Exception as e:
             logger.debug(f"broadcast_loop: {e}")
-        await asyncio.sleep(APP_CONFIG.get("broadcast_ms", 200) / 1000.0)
+        await asyncio.sleep(config.APP_CONFIG.get("broadcast_ms", 200) / 1000.0)
 
 
-#  RADAR — OSBEntity (FalconSharedMemoryArea, BMS 4.38)
-#  Offset 0x0C78 · 40 bytes/entité · max 150
-
-_ENT_NAMES={1:"F-16",2:"F-15",3:"F/A-18",4:"A-10",5:"F-117",
-            6:"MiG-29",7:"Su-27",8:"MiG-21",9:"MiG-23",10:"Su-25",
-            20:"SA-2",21:"SA-3",22:"SA-6",23:"SA-8",24:"SA-10",25:"SA-11",30:"Helo",40:"Transport"}
-
-def _find_drawing_data_base(ptr1: int, ptr2: int) -> tuple:
-    """Cherche l'offset DrawingData dans toutes les zones SHM connues."""
-    candidates = []
-    # Toutes les zones ouvertes par BMS
-    for name, ptr in bms.shm_ptrs.items():
-        if not ptr: continue
-        for off in [0x000, 0x100, 0x200, 0x300, 0x400, 0x500,
-                    0x600, 0x700, 0x800, 0x900, 0xA00, 0xB00,
-                    0xC00, 0xD00, 0xE00, 0xF00,
-                    0x1000, 0x1200, 0x1500, 0x1800, 0x1E00,
-                    0x2000, 0x2400, 0x2800, 0x2BD0]:
-            candidates.append((ptr, off, f"{name}+0x{off:X}"))
-    # Fallback ptr1/ptr2
-    for ptr, off, lbl in [(ptr1, 0x2BD0, "ptr1+0x2BD0"), (ptr2, 0x000, "ptr2+0x000"),
-                          (ptr2, 0x100, "ptr2+0x100"), (ptr2, 0x200, "ptr2+0x200")]:
-        if ptr and (ptr, off, lbl) not in candidates:
-            candidates.append((ptr, off, lbl))
-    for base, off, label in candidates:
-        if not base: continue
-        b = safe_read(base + off, 4)
-        if b is None: 
-            logger.debug(f"  scan {label}: inaccessible")
-            continue
-        nb = struct.unpack('<i', b)[0]
-        if 1 <= nb <= 50:  # nb entités plausible: entre 1 et 50
-            # Vérifier que les coordonnées de la 1ère entité sont en Corée
-            blob = safe_read(base + off + 4, 8)
-            if blob:
-                lr, lo = struct.unpack('<ff', blob)
-                import math as _m
-                if 0.4 < abs(lr) < 1.0 and 2.0 < abs(lo) < 2.5:
-                    logger.info(f"DrawingData TROUVE: {label} nb={nb} lat={_m.degrees(lr):.2f} lon={_m.degrees(lo):.2f}")
-                    return base, off
-                else:
-                    logger.debug(f"  scan {label}: nb={nb} mais coords hors Corée ({lr:.3f},{lo:.3f})")
-            logger.debug(f"  scan {label}: nb={nb} mais blob illisible")
-        else:
-            logger.debug(f"  scan {label}: nb={nb} invalide")
-    return None, None
-
-def get_radar_contacts(ptr1: int, own_lat=None, own_lon=None, ptr2: int = 0) -> list:
-    """Lit DrawingData via safe_read — cherche l'offset automatiquement."""
-    global _DD_CANDIDATES
-    if not ptr1: return []
-    # Détermination automatique de l'offset au premier appel
-    if _DD_CANDIDATES is None:
-        logger.info("Scan DrawingData en cours...")
-        found_base, found_off = _find_drawing_data_base(ptr1, ptr2)
-        if found_base:
-            _DD_CANDIDATES = (found_base, found_off)
-            logger.info(f"DrawingData lock: base={hex(found_base)} off=0x{found_off:X}")
-        else:
-            _DD_CANDIDATES = False
-            logger.warning("DrawingData: offset introuvable par scan — datalink désactivé")
-    if not _DD_CANDIDATES:
-        return []
-    dd_base, dd_off = _DD_CANDIDATES
-    b = safe_read(dd_base + dd_off, 4)
-    if b is None:
-        logger.warning(f"DrawingData nb inaccessible @ 0x{dd_base+dd_off:X} — reset scan")
-        _DD_CANDIDATES = None
-        return []
-    nb_raw = struct.unpack('<i', b)[0]
-    logger.debug(f"DrawingData nb_raw={nb_raw}")
-    if nb_raw <= 0 or nb_raw > DRAWING_ENTITY_MAX: return []
-    blob = safe_read(dd_base + dd_off + 4, nb_raw * DRAWING_ENTITY_SIZE)
-    if blob is None:
-        logger.warning("DrawingData blob: lecture impossible")
-        return []
-    assert isinstance(blob, (bytes, bytearray))  # narrow type for static analysis
-    res: list = []
-    for i in range(nb_raw):
+# ── INI watcher ───────────────────────────────────────────────────────────────
+async def _ini_watcher_loop() -> None:
+    _last_path  = ""
+    _last_mtime = 0.0
+    while True:
         try:
-            off = i * DRAWING_ENTITY_SIZE
-            lat_r, lon_r, z, et, ca, hr, sp = struct.unpack_from('<fffiiif', blob, off)
-            lb = blob[off+32:off+40].split(b'\x00')[0].decode('ascii', errors='replace').strip()
-            if lat_r == 0.0 and lon_r == 0.0: continue
-            if not 1 <= ca <= 4: continue
-            lat = math.degrees(lat_r); lon = math.degrees(lon_r)
-            if not (25 <= lat <= 50 and 110 <= lon <= 145): continue
-            if own_lat and own_lon and abs(lat-own_lat)<0.002 and abs(lon-own_lon)<0.002: continue
-            res.append({"lat": round(lat,5), "lon": round(lon,5),
-                        "alt": round(abs(z)/100)*100, "camp": int(ca),
-                        "type_name": _ENT_NAMES.get(int(et), f"T{et}"),
-                        "callsign": lb,
-                        "heading": round(math.degrees(hr)%360, 1),
-                        "speed": round(sp)})
-        except Exception as ex:
-            logger.debug(f"DrawingData[{i}]: {ex}")
-    logger.debug(f"DrawingData: {len(res)}/{nb_raw} contacts valides")
-    return res
+            if not (bms.connected and mission.mission_data.get("route")):
+                extra = ([os.path.join(_bms_campaign_dir, "*.ini")]
+                         if (_bms_campaign_dir and os.path.isdir(_bms_campaign_dir)) else None)
+                path, mtime = mission.find_latest_ini(extra)
+                if path and (path != _last_path or mtime > _last_mtime + 1):
+                    _last_path  = path
+                    _last_mtime = mtime
+                    # Detect theater from raw BMS coords before parsing
+                    try:
+                        with open(path, encoding="latin-1") as _f:
+                            _raw = _f.read()
+                        _cfg = configparser.RawConfigParser()
+                        _cfg.optionxform = str  # type: ignore[assignment]
+                        _cfg.read_string(_raw)
+                        if _cfg.has_section("STPT"):
+                            _pts = [(float(_p[0]), float(_p[1]))
+                                    for _, _v in _cfg["STPT"].items()
+                                    for _p in [_v.split(",")]
+                                    if len(_p) >= 2
+                                    and _try_float(_p[0]) and _try_float(_p[1])
+                                    and abs(float(_p[0])) > 10 and abs(float(_p[1])) > 10]
+                            if _pts and detect_theater_from_coords_multi(_pts) and ws_clients:
+                                await _broadcast(_theater_msg())
+                    except Exception:
+                        pass
+                    result = mission.parse_ini_file(path)
+                    if result and ws_clients:
+                        await _broadcast(json.dumps({"type": "mission", "data": mission.mission_data}))
+        except Exception as e:
+            logger.debug(f"INI watcher: {e}")
+        await asyncio.sleep(3)
 
+
+def _try_float(s: str) -> bool:
+    try:
+        float(s)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+# ── App & lifespan ────────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(_a):
+    asyncio.create_task(broadcast_loop())
+    asyncio.create_task(_ini_watcher_loop())
+    trtt.start()
+    config.log_sep(f"{app_info.SHORT} v{app_info.VERSION} — by {app_info.AUTHOR}")
+    logger.info(f"  Contact  : {app_info.CONTACT}")
+    logger.info(f"  Website  : {app_info.WEBSITE}")
+    logger.info(f"  License  : {app_info.LICENSE}")
+    logger.info(f"  Log      : {config.LOG_FILE}")
+    logger.info(f"  Briefing : {config.BRIEFING_DIR}")
+    logger.info(f"  Config   : {app_info.CONFIG_FILE}")
+    logger.info(f"  BMS      : {'CONNECTE' if bms.connected else 'NON DETECTE'}")
+    logger.info(f"  Local    : http://localhost:{SERVER_PORT}       <- PC")
+    logger.info(f"  Reseau   : http://{SERVER_IP}:{SERVER_PORT}  <- Tablette/Mobile")
+    config.log_sep()
+    yield
+    config.log_sep("ARRET")
+
+
+app = FastAPI(title="Falcon-Pad", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+def _is_local(ip: str) -> bool:
+    return (ip in ("127.0.0.1", "::1", "localhost") or
+            ip.startswith("10.") or ip.startswith("192.168.") or
+            (ip.startswith("172.") and
+             any(ip.startswith(f"172.{i}.") for i in range(16, 32))))
+
+
+class _LocalOnlyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        client_ip = request.client.host if request.client else ""
+        if not _is_local(client_ip):
+            return _StarResp("Acces refuse — reseau local uniquement", status_code=403)
+        return await call_next(request)
+
+
+app.add_middleware(_LocalOnlyMiddleware)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
     ws_clients.append(websocket)
     try:
-        await websocket.send_text(json.dumps({"type":"status","data":{"connected": bms.connected}}))
-        while True: await websocket.receive_text()
+        await websocket.send_text(json.dumps({"type": "status", "data": {"connected": bms.connected}}))
+        while True:
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        if websocket in ws_clients: ws_clients.remove(websocket)
+        if websocket in ws_clients:
+            ws_clients.remove(websocket)
 
 
 @app.get("/api/airports")
 async def get_airports():
     if not is_theater_detected():
         return []
-    return _load_airports(get_theater_name())
+    return airports.load(get_theater_name())
+
 
 @app.get("/api/ini/status")
 async def ini_status():
-    """Statut du dernier .ini chargé automatiquement."""
-    return {
-        "file": os.path.basename(_ini_last_path) if _ini_last_path else None,
-        "path": _ini_last_path,
-        "loaded": bool(_ini_last_path),
-        "steerpoints": len(mission_data.get("route", [])),
-        "ppt": len(mission_data.get("threats", [])),
-        "flightplan": len(mission_data.get("flightplan", [])),
-        "theater": get_theater_name(),
-        "source": "shm" if (bms.connected and mission_data.get("route")) else "ini",
-    }
+    status = mission.ini_status()
+    status["theater"] = get_theater_name()
+    status["source"]  = "shm" if (bms.connected and mission.mission_data.get("route")) else "ini"
+    return status
+
 
 @app.get("/api/mission")
-async def get_mission(): return mission_data
+async def get_mission():
+    return mission.mission_data
+
 
 @app.post("/api/upload")
 async def upload_mission(file: UploadFile = File(...)):
     try:
         content = (await file.read()).decode("latin-1")
-        cfg = configparser.RawConfigParser(); cfg.optionxform = str  # type: ignore[assignment]
-        cfg.read_string(content)
-        route, threats, fplan = [], [], []
-        # ── Theater auto-detection from all valid steerpoints ──
-        if cfg.has_section("STPT"):
-            _pts = []
-            for _, _v in cfg["STPT"].items():
-                _p = _v.split(",")
-                if len(_p) >= 2:
-                    try:
-                        _x, _y = float(_p[0]), float(_p[1])
-                        if abs(_x) > 10 and abs(_y) > 10:
-                            _pts.append((_x, _y))
-                    except: pass
-            if _pts:
-                changed = detect_theater_from_coords_multi(_pts)
-                if changed:
-                    await _broadcast(_theater_msg())
-        if cfg.has_section("STPT"):
-            for key, val in cfg["STPT"].items():
-                parts = val.split(",")
-                if len(parts) >= 3:
-                    try:
-                        x,y,z = float(parts[0]),float(parts[1]),float(parts[2])
-                        if abs(x)>10 and abs(y)>10:
-                            # .ini BMS: col1=North(x), col2=East(y) — confirmé
-                            lat,lon = bms_to_latlon(x, y)
-                            if   "line" in key.lower(): fplan.append({"lat":lat,"lon":lon,"alt":z,"index":len(fplan)})
-                            elif "ppt"  in key.lower():
-                                # col4 = range en pieds (164055 ft ≈ 27 NM pour SA2, etc.)
-                                try:
-                                    r_ft=float(parts[3]);range_m=int(r_ft*0.3048);range_nm=max(1,round(r_ft/6076.12))
-                                except:
-                                    range_m=27800;range_nm=15
-                                name_ppt=parts[4].strip() if len(parts)>4 else ""
-                                try:    ppt_num = 56 + int(key.lower().replace("ppt_","").strip())
-                                except: ppt_num = 56 + len(threats)
-                                # Ignorer les PPTs hors du théâtre actif (IPs hors zone, etc.)
-                                if in_theater_bbox(lat, lon):
-                                    threats.append({"lat":lat,"lon":lon,"name":name_ppt,"range_nm":range_nm,"range_m":range_m,"num":ppt_num,"index":len(threats)})
-                            else:                       route.append({"lat":lat,"lon":lon,"alt":z,"index":len(route)})
-                    except: pass
+        # Theater detection from raw BMS coords before parsing
+        _cfg = configparser.RawConfigParser()
+        _cfg.optionxform = str  # type: ignore[assignment]
+        _cfg.read_string(content)
+        if _cfg.has_section("STPT"):
+            _pts = [(float(_p[0]), float(_p[1]))
+                    for _, _v in _cfg["STPT"].items()
+                    for _p in [_v.split(",")]
+                    if len(_p) >= 2 and _try_float(_p[0]) and _try_float(_p[1])
+                    and abs(float(_p[0])) > 10 and abs(float(_p[1])) > 10]
+            if _pts and detect_theater_from_coords_multi(_pts):
+                await _broadcast(_theater_msg())
+        result = mission.set_from_upload(content, file.filename or "uploaded.ini")
+        route   = result.get("route",   [])
+        threats = result.get("threats", [])
+        fplan   = result.get("flightplan", [])
         if not route and not threats and not fplan:
             raise HTTPException(400, "No valid steerpoints found — check theater and file format")
-        mission_data.clear(); mission_data.update({"route":route,"threats":threats,"flightplan":fplan})
         logger.info(f"INI upload OK: {len(route)} WP, {len(threats)} PPT, {len(fplan)} FP")
-        return {"status":"ok","route":len(route),"threats":len(threats),"flightplan":len(fplan)}
+        return {"status": "ok", "route": len(route),
+                "threats": len(threats), "flightplan": len(fplan)}
     except HTTPException:
         raise
     except Exception as e:
         logger.warning(f"INI upload error: {e}")
         raise HTTPException(400, f"Parse error: {e}")
 
-#  AUTO-LOADER .INI MISSION BMS
-#  Surveille les dossiers BMS connus et charge le dernier .ini modifié
-import glob as _glob, configparser as _configparser
 
-_ini_last_path: str = ""
-_ini_last_mtime: float = 0.0
-_bms_campaign_dir: str = ""
+# ── Settings ──────────────────────────────────────────────────────────────────
 
-INI_SEARCH_PATHS = [
-    r"C:\Falcon BMS 4.38\User\DTC\*.ini",
-    r"C:\Falcon BMS 4.37\User\DTC\*.ini",
-    r"C:\Falcon BMS 4.38\User\Acmi\*.ini",
-    r"D:\Falcon BMS 4.38\User\DTC\*.ini",
-    r"D:\Falcon BMS 4.37\User\DTC\*.ini",
-]
-
-def _find_latest_ini() -> tuple[str, float]:
-    """Trouve le .ini BMS le plus récemment modifié."""
-    patterns = list(INI_SEARCH_PATHS)
-    # Priorité 1 : chemin campaign lu depuis la shared memory (ID 14 — ThrCampaigndir)
-    if _bms_campaign_dir and os.path.isdir(_bms_campaign_dir):
-        patterns.insert(0, os.path.join(_bms_campaign_dir, "*.ini"))
-    try:
-        import winreg
-        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                             r"SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.38")
-        install_dir, _ = winreg.QueryValueEx(key, "InstallDir")
-        # Priorité 2 : DTC utilisateur
-        patterns.insert(0, os.path.join(install_dir, "User", "DTC", "*.ini"))
-        # Priorité 3 : fallback — tous les dossiers Campaign sous Data\
-        patterns.append(os.path.join(install_dir, "Data", "*", "Campaign", "*.ini"))
-        patterns.append(os.path.join(install_dir, "Data", "*", "*", "Campaign", "*.ini"))
-    except Exception:
-        pass
-    files = []
-    for pat in patterns:
-        try: files.extend(_glob.glob(pat))
-        except: pass
-    if not files:
-        return "", 0.0
-    best = max(files, key=os.path.getmtime)
-    return best, os.path.getmtime(best)
-
-def _parse_ini_file(path: str) -> tuple:
-    """Parse un .ini BMS et retourne mission_data. Retourne aussi si le théâtre a changé."""
-    _ini_theater_changed = False
-    try:
-        with open(path, encoding="latin-1") as f:
-            raw = f.read()
-        cfg = _configparser.ConfigParser()
-        cfg.optionxform = str  # type: ignore[assignment]
-        cfg.read_string(raw)
-        route, threats, fplan = [], [], []
-        # ── Theater auto-detection from all valid steerpoints ──
-        if cfg.has_section("STPT"):
-            _pts = []
-            for _, _v in cfg["STPT"].items():
-                _p = _v.split(",")
-                if len(_p) >= 2:
-                    try:
-                        _x, _y = float(_p[0]), float(_p[1])
-                        if abs(_x) > 10 and abs(_y) > 10:
-                            _pts.append((_x, _y))
-                    except: pass
-            if _pts:
-                _before = get_theater_name()
-                detect_theater_from_coords_multi(_pts)
-                _ini_theater_changed = (get_theater_name() != _before)
-        if cfg.has_section("STPT"):
-            for key, val in cfg["STPT"].items():
-                parts = val.split(",")
-                if len(parts) >= 3:
-                    try:
-                        x, y, z = float(parts[0]), float(parts[1]), float(parts[2])
-                        if abs(x) > 10 and abs(y) > 10:
-                            lat, lon = bms_to_latlon(x, y)
-                            kl = key.lower()
-                            if "line" in kl:
-                                fplan.append({"lat": lat, "lon": lon, "alt": z, "index": len(fplan)})
-                            elif "ppt" in kl:
-                                try:
-                                    r_ft = float(parts[3])
-                                    range_m = int(r_ft * 0.3048)
-                                    range_nm = max(1, round(r_ft / 6076.12))
-                                except:
-                                    range_m = 27800; range_nm = 15
-                                name_ppt = parts[4].strip() if len(parts) > 4 else ""
-                                try:    ppt_num = 56 + int(kl.replace("ppt_", "").strip())
-                                except: ppt_num = 56 + len(threats)
-                                if in_theater_bbox(lat, lon):
-                                    threats.append({"lat": lat, "lon": lon, "name": name_ppt,
-                                                    "range_nm": range_nm, "range_m": range_m,
-                                                    "num": ppt_num, "index": len(threats)})
-                            else:
-                                route.append({"lat": lat, "lon": lon, "alt": z, "index": len(route)})
-                    except: pass
-        result = {"route": route, "threats": threats, "flightplan": fplan}
-        mission_data.clear(); mission_data.update(result)
-        logger.info(f"INI auto-chargé: {os.path.basename(path)} — {len(route)} steerpoints, {len(threats)} PPT")
-        return result, _ini_theater_changed
-    except Exception as e:
-        logger.error(f"INI parse error: {e}")
-        return {}, False
-
-async def _ini_watcher_loop():
-    """Tâche asyncio: surveille et charge automatiquement le dernier .ini BMS.
-    Actif seulement quand BMS n'est pas connecté ou que la SHM ne fournit pas de route."""
-    global _ini_last_path, _ini_last_mtime
-    while True:
-        try:
-            # Si BMS connecté et route déjà alimentée par SHM → pas besoin du fichier
-            if not (bms.connected and mission_data.get("route")):
-                path, mtime = _find_latest_ini()
-                if path and (path != _ini_last_path or mtime > _ini_last_mtime + 1):
-                    _ini_last_path = path
-                    _ini_last_mtime = mtime
-                    _, theater_changed = _parse_ini_file(path)
-                    if theater_changed and ws_clients:
-                        await _broadcast(_theater_msg())
-        except Exception as e:
-            logger.debug(f"INI watcher: {e}")
-        await asyncio.sleep(3)
-
-
-#  HTML / CSS / JS
-
-# ══════════════════════════════════════════════════════════════════
-#  SETTINGS API
-# ══════════════════════════════════════════════════════════════════
 class SettingsModel(BaseModel):
     port:         Optional[int] = None
     briefing_dir: Optional[str] = None
     broadcast_ms: Optional[int] = None
     theme:        Optional[str] = None
 
+
 @app.get("/api/settings")
 async def settings_get():
-    return {**APP_CONFIG, "current_port": SERVER_PORT, "current_ip": SERVER_IP}
+    return {**config.APP_CONFIG, "current_port": SERVER_PORT, "current_ip": SERVER_IP}
+
 
 @app.post("/api/settings")
 async def settings_save(s: SettingsModel):
-    global APP_CONFIG, BRIEFING_DIR
     changed: list = []
-    if s.port is not None and 1024 <= s.port <= 65535 and s.port != APP_CONFIG.get("port", 8000):
-        APP_CONFIG["port"] = s.port; changed.append("port")
+    if s.port is not None and 1024 <= s.port <= 65535 and s.port != config.APP_CONFIG.get("port"):
+        config.APP_CONFIG["port"] = s.port
+        changed.append("port")
     if s.briefing_dir is not None and s.briefing_dir.strip():
         nd = s.briefing_dir.strip()
         try:
             os.makedirs(nd, exist_ok=True)
-            APP_CONFIG["briefing_dir"] = nd; BRIEFING_DIR = nd; changed.append("briefing_dir")
+            config.APP_CONFIG["briefing_dir"] = nd
+            config.BRIEFING_DIR = nd
+            changed.append("briefing_dir")
         except Exception as e:
             raise HTTPException(400, f"Dossier invalide: {e}")
     if s.broadcast_ms is not None and 50 <= s.broadcast_ms <= 2000:
-        APP_CONFIG["broadcast_ms"] = s.broadcast_ms; changed.append("broadcast_ms")
+        config.APP_CONFIG["broadcast_ms"] = s.broadcast_ms
+        changed.append("broadcast_ms")
     if s.theme is not None and s.theme in ("dark", "light"):
-        APP_CONFIG["theme"] = s.theme; changed.append("theme")
-    _save_config(APP_CONFIG)
+        config.APP_CONFIG["theme"] = s.theme
+        changed.append("theme")
+    config.save(config.APP_CONFIG)
     needs_restart = "port" in changed
     logger.info(f"Settings: {changed}" + (" — RESTART requis (port)" if needs_restart else ""))
-    return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": APP_CONFIG}
+    return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": config.APP_CONFIG}
+
 
 @app.get("/api/server/info")
 async def server_info():
     return {"ip": SERVER_IP, "port": SERVER_PORT, "url": f"http://{SERVER_IP}:{SERVER_PORT}"}
 
+
 @app.get("/api/app/info")
 async def app_info_route():
-    return {
-        "name":    app_info.SHORT,
-        "version": app_info.VERSION,
-        "author":  app_info.AUTHOR,
-        "website": getattr(app_info, "WEBSITE", ""),
-        "github":  getattr(app_info, "GITHUB", ""),
-        "bms":     getattr(app_info, "BMS", "4.38"),
-    }
+    return {"name": app_info.SHORT, "version": app_info.VERSION,
+            "author": app_info.AUTHOR, "website": app_info.WEBSITE,
+            "github": app_info.GITHUB, "bms": app_info.BMS}
+
 
 @app.get("/api/theater")
 async def theater_info():
@@ -1241,18 +384,15 @@ async def theater_info():
     lat_min, lat_max, lon_min, lon_max = tp.bbox
     c_lat = (lat_min + lat_max) / 2
     c_lon = (lon_min + lon_max) / 2
-    span  = max(lat_max-lat_min, lon_max-lon_min)
+    span  = max(lat_max - lat_min, lon_max - lon_min)
     zoom  = 6 if span > 20 else 7 if span > 15 else 8
-    return {
-        "name": get_theater_name(),
-        "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
-        "bbox": {"lat_min": lat_min, "lat_max": lat_max,
-                 "lon_min": lon_min, "lon_max": lon_max},
-    }
+    return {"name": get_theater_name(),
+            "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
+            "bbox": {"lat_min": lat_min, "lat_max": lat_max,
+                     "lon_min": lon_min, "lon_max": lon_max}}
 
-@app.get("/api/ui-prefs")
-async def ui_prefs_get():
-    return UI_PREFS
+
+# ── UI Preferences ────────────────────────────────────────────────────────────
 
 class UiPrefsModel(BaseModel):
     active_color:     Optional[str]   = None
@@ -1279,191 +419,191 @@ class UiPrefsModel(BaseModel):
     rwy_offsets:      Optional[str]   = None
     annotations:      Optional[str]   = None
 
+
+@app.get("/api/ui-prefs")
+async def ui_prefs_get():
+    return ui_prefs.prefs
+
+
 @app.post("/api/ui-prefs")
 async def ui_prefs_save(p: UiPrefsModel):
-    global UI_PREFS
-    hex_re = r'#[0-9a-fA-F]{6}$'
-    # Colors validation
-    for key in ("active_color","color_draw","color_stpt","color_fplan",
-                "color_ppt",
-                "color_hsd_l1","color_hsd_l2","color_hsd_l3","color_hsd_l4"):
+    hex_re = r"#[0-9a-fA-F]{6}$"
+    for key in ("active_color", "color_draw", "color_stpt", "color_fplan", "color_ppt",
+                "color_hsd_l1", "color_hsd_l2", "color_hsd_l3", "color_hsd_l4"):
         val = getattr(p, key)
         if val is not None and re.match(hex_re, val):
-            UI_PREFS[key] = val
-    # Layer
-    if p.layer is not None and p.layer in ("dark","osm","satellite","terrain"):
-        UI_PREFS["layer"] = p.layer
-    # Booleans
-    for key in ("ppt_visible","airports_visible","runways_visible","ap_name_visible"):
+            ui_prefs.prefs[key] = val
+    if p.layer is not None and p.layer in ("dark", "osm", "satellite", "terrain"):
+        ui_prefs.prefs["layer"] = p.layer
+    for key in ("ppt_visible", "airports_visible", "runways_visible", "ap_name_visible"):
         val = getattr(p, key)
         if val is not None:
-            UI_PREFS[key] = val
-    # Sizes
-    for key in ("size_draw","size_stpt","size_stpt_line","size_fplan","size_fplan_line","size_ppt","size_ppt_dot"):
+            ui_prefs.prefs[key] = val
+    for key in ("size_draw", "size_stpt", "size_stpt_line", "size_fplan",
+                "size_fplan_line", "size_ppt", "size_ppt_dot"):
         val = getattr(p, key)
         if val is not None and 0.5 <= val <= 50:
-            UI_PREFS[key] = val
-    # JSON strings (validated)
-    for key in ("rwy_offsets","annotations"):
+            ui_prefs.prefs[key] = val
+    for key in ("rwy_offsets", "annotations"):
         val = getattr(p, key)
         if val is not None:
             try:
-                json.loads(val)  # validate JSON
-                UI_PREFS[key] = val
+                json.loads(val)
+                ui_prefs.prefs[key] = val
             except Exception:
                 pass
-    _save_ui_prefs(UI_PREFS)
+    ui_prefs.save(ui_prefs.prefs)
     logger.debug(f"ui_prefs saved: {p.model_dump(exclude_none=True)}")
-    return {"ok": True, "prefs": UI_PREFS}
+    return {"ok": True, "prefs": ui_prefs.prefs}
+
+
+# ── ACMI status ───────────────────────────────────────────────────────────────
 
 @app.get("/api/acmi/status")
 async def acmi_status():
-    """Statut du client TRTT et contacts en cours."""
-    with _acmi_lock:
-        nb = len(_acmi_contacts)
-        sample = list(_acmi_contacts.values())[:5]
-    return {
-        "trtt_host": f"{TRTT_HOST}:{TRTT_PORT}",
-        "connected": _acmi_connected,
-        "thread_alive": _acmi_thread.is_alive() if _acmi_thread else False,
-        "nb_contacts": nb,
-        "sample": [{k:v for k,v in c.items() if k != '_ts'} for c in sample],
-        "config_bms": "set g_bTacviewRealTime 1  (dans User/config/Falcon BMS User.cfg)"
-    }
+    diag = trtt.get_diagnostics()
+    return {"trtt_host": diag.get("host", ""),
+            "connected": diag.get("connected", False),
+            "thread_alive": diag.get("thread_alive", False),
+            "nb_contacts": diag.get("nb_contacts", 0),
+            "config_bms": "set g_bTacviewRealTime 1  (User/config/Falcon BMS User.cfg)"}
 
-# ══════════════════════════════════════════════════════════════════
-#  BRIEFING API
-# ══════════════════════════════════════════════════════════════════
 
-BRIEFING_ALLOWED = {".pdf", ".png", ".jpg", ".jpeg", ".docx"}
-BRIEFING_MAX_MB  = 50
+# ── Briefing ──────────────────────────────────────────────────────────────────
+
+_BRIEFING_ALLOWED = {".pdf", ".png", ".jpg", ".jpeg", ".docx"}
+_BRIEFING_MAX_MB  = 50
+
 
 def _briefing_meta() -> list:
-    """Retourne la liste des fichiers briefing avec métadonnées."""
+    from datetime import datetime as _dt
     files = []
-    for fn in sorted(os.listdir(BRIEFING_DIR)):
+    bdir = config.BRIEFING_DIR
+    for fn in sorted(os.listdir(bdir)):
         ext = os.path.splitext(fn)[1].lower()
-        if ext not in BRIEFING_ALLOWED:
+        if ext not in _BRIEFING_ALLOWED:
             continue
-        fp = os.path.join(BRIEFING_DIR, fn)
+        fp   = os.path.join(bdir, fn)
         stat = os.stat(fp)
-        files.append({
-            "name":     fn,
-            "ext":      ext.lstrip("."),
-            "size_kb":  round(stat.st_size / 1024, 1),
-            "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%d/%m %H:%M"),
-        })
+        files.append({"name": fn, "ext": ext.lstrip("."),
+                      "size_kb":  round(stat.st_size / 1024, 1),
+                      "modified": _dt.fromtimestamp(stat.st_mtime).strftime("%d/%m %H:%M")})
     return files
+
 
 @app.get("/api/briefing/list")
 async def briefing_list():
     return {"files": _briefing_meta()}
 
+
 @app.post("/api/briefing/upload")
 async def briefing_upload(file: UploadFile = File(...)):
-    filename: str = file.filename or "unnamed"
+    filename = file.filename or "unnamed"
     ext = os.path.splitext(filename)[1].lower()
-    if ext not in BRIEFING_ALLOWED:
-        raise HTTPException(400, f"Type non supporté: {ext}. Acceptés: {', '.join(BRIEFING_ALLOWED)}")
+    if ext not in _BRIEFING_ALLOWED:
+        raise HTTPException(400, f"Type non supporté: {ext}. Acceptés: {', '.join(_BRIEFING_ALLOWED)}")
     data = await file.read()
-    if len(data) > BRIEFING_MAX_MB * 1024 * 1024:
-        raise HTTPException(400, f"Fichier trop lourd (max {BRIEFING_MAX_MB} MB)")
+    if len(data) > _BRIEFING_MAX_MB * 1024 * 1024:
+        raise HTTPException(400, f"Fichier trop lourd (max {_BRIEFING_MAX_MB} MB)")
     safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
-    dest = os.path.join(BRIEFING_DIR, safe_name)
+    dest = os.path.join(config.BRIEFING_DIR, safe_name)
     with open(dest, "wb") as f:
         f.write(data)
     logger.info(f"Briefing uploadé: {safe_name} ({len(data)//1024} KB)")
     return {"ok": True, "name": safe_name, "files": _briefing_meta()}
 
+
 @app.delete("/api/briefing/delete/{filename}")
 async def briefing_delete(filename: str):
     safe = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
-    fp = os.path.join(BRIEFING_DIR, safe)
+    fp   = os.path.join(config.BRIEFING_DIR, safe)
     if not os.path.exists(fp):
         raise HTTPException(404, "Fichier introuvable")
     os.remove(fp)
     logger.info(f"Briefing supprimé: {safe}")
     return {"ok": True, "files": _briefing_meta()}
 
+
 @app.get("/api/briefing/file/{filename}")
 async def briefing_serve(filename: str):
-    """Sert le fichier brut (PDF, image). Le .docx est converti en HTML."""
     safe = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
-    fp = os.path.join(BRIEFING_DIR, safe)
+    fp   = os.path.join(config.BRIEFING_DIR, safe)
     if not os.path.exists(fp):
         raise HTTPException(404, "Fichier introuvable")
     ext = os.path.splitext(safe)[1].lower()
     if ext == ".docx":
-        return await _docx_to_html_response(fp)
-    mime = {".pdf":"application/pdf", ".png":"image/png",
-            ".jpg":"image/jpeg", ".jpeg":"image/jpeg"}.get(ext, "application/octet-stream")
+        return await _docx_to_html(fp)
+    mime = {".pdf": "application/pdf", ".png": "image/png",
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(ext, "application/octet-stream")
     return FileResponse(fp, media_type=mime, headers={"Content-Disposition": "inline"})
 
-async def _docx_to_html_response(fp: str):
-    """Convertit un .docx en page HTML tactique."""
+
+async def _docx_to_html(fp: str):
     try:
-        from docx import Document as _DocxDoc  # type: ignore[import-untyped]
-        doc = _DocxDoc(fp)
-        paras = []
+        from docx import Document as _Doc  # type: ignore[import-untyped]
+        doc  = _Doc(fp)
+        para_html = []
         for p in doc.paragraphs:
             if not p.text.strip():
-                paras.append("<br>")
+                para_html.append("<br>")
                 continue
             style = (p.style.name.lower() if p.style and p.style.name else "")
-            if "heading 1" in style:
-                paras.append(f"<h1>{p.text}</h1>")
-            elif "heading 2" in style:
-                paras.append(f"<h2>{p.text}</h2>")
-            elif "heading 3" in style:
-                paras.append(f"<h3>{p.text}</h3>")
+            if   "heading 1" in style: para_html.append(f"<h1>{p.text}</h1>")
+            elif "heading 2" in style: para_html.append(f"<h2>{p.text}</h2>")
+            elif "heading 3" in style: para_html.append(f"<h3>{p.text}</h3>")
             else:
-                runs_html = ""
+                runs = ""
                 for r in p.runs:
-                    t = r.text.replace("&","&amp;").replace("<","&lt;")
+                    t = r.text.replace("&", "&amp;").replace("<", "&lt;")
                     if r.bold:   t = f"<strong>{t}</strong>"
                     if r.italic: t = f"<em>{t}</em>"
-                    runs_html += t
-                paras.append(f"<p>{runs_html}</p>")
-        body = "\n".join(paras)
-        html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>
-  body{{background:#060a12;color:#cbd5e1;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
-    max-width:860px;margin:0 auto;padding:32px 24px;font-size:15px;line-height:1.7}}
-  h1{{font-size:22px;color:#fbbf24;letter-spacing:2px;text-transform:uppercase;
-    border-bottom:1px solid rgba(251,191,36,.2);padding-bottom:8px;margin:24px 0 12px}}
-  h2{{font-size:16px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin:20px 0 8px}}
-  h3{{font-size:13px;color:#4ade80;letter-spacing:1px;text-transform:uppercase;margin:16px 0 6px}}
-  p{{margin:4px 0;color:#94a3b8}} strong{{color:#e2e8f0}} em{{color:#fbbf24}}
-  br{{display:block;margin:4px 0}}
-</style></head><body>{body}</body></html>"""
-        from fastapi.responses import HTMLResponse as _HR
-        return _HR(content=html)
+                    runs += t
+                para_html.append(f"<p>{runs}</p>")
+        body = "\n".join(para_html)
+        html = (
+            '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+            'body{background:#060a12;color:#cbd5e1;font-family:system-ui,-apple-system,'
+            "'Segoe UI',sans-serif;max-width:860px;margin:0 auto;padding:32px 24px;"
+            'font-size:15px;line-height:1.7}'
+            'h1{font-size:22px;color:#fbbf24;letter-spacing:2px;text-transform:uppercase;'
+            'border-bottom:1px solid rgba(251,191,36,.2);padding-bottom:8px;margin:24px 0 12px}'
+            'h2{font-size:16px;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin:20px 0 8px}'
+            'h3{font-size:13px;color:#4ade80;letter-spacing:1px;text-transform:uppercase;margin:16px 0 6px}'
+            'p{margin:4px 0;color:#94a3b8}strong{color:#e2e8f0}em{color:#fbbf24}'
+            f'</style></head><body>{body}</body></html>'
+        )
+        return HTMLResponse(content=html)
     except ImportError:
-        from fastapi.responses import HTMLResponse as _HR
-        return _HR(content="<html><body style='background:#060a12;color:#ef4444;font-family:monospace;padding:40px'>"
-                   "<h2>⚠ python-docx non installé</h2>"
-                   "<p>Installer avec: <code>pip install python-docx</code></p></body></html>", status_code=500)
+        return HTMLResponse(
+            '<html><body style="background:#060a12;color:#ef4444;font-family:monospace;padding:40px">'
+            '<h2>python-docx non installé</h2><p><code>pip install python-docx</code></p></body></html>',
+            status_code=500)
     except Exception as e:
-        from fastapi.responses import HTMLResponse as _HR
-        return _HR(content=f"<html><body style='background:#060a12;color:#ef4444;padding:40px;font-family:monospace'>"
-                   f"<h2>Erreur conversion DOCX</h2><pre>{e}</pre></body></html>", status_code=500)
+        return HTMLResponse(
+            f'<html><body style="background:#060a12;color:#ef4444;padding:40px;font-family:monospace">'
+            f'<h2>Erreur conversion DOCX</h2><pre>{e}</pre></body></html>',
+            status_code=500)
+
 
 @app.get("/")
 async def index():
     idx = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(idx):
         return FileResponse(idx, media_type="text/html")
-    logger.error(f"index.html introuvable : {idx}")
     return HTMLResponse("<h1>Falcon-Pad — frontend/index.html manquant</h1>", status_code=500)
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ENTRY POINT — Qt tray window + uvicorn server thread
+# ═══════════════════════════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
-    import threading as _th_main
+    import threading as _th
 
     def _run_server():
         uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="warning")
 
-    _srv_thread = _th_main.Thread(target=_run_server, daemon=True)
-    _srv_thread.start()
+    _th.Thread(target=_run_server, daemon=True).start()
 
     try:
         from PySide6.QtWidgets import QApplication, QWidget  # type: ignore[import-untyped]
@@ -1472,7 +612,6 @@ if __name__ == "__main__":
                                        QPixmap, QIcon, QBrush)
     except ImportError:
         logger.error("PySide6 absent — pip install PySide6")
-        _srv_thread.join()
         raise SystemExit(0)
 
     class FalconPadWindow(QWidget):
@@ -1492,11 +631,7 @@ if __name__ == "__main__":
         def __init__(self):
             super().__init__()
             self.setFixedSize(self.W, self.H)
-            # Window + Frameless = barre des tâches OK + showMinimized() OK
-            self.setWindowFlags(
-                Qt.WindowType.Window |
-                Qt.WindowType.FramelessWindowHint
-            )
+            self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
             self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             self.setWindowTitle("Falcon-Pad")
             _ico = os.path.join(ASSETS_DIR, "falcon_pad.ico")
@@ -1509,14 +644,10 @@ if __name__ == "__main__":
             if os.path.exists(_lp):
                 px = QPixmap(_lp)
                 if not px.isNull():
-                    self._logo = px.scaled(64,64,Qt.AspectRatioMode.KeepAspectRatio,
+                    self._logo = px.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio,
                                            Qt.TransformationMode.SmoothTransformation)
-            self._drag_pos  = None
-            self._btn_hover = False
-            self._min_hover = False
-            self._btn_rect  = None
-            self._min_rect  = None
-            self._bms_ok    = False
+            self._drag_pos = self._btn_rect = self._min_rect = None
+            self._btn_hover = self._min_hover = self._bms_ok = False
             self._timer = QTimer(self)
             self._timer.timeout.connect(self._poll_bms)
             self._timer.start(3000)
@@ -1544,100 +675,98 @@ if __name__ == "__main__":
             p.drawRect(0, 0, W-1, H-1)
             p.drawLine(20, 80, W-20, 80)
             p.drawLine(20, H-66, W-20, H-66)
-            # Bouton réduire
-            rx,ry,rw,rh = W-36,10,24,18
-            self._min_rect=(rx,ry,rw,rh)
+            rx, ry, rw, rh = W-36, 10, 24, 18
+            self._min_rect = (rx, ry, rw, rh)
             mc = self.TXT_MID if self._min_hover else self.TXT_DIM
-            p.setPen(QPen(mc,1)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRect(rx,ry,rw,rh)
-            p.setPen(QPen(mc,2))
+            p.setPen(QPen(mc, 1)); p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(rx, ry, rw, rh)
+            p.setPen(QPen(mc, 2))
             p.drawLine(rx+5, ry+rh//2, rx+rw-5, ry+rh//2)
-            # Logo + titre
             tx = 20
             if self._logo:
                 p.drawPixmap(12, 8, self._logo); tx = 88
             p.setPen(QPen(self.ACCENT))
-            p.setFont(QFont("Consolas",15,QFont.Weight.Bold))
-            p.drawText(tx,8,W-tx-44,40,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,"FALCON-PAD")
+            p.setFont(QFont("Consolas", 15, QFont.Weight.Bold))
+            p.drawText(tx, 8, W-tx-44, 40, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft, "FALCON-PAD")
             p.setPen(QPen(self.TXT_DIM))
-            p.setFont(QFont("Consolas",8))
-            p.drawText(tx,48,W-tx-44,20,Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,
-                       f"v{APP_VERSION}  ·  by {APP_AUTHOR}")
-            # URLs
-            y=96
-            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22,y,"LOCAL"); y+=17
-            p.setFont(QFont("Consolas",11)); p.setPen(QPen(self.ACCENT))
-            p.drawText(22,y,f"http://localhost:{SERVER_PORT}"); y+=25
-            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22,y,"RÉSEAU  —  Tablette / Mobile"); y+=17
-            p.setFont(QFont("Consolas",11)); p.setPen(QPen(self.BLUE))
-            p.drawText(22,y,f"http://{SERVER_IP}:{SERVER_PORT}"); y+=25
-            # BMS
-            p.setFont(QFont("Consolas",7,QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22,y,"FALCON BMS 4.38"); y+=17
+            p.setFont(QFont("Consolas", 8))
+            p.drawText(tx, 48, W-tx-44, 20, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,
+                       f"v{app_info.VERSION}  ·  by {app_info.AUTHOR}")
+            y = 96
+            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22, y, "LOCAL"); y += 17
+            p.setFont(QFont("Consolas", 11)); p.setPen(QPen(self.ACCENT))
+            p.drawText(22, y, f"http://localhost:{SERVER_PORT}"); y += 25
+            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22, y, "RESEAU  —  Tablette / Mobile"); y += 17
+            p.setFont(QFont("Consolas", 11)); p.setPen(QPen(self.BLUE))
+            p.drawText(22, y, f"http://{SERVER_IP}:{SERVER_PORT}"); y += 25
+            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
+            p.drawText(22, y, "FALCON BMS 4.38"); y += 17
             dc = self.ACCENT if self._bms_ok else self.RED
             p.setBrush(QBrush(dc)); p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(22,y-9,10,10)
+            p.drawEllipse(22, y-9, 10, 10)
             p.setPen(QPen(dc))
-            p.setFont(QFont("Consolas",10,QFont.Weight.Bold))
-            p.drawText(38,y,"CONNECTÉ" if self._bms_ok else "NON DÉTECTÉ"); y+=25
-            # Logs
+            p.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+            p.drawText(38, y, "CONNECTE" if self._bms_ok else "NON DETECTE"); y += 25
             p.setPen(QPen(self.TXT_DIM))
-            p.setFont(QFont("Consolas",7,QFont.Weight.Bold))
-            p.drawText(22,y,"LOGS"); y+=15
-            ls = LOG_DIR if len(LOG_DIR)<=54 else "…"+LOG_DIR[-52:]
-            p.setFont(QFont("Consolas",8)); p.drawText(22,y,ls)
-            # Bouton ARRÊT
-            bx,by_,bw_,bh_ = W//2-72,H-52,144,28
-            self._btn_rect=(bx,by_,bw_,bh_)
+            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+            p.drawText(22, y, "LOGS"); y += 15
+            ls = app_info.LOG_DIR if len(app_info.LOG_DIR) <= 54 else "..." + app_info.LOG_DIR[-52:]
+            p.setFont(QFont("Consolas", 8)); p.drawText(22, y, ls)
+            bx, by_, bw_, bh_ = W//2-72, H-52, 144, 28
+            self._btn_rect = (bx, by_, bw_, bh_)
             p.setBrush(QBrush(self.RED_HOV if self._btn_hover else self.RED_DIM))
-            p.setPen(QPen(self.RED if self._btn_hover else self.RED_OUT,1))
-            p.drawRect(bx,by_,bw_,bh_)
+            p.setPen(QPen(self.RED if self._btn_hover else self.RED_OUT, 1))
+            p.drawRect(bx, by_, bw_, bh_)
             p.setPen(QPen(self.RED))
-            p.setFont(QFont("Consolas",11,QFont.Weight.Bold))
-            p.drawText(bx,by_,bw_,bh_,Qt.AlignmentFlag.AlignCenter,"■  ARRÊT")
-            p.setPen(QPen(self.TXT_DIM)); p.setFont(QFont("Consolas",7))
-            p.drawText(0,H-13,W,12,Qt.AlignmentFlag.AlignCenter,"Le serveur sera arrêté")
+            p.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+            p.drawText(bx, by_, bw_, bh_, Qt.AlignmentFlag.AlignCenter, "■  ARRET")
+            p.setPen(QPen(self.TXT_DIM)); p.setFont(QFont("Consolas", 7))
+            p.drawText(0, H-13, W, 12, Qt.AlignmentFlag.AlignCenter, "Le serveur sera arrete")
             p.end()
 
         def mousePressEvent(self, e):
-            if e.button() != Qt.MouseButton.LeftButton: return
-            mx,my = e.position().x(), e.position().y()
+            if e.button() != Qt.MouseButton.LeftButton:
+                return
+            mx, my = e.position().x(), e.position().y()
             if self._btn_rect:
-                bx,by_,bw_,bh_ = self._btn_rect
-                if bx<=mx<=bx+bw_ and by_<=my<=by_+bh_:
+                bx, by_, bw_, bh_ = self._btn_rect
+                if bx <= mx <= bx+bw_ and by_ <= my <= by_+bh_:
                     self._do_quit(); return
             if self._min_rect:
-                rx,ry,rw,rh = self._min_rect
-                if rx<=mx<=rx+rw and ry<=my<=ry+rh:
+                rx, ry, rw, rh = self._min_rect
+                if rx <= mx <= rx+rw and ry <= my <= ry+rh:
                     self.showMinimized(); return
             if my < 80:
                 self._drag_pos = e.globalPosition().toPoint()
 
         def mouseMoveEvent(self, e):
-            if self._drag_pos and e.buttons()==Qt.MouseButton.LeftButton:
-                delta = e.globalPosition().toPoint()-self._drag_pos
-                self.move(self.pos()+delta)
+            if self._drag_pos and e.buttons() == Qt.MouseButton.LeftButton:
+                delta = e.globalPosition().toPoint() - self._drag_pos
+                self.move(self.pos() + delta)
                 self._drag_pos = e.globalPosition().toPoint()
-            mx,my = e.position().x(), e.position().y()
+            mx, my = e.position().x(), e.position().y()
             if self._btn_rect:
-                bx,by_,bw_,bh_ = self._btn_rect
-                h = bx<=mx<=bx+bw_ and by_<=my<=by_+bh_
-                if h!=self._btn_hover: self._btn_hover=h; self.update()
+                bx, by_, bw_, bh_ = self._btn_rect
+                h = bx <= mx <= bx+bw_ and by_ <= my <= by_+bh_
+                if h != self._btn_hover:
+                    self._btn_hover = h; self.update()
             if self._min_rect:
-                rx,ry,rw,rh = self._min_rect
-                h2 = rx<=mx<=rx+rw and ry<=my<=ry+rh
-                if h2!=self._min_hover: self._min_hover=h2; self.update()
+                rx, ry, rw, rh = self._min_rect
+                h2 = rx <= mx <= rx+rw and ry <= my <= ry+rh
+                if h2 != self._min_hover:
+                    self._min_hover = h2; self.update()
 
-        def mouseReleaseEvent(self, _e): self._drag_pos = None
+        def mouseReleaseEvent(self, _e):
+            self._drag_pos = None
 
         def leaveEvent(self, _e):
             if self._btn_hover or self._min_hover:
-                self._btn_hover=False; self._min_hover=False; self.update()
+                self._btn_hover = False; self._min_hover = False; self.update()
 
         def keyPressEvent(self, e):
-            if e.key()==Qt.Key.Key_F4 and e.modifiers()==Qt.KeyboardModifier.AltModifier:
+            if e.key() == Qt.Key.Key_F4 and e.modifiers() == Qt.KeyboardModifier.AltModifier:
                 self._do_quit()
 
         def _do_quit(self):
@@ -1646,7 +775,6 @@ if __name__ == "__main__":
 
     _app = QApplication(sys.argv)
     _app.setApplicationName("Falcon-Pad")
-    _app.setApplicationVersion(APP_VERSION)
+    _app.setApplicationVersion(app_info.VERSION)
     _win = FalconPadWindow()
     _app.exec()
-

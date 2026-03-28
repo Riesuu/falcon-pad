@@ -5,7 +5,14 @@
       "WebFetch(domain:forum.falcon-bms.com)",
       "Bash(python -c \"import sys; sys.path.insert\\(0, r''c:\\\\Users\\\\Lyes\\\\Documents\\\\00_DEV''\\); import theaters; print\\(''theaters OK —'', list\\(theaters.THEATER_DB.keys\\(\\)\\)\\)\")",
       "Bash(python -m pytest tests/tests.py tests/test_theaters.py tests/test_stringdata.py tests/test_mission.py tests/test_trtt.py -v --tb=short)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''falcon_pad.py''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''falcon_pad.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "Bash(python -c \"print\\(sum\\(1 for _ in open\\(''falcon_pad.py'', encoding=''utf-8''\\)\\)\\)\")",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m pytest tests/tests.py -x -q)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(python -c \"print\\(sum\\(1 for _ in open\\(''''falcon_pad.py'''', encoding=''''utf-8''''\\)\\)\\)\")"
     ]
   }
 }

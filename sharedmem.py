@@ -107,6 +107,7 @@ _SHM_NAMES = [
     "FalconSharedMemoryArea",
     "FalconSharedMemoryArea2",
     "FalconSharedMemoryArea3",
+    "FalconSharedMemoryAreaString",
     "FalconSharedOSBMemoryArea",
     "FalconSharedIntellivibeMemoryArea",
     "FalconSharedDrawingMemoryArea",
