@@ -58,7 +58,7 @@ _reg("Korea KTO", lon0=127.5,  k0=0.9996, FE=512000.0, FN=-3749290.0,
      bbox=(30.0, 45.0, 118.0, 135.0))
 _reg("Balkans",   lon0=20.0,   k0=0.9996, FE=500000.0, FN=0.0,
      bbox=(35.0, 50.0, 12.0,  32.0))
-_reg("Israel",    lon0=35.5,   k0=0.9996, FE=500000.0, FN=0.0,
+_reg("Israel",    lon0=35.0,   k0=0.9996, FE=500000.0, FN=-3113000.0,
      bbox=(27.0, 37.0, 29.0,  42.0))
 _reg("Aegean",    lon0=24.0,   k0=0.9996, FE=500000.0, FN=0.0,
      bbox=(33.0, 43.0, 18.0,  32.0))
@@ -179,6 +179,48 @@ def bms_to_latlon_theater(north_ft: float, east_ft: float,
                           tp: TheaterParams) -> Tuple[float, float]:
     """Convert BMS coords → WGS-84 using an *explicit* theater projection."""
     return _tmerc_to_latlon(north_ft, east_ft, tp)
+
+
+def detect_theater_from_coords(north_ft: float, east_ft: float) -> bool:
+    """Single-point wrapper — see detect_theater_from_coords_multi."""
+    return detect_theater_from_coords_multi([(north_ft, east_ft)])
+
+
+def detect_theater_from_coords_multi(points: List[Tuple[float, float]]) -> bool:
+    """
+    Try every theater against all provided (north_ft, east_ft) points.
+    Score = (bbox_hits, -sum_of_distances_from_center).
+    Pick the theater with most hits; break ties by choosing the one whose
+    projected points cluster closest to the bbox center (tighter fit).
+    Returns True if the active theater changed.
+    """
+    best_key: Optional[str] = None
+    best_hits = 0
+    best_dist = float("inf")
+
+    for key, tp in THEATER_DB.items():
+        hits = 0
+        total_dist = 0.0
+        c_lat = (tp.bbox[0] + tp.bbox[1]) / 2
+        c_lon = (tp.bbox[2] + tp.bbox[3]) / 2
+        for north_ft, east_ft in points:
+            try:
+                lat, lon = _tmerc_to_latlon(north_ft, east_ft, tp)
+                bb = tp.bbox
+                if bb[0] <= lat <= bb[1] and bb[2] <= lon <= bb[3]:
+                    hits += 1
+                    total_dist += math.sqrt((lat - c_lat) ** 2 + (lon - c_lon) ** 2)
+            except Exception:
+                continue
+        if hits > best_hits or (hits == best_hits and hits > 0 and total_dist < best_dist):
+            best_hits = hits
+            best_dist = total_dist
+            best_key = key
+
+    if best_key:
+        return set_active_theater(THEATER_DB[best_key].name)
+    logger.warning("detect_theater_from_coords_multi: no theater matched")
+    return False
 
 
 def in_theater_bbox(lat: float, lon: float) -> bool:

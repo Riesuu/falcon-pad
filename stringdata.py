@@ -69,6 +69,7 @@ STRID_BMS_BASEDIR    = 2
 STRID_BMS_USER_DIR   = 6
 STRID_BMS_CONFIG_DIR = 9
 STRID_THR_NAME       = 13
+STRID_THR_CAMPAIGN   = 14
 STRID_THR_TERRAIN    = 15
 STRID_AC_NAME        = 29
 STRID_NAVPOINT       = 33   # ★ Was incorrectly set to 30 (AcNCTR) in old code
@@ -170,6 +171,12 @@ def get_bms_user_dir(strings: Dict[int, List[str]]) -> Optional[str]:
     return entries[0].strip() if entries else None
 
 
+def get_campaign_dir(strings: Dict[int, List[str]]) -> Optional[str]:
+    """Extract active theater campaign directory from StringData (ID 14)."""
+    entries = strings.get(STRID_THR_CAMPAIGN, [])
+    return entries[0].strip() if entries else None
+
+
 def get_aircraft_name(strings: Dict[int, List[str]]) -> Optional[str]:
     """Extract current aircraft name from StringData (ID 29)."""
     entries = strings.get(STRID_AC_NAME, [])
@@ -182,7 +189,7 @@ def get_aircraft_name(strings: Dict[int, List[str]]) -> Optional[str]:
 
 # Regex for the mandatory NP: block
 _RE_NP = re.compile(
-    r'NP:(\d+),([A-Z][A-Z0-9]),([^,]+),([^,]+),([^,]+),([^;]+);'
+    r'NP:(\d+),([A-Z][A-Z0-9]),([^,]+),([^,]+),([^,]+),([^,;]+)'
 )
 # Regex for the optional PT: block (PPT threat info)
 _RE_PT = re.compile(

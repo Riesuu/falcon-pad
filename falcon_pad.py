@@ -31,10 +31,13 @@ from fastapi.responses import HTMLResponse, FileResponse
 import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil, re
 from datetime import datetime
 import app_info
-from stringdata import read_all_strings, get_mk_markpoints, get_hsd_lines, detect_theater
+from stringdata import (read_all_strings, get_mk_markpoints, get_hsd_lines,
+                        detect_theater, get_campaign_dir,
+                        get_steerpoints, get_ppt_threats)
 from theaters import (
     bms_to_latlon, in_theater_bbox,
-    get_theater, get_theater_name, THEATER_DB
+    get_theater, get_theater_name, THEATER_DB,
+    detect_theater_from_coords_multi
 )
 from typing import List, Optional, Dict
 import logging
@@ -588,6 +591,7 @@ class BMSSharedMemory:
                 "FalconSharedMemoryArea",
                 "FalconSharedMemoryArea2",
                 "FalconSharedMemoryArea3",
+                "FalconSharedMemoryAreaString",
                 "FalconSharedOSBMemoryArea",
                 "FalconSharedIntellivibeMemoryArea",
                 "FalconSharedDrawingMemoryArea",
@@ -780,7 +784,7 @@ _BMS_RECONNECT_INTERVAL = 5.0
 
 async def broadcast_loop() -> None:
     """Tâche asyncio : lit BMS et diffuse position + radar toutes les N ms."""
-    global _bms_last_reconnect
+    global _bms_last_reconnect, _bms_campaign_dir, mission_data
     while True:
         try:
             if not bms.connected:
@@ -789,6 +793,40 @@ async def broadcast_loop() -> None:
                     _bms_last_reconnect = _now
                     bms.try_reconnect()
             pos = bms.get_position() if bms.connected else None
+
+            # 4. Lecture SHM strings (toujours si BMS connecté, indépendant des WS clients)
+            ptr_str = None; _thr_changed = False; _mk_marks = []; _hsd = []
+            if bms.connected:
+                ptr_str = (bms.shm_ptrs.get("FalconSharedMemoryAreaString")
+                           or bms.shm_ptrs.get("FalconSharedMemoryArea3"))
+                if ptr_str:
+                    _strings = read_all_strings(ptr_str, safe_read)
+                    # Update campaign dir from shared memory
+                    _cd = get_campaign_dir(_strings)
+                    if _cd:
+                        _bms_campaign_dir = _cd
+                    # Detect theater
+                    _thr_changed = detect_theater(_strings)
+                    # Route + PPT threats depuis NavPoint SHM (ID 33)
+                    _shm_route   = get_steerpoints(_strings)
+                    _shm_threats = get_ppt_threats(_strings)
+                    if _shm_route or _shm_threats:
+                        _new_mission = {
+                            "route":     _shm_route,
+                            "threats":   _shm_threats,
+                            "flightplan": mission_data.get("flightplan", []),
+                        }
+                        if _new_mission != mission_data:
+                            mission_data.clear()
+                            mission_data.update(_new_mission)
+                            if ws_clients:
+                                msg_mission = json.dumps({"type": "mission", "data": mission_data})
+                                for ws in list(ws_clients):
+                                    try:    await ws.send_text(msg_mission)
+                                    except: pass
+                    # MK markpoints + HSD lines
+                    _mk_marks = get_mk_markpoints(_strings)
+                    _hsd      = get_hsd_lines(_strings)
 
             if pos and ws_clients:
                 # 1. Position ownship
@@ -819,12 +857,9 @@ async def broadcast_loop() -> None:
                         try:    await ws.send_text(msg_acmi)
                         except: pass
 
-                # 4. MK Markpoints + HSD Lines + theater detection
-                ptr_str = bms.shm_ptrs.get("FalconSharedMemoryArea3")
-                if ptr_str:
-                    _strings = read_all_strings(ptr_str, safe_read)
-                    # Detect theater change and broadcast
-                    if detect_theater(_strings):
+                # Theater + MK markpoints + HSD lines — broadcast si données dispo
+                if bms.connected and ptr_str:
+                    if _thr_changed:
                         tp = get_theater()
                         lat_min, lat_max, lon_min, lon_max = tp.bbox
                         c_lat = (lat_min + lat_max) / 2
@@ -840,15 +875,11 @@ async def broadcast_loop() -> None:
                         for ws in list(ws_clients):
                             try:    await ws.send_text(msg_thr)
                             except: pass
-                    # MK markpoints (STPTs 26-30)
-                    mk_marks = get_mk_markpoints(_strings)
-                    msg_mk = json.dumps({"type": "mk_marks", "data": mk_marks})
+                    msg_mk = json.dumps({"type": "mk_marks", "data": _mk_marks})
                     for ws in list(ws_clients):
                         try:    await ws.send_text(msg_mk)
                         except: pass
-                    # HSD Lines L1-L4 (STPTs 31-54)
-                    hsd = get_hsd_lines(_strings)
-                    msg_hsd = json.dumps({"type": "hsd_lines", "data": hsd})
+                    msg_hsd = json.dumps({"type": "hsd_lines", "data": _hsd})
                     for ws in list(ws_clients):
                         try:    await ws.send_text(msg_hsd)
                         except: pass
@@ -1051,6 +1082,8 @@ async def ini_status():
         "steerpoints": len(mission_data.get("route", [])),
         "ppt": len(mission_data.get("threats", [])),
         "flightplan": len(mission_data.get("flightplan", [])),
+        "theater": get_theater_name(),
+        "source": "shm" if (bms.connected and mission_data.get("route")) else "ini",
     }
 
 @app.get("/api/mission")
@@ -1064,6 +1097,35 @@ async def upload_mission(file: UploadFile = File(...)):
         cfg = configparser.RawConfigParser(); cfg.optionxform = str  # type: ignore[assignment]
         cfg.read_string(content)
         route, threats, fplan = [], [], []
+        # ── Theater auto-detection from all valid steerpoints ──
+        if cfg.has_section("STPT"):
+            _pts = []
+            for _, _v in cfg["STPT"].items():
+                _p = _v.split(",")
+                if len(_p) >= 2:
+                    try:
+                        _x, _y = float(_p[0]), float(_p[1])
+                        if abs(_x) > 10 and abs(_y) > 10:
+                            _pts.append((_x, _y))
+                    except: pass
+            if _pts:
+                changed = detect_theater_from_coords_multi(_pts)
+                if changed:
+                    tp = get_theater()
+                    lat_min, lat_max, lon_min, lon_max = tp.bbox
+                    c_lat = (lat_min + lat_max) / 2
+                    c_lon = (lon_min + lon_max) / 2
+                    span  = max(lat_max-lat_min, lon_max-lon_min)
+                    zoom  = 6 if span > 20 else 7 if span > 15 else 8
+                    msg_thr = json.dumps({"type": "theater", "data": {
+                        "name": get_theater_name(),
+                        "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
+                        "bbox": {"lat_min": lat_min, "lat_max": lat_max,
+                                 "lon_min": lon_min, "lon_max": lon_max},
+                    }})
+                    for ws in list(ws_clients):
+                        try:    await ws.send_text(msg_thr)
+                        except: pass
         if cfg.has_section("STPT"):
             for key, val in cfg["STPT"].items():
                 parts = val.split(",")
@@ -1105,6 +1167,7 @@ import glob as _glob, configparser as _configparser
 
 _ini_last_path: str = ""
 _ini_last_mtime: float = 0.0
+_bms_campaign_dir: str = ""
 
 INI_SEARCH_PATHS = [
     r"C:\Falcon BMS 4.38\User\DTC\*.ini",
@@ -1116,14 +1179,20 @@ INI_SEARCH_PATHS = [
 
 def _find_latest_ini() -> tuple[str, float]:
     """Trouve le .ini BMS le plus récemment modifié."""
-    # Ajouter chemin depuis registre BMS
     patterns = list(INI_SEARCH_PATHS)
+    # Priorité 1 : chemin campaign lu depuis la shared memory (ID 14 — ThrCampaigndir)
+    if _bms_campaign_dir and os.path.isdir(_bms_campaign_dir):
+        patterns.insert(0, os.path.join(_bms_campaign_dir, "*.ini"))
     try:
         import winreg
         key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                              r"SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.38")
         install_dir, _ = winreg.QueryValueEx(key, "InstallDir")
+        # Priorité 2 : DTC utilisateur
         patterns.insert(0, os.path.join(install_dir, "User", "DTC", "*.ini"))
+        # Priorité 3 : fallback — tous les dossiers Campaign sous Data\
+        patterns.append(os.path.join(install_dir, "Data", "*", "Campaign", "*.ini"))
+        patterns.append(os.path.join(install_dir, "Data", "*", "*", "Campaign", "*.ini"))
     except Exception:
         pass
     files = []
@@ -1145,6 +1214,19 @@ def _parse_ini_file(path: str) -> dict:
         cfg.optionxform = str  # type: ignore[assignment]
         cfg.read_string(raw)
         route, threats, fplan = [], [], []
+        # ── Theater auto-detection from all valid steerpoints ──
+        if cfg.has_section("STPT"):
+            _pts = []
+            for _, _v in cfg["STPT"].items():
+                _p = _v.split(",")
+                if len(_p) >= 2:
+                    try:
+                        _x, _y = float(_p[0]), float(_p[1])
+                        if abs(_x) > 10 and abs(_y) > 10:
+                            _pts.append((_x, _y))
+                    except: pass
+            if _pts:
+                detect_theater_from_coords_multi(_pts)
         if cfg.has_section("STPT"):
             for key, val in cfg["STPT"].items():
                 parts = val.split(",")
@@ -1182,18 +1264,21 @@ def _parse_ini_file(path: str) -> dict:
         return {}
 
 async def _ini_watcher_loop():
-    """Tâche asyncio: surveille et charge automatiquement le dernier .ini BMS."""
+    """Tâche asyncio: surveille et charge automatiquement le dernier .ini BMS.
+    Actif seulement quand BMS n'est pas connecté ou que la SHM ne fournit pas de route."""
     global _ini_last_path, _ini_last_mtime
     while True:
         try:
-            path, mtime = _find_latest_ini()
-            if path and (path != _ini_last_path or mtime > _ini_last_mtime + 1):
-                _ini_last_path = path
-                _ini_last_mtime = mtime
-                _parse_ini_file(path)
+            # Si BMS connecté et route déjà alimentée par SHM → pas besoin du fichier
+            if not (bms.connected and mission_data.get("route")):
+                path, mtime = _find_latest_ini()
+                if path and (path != _ini_last_path or mtime > _ini_last_mtime + 1):
+                    _ini_last_path = path
+                    _ini_last_mtime = mtime
+                    _parse_ini_file(path)
         except Exception as e:
             logger.debug(f"INI watcher: {e}")
-        await asyncio.sleep(3)  # vérifier toutes les 3s
+        await asyncio.sleep(3)
 
 
 #  HTML / CSS / JS

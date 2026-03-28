@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "WebFetch(domain:forum.falcon-bms.com)"
+    ]
+  }
+}
