@@ -291,7 +291,8 @@ def get_ppt_threats(strings: Dict[int, List[str]]) -> List[dict]:
     Extract PPT (preplanned threats) from StringData NavPoints.
     Returns list sorted by index, each entry:
         {"lat":..., "lon":..., "name":..., "range_nm":..., "range_m":...,
-         "num":..., "index": 0-based}
+         "num":..., "index": 0-based, "agl_ft": altitude above ground in ft}
+    agl_ft > 0 means the unit is airborne (aircraft); ≈0 means ground unit.
     """
     entries = strings.get(STRID_NAVPOINT, [])
     if not entries:
@@ -304,6 +305,8 @@ def get_ppt_threats(strings: Dict[int, List[str]]) -> List[dict]:
         range_ft = np.get("ppt_range_ft", 0.0)
         range_m = int(range_ft * 0.3048) if range_ft > 0 else 27800
         range_nm = max(1, round(range_ft / 6076.12)) if range_ft > 0 else 15
+        # z and grnd_elev are in tens of feet in BMS; AGL = (z - grnd_elev) * 10
+        agl_ft = max(0, round((np["z"] - np["grnd_elev"]) * 10))
         ppts.append({
             "lat":      np["lat"],
             "lon":      np["lon"],
@@ -312,6 +315,7 @@ def get_ppt_threats(strings: Dict[int, List[str]]) -> List[dict]:
             "range_m":  range_m,
             "num":      np["index"],
             "index":    len(ppts),
+            "agl_ft":   agl_ft,
         })
     ppts.sort(key=lambda p: p["num"])
     for i, p in enumerate(ppts):

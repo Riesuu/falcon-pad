@@ -468,27 +468,32 @@ map.on('mousemove',e=>{if(rulerActive&&rStart)updateRuler(e.latlng);});
 
 let aStart=null,aLine=null,aHead=null,aDot=null;
 
-function arrowHeadPts(from,to,zoom){
+function _bearingDeg(from, to) {
+  const φ1=from.lat*Math.PI/180, φ2=to.lat*Math.PI/180;
+  const dλ=(to.lng-from.lng)*Math.PI/180;
+  const x=Math.sin(dλ)*Math.cos(φ2);
+  const y=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(dλ);
+  return ((Math.atan2(x,y)*180/Math.PI)+360)%360;
+}
+
+// Arrowhead points always 20px on screen — works at any zoom and distance
+function arrowHeadPts(from, to) {
   const fp = map.latLngToLayerPoint(from);
   const tp = map.latLngToLayerPoint(to);
-  const ang = Math.atan2(tp.y-fp.y, tp.x-fp.x);
-  const A = Math.PI/5.5;
-  const L2 = Math.max(14, Math.min(32, map.distance(from,to)/60));  // px, proportionnel dist
-  const sz = L2 / Math.pow(2, zoom-7) * 0.00015;  // retour en degrés approx
-  const cosLat = Math.cos(to.lat*Math.PI/180);
+  const ang = Math.atan2(tp.y - fp.y, tp.x - fp.x);
+  const L2 = 20, A = Math.PI / 6;  // 20px wings, 30° angle
   return [
-    L.latLng(to.lat - sz*Math.cos(ang-A),          to.lng - sz*Math.sin(ang-A)/cosLat),
-    L.latLng(to.lat - sz*Math.cos(ang+A),          to.lng - sz*Math.sin(ang+A)/cosLat)
+    map.layerPointToLatLng(L.point(tp.x - L2*Math.cos(ang-A), tp.y - L2*Math.sin(ang-A))),
+    map.layerPointToLatLng(L.point(tp.x - L2*Math.cos(ang+A), tp.y - L2*Math.sin(ang+A))),
   ];
 }
 
 function updateArrow(to){
   if(!aStart)return;
-  if(aLine)map.removeLayer(aLine);
-  if(aHead)map.removeLayer(aHead);
-  aLine=L.polyline([aStart,to],{color:activeColor,weight:2,opacity:.85}).addTo(map);
-  const [p1,p2]=arrowHeadPts(aStart,to,map.getZoom());
-  aHead=L.polygon([to,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:.9,weight:1.5}).addTo(map);
+  [aLine,aHead].forEach(l=>{if(l)map.removeLayer(l)});
+  aLine=L.polyline([aStart,to],{color:activeColor,weight:1.5,opacity:.9,interactive:false}).addTo(map);
+  const [p1,p2]=arrowHeadPts(aStart,to);
+  aHead=L.polygon([to,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:0,interactive:false}).addTo(map);
 }
 function clearArrow(){[aLine,aHead,aDot].forEach(l=>{if(l)map.removeLayer(l)});aLine=aHead=aDot=aStart=null;}
 
@@ -505,15 +510,21 @@ map.on('click',e=>{
     aStart=e.latlng;
     aDot=L.circleMarker(aStart,{radius:4,color:'#fff',fillColor:activeColor,fillOpacity:1,weight:2}).addTo(map);
   } else {
-    const fLine=L.polyline([aStart,e.latlng],{color:activeColor,weight:2,opacity:.9}).addTo(map);
+    const fLine=L.polyline([aStart,e.latlng],{color:activeColor,weight:1.5,opacity:.9,interactive:false}).addTo(map);
     drawMarkers.push(fLine);
-    const [p1,p2]=arrowHeadPts(aStart,e.latlng,map.getZoom());
-    const fHead=L.polygon([e.latlng,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:1.5}).addTo(map);
+    const [p1,p2]=arrowHeadPts(aStart,e.latlng);
+    const fHead=L.polygon([e.latlng,p1,p2],{color:activeColor,fillColor:activeColor,fillOpacity:1,weight:0,interactive:false}).addTo(map);
     drawMarkers.push(fHead);
     const dist=map.distance(aStart,e.latlng)/1852;
     if(dist>0.05){
+      const brg=_bearingDeg(aStart,e.latlng);
+      const brgStr=String(Math.round(brg)).padStart(3,'0')+'°';
       const mid=L.latLng((aStart.lat+e.latlng.lat)/2,(aStart.lng+e.latlng.lng)/2);
-      const lm=L.marker(mid,{icon:L.divIcon({html:`<div class="arrow-label" style="color:${activeColor}">${dist.toFixed(1)} NM</div>`,className:'',iconSize:[70,20],iconAnchor:[35,20]})}).addTo(map);
+      const html=`<div class="arrow-label" style="--ac:${activeColor}">
+        <span class="arrow-brg">${brgStr}</span>
+        <span class="arrow-dist">${dist.toFixed(1)}<span class="arrow-unit"> NM</span></span>
+      </div>`;
+      const lm=L.marker(mid,{icon:L.divIcon({html,className:'',iconSize:[120,24],iconAnchor:[60,12]})}).addTo(map);
       drawMarkers.push(lm);
     }
     clearArrow();
@@ -832,7 +843,8 @@ function _renderMissionData(d, noSetView=false){
     if(d.threats?.length){
       const c=C_PPT;
       const pptOn = document.getElementById('pptBtn')?.classList.contains('active');
-      d.threats.forEach(t=>{
+      // Filter SHM ground units (agl_ft defined and ≤ 500ft) — INI PPTs (no agl_ft) always shown
+      d.threats.filter(t => t.agl_ft === undefined || t.agl_ft === null || t.agl_ft > 500).forEach(t=>{
         const circ=L.circle([t.lat,t.lon],{radius:(t.range_m||t.range_nm*1852),color:c,fillColor:c,fillOpacity:.05,weight:S_PPT,dashArray:'5 4'});
         if(pptOn) circ.addTo(map);
         pptCircles.push(circ);
@@ -842,16 +854,11 @@ function _renderMissionData(d, noSetView=false){
         pptCircles.push(_pm);  // tracked with circles so pptBtn toggles it
 
         const nm=t.name?t.name.trim():'';
-        const rng=t.range_nm>0?t.range_nm+'NM':'';
         const pptNum=(t.num!==undefined)?t.num:t.index;
-        const parts2=[
-          `<span style="color:#f87171;font-size:9px;letter-spacing:1px;font-weight:700">PPT\u00a0${pptNum}</span>`,
-          nm?`<span style="color:#fca5a5;font-size:10px;font-weight:700;letter-spacing:.3px">${nm}</span>`:'',
-          rng?`<span style="color:#ef4444;font-size:9px;font-family:'Consolas','Courier New',monospace">${rng}</span>`:'',
-        ].filter(Boolean).join('<span style="color:rgba(239,68,68,.25);margin:0 3px;font-size:7px">▸</span>');
+        const numStr=String(pptNum).padStart(2,'0');
         const pptLbl=L.marker([t.lat,t.lon],{icon:L.divIcon({
-          html:`<div style="background:rgba(8,2,2,.9);border:1px solid rgba(239,68,68,.22);border-left:2px solid rgba(239,68,68,.65);border-radius:2px;padding:2px 7px;white-space:nowrap;pointer-events:none;font-family:system-ui,sans-serif;display:inline-flex;align-items:center;gap:0;box-shadow:0 2px 8px rgba(0,0,0,.5)">${parts2}</div>`,
-          className:'',iconSize:[110,16],iconAnchor:[-6,8]
+          html:`<div style="display:inline-flex;align-items:center;gap:0;background:rgba(6,0,0,.88);border-top:1px solid rgba(220,38,38,.18);border-bottom:1px solid rgba(220,38,38,.18);border-right:1px solid rgba(220,38,38,.18);border-left:2px solid #dc2626;padding:2px 8px 2px 6px;white-space:nowrap;pointer-events:none;font-family:'Consolas','Courier New',monospace;letter-spacing:.06em"><span style="color:#6b7280;font-size:8px;font-weight:600;margin-right:4px">PPT</span><span style="color:#ef4444;font-size:10px;font-weight:700;margin-right:${nm?'6':'0'}px">${numStr}</span>${nm?`<span style="color:#d1d5db;font-size:10px;font-weight:600;letter-spacing:.08em">${nm}</span>`:''}</div>`,
+          className:'',iconSize:[90,18],iconAnchor:[-6,9]
         }),zIndexOffset:50});
         if(pptOn && pptLabelsVisible) pptLbl.addTo(map);
         pptLabelMarkers.push(pptLbl);

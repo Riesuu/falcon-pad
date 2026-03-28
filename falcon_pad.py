@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, shutil, re
+import uvicorn, asyncio, json, ctypes, configparser, math, struct, os, sys, re, socket as _socket
 from datetime import datetime
 import app_info
 from stringdata import (read_all_strings, get_mk_markpoints, get_hsd_lines,
@@ -43,7 +43,7 @@ from typing import List, Optional, Dict
 import logging
 
 APP_NAME    = "Falcon-Pad"
-APP_VERSION = "0.2"
+APP_VERSION = "0.3"
 APP_AUTHOR  = "Riesu"
 APP_CONTACT = "contact@falcon-charts.com"
 APP_WEBSITE = "https://www.falcon-charts.com"
@@ -270,7 +270,6 @@ def _load_airports(theater_name: str) -> list:
 #  Handshake: BMS envoie "XtraLib.Stream.0\nTacview.RealTimeTelemetry.0\nHost\n\0"
 #             Client répond "XtraLib.Stream.0\nTacview.RealTimeTelemetry.0\nClient\n0\0"
 #  Ensuite: stream ACMI 2.x texte UTF-8 continu
-import socket as _socket
 import threading, time as _time
 
 TRTT_HOST = "127.0.0.1"
@@ -500,7 +499,7 @@ def get_acmi_contacts(own_lat=None, own_lon=None) -> list:
     with _acmi_lock:
         contacts = list(_acmi_contacts.items())
     result = []
-    for obj_id, c in contacts:
+    for _, c in contacts:
         # Ignorer stale (>30s sans update — objet détruit)
         if now - c.get('_ts', 0) > 30.0:
             continue
@@ -759,6 +758,31 @@ mission_data = {"route": [], "threats": [], "flightplan": []}
 DRAWING_ENTITY_SIZE: int = 40   # bytes per OSBEntity
 DRAWING_ENTITY_MAX:  int = 150  # max entities in DrawingData array
 
+# ── Helper broadcast ─────────────────────────────────────────────
+async def _broadcast(msg: str) -> None:
+    """Envoie msg à tous les WS connectés, retire les connexions mortes."""
+    dead: list = []
+    for ws in list(ws_clients):
+        try:    await ws.send_text(msg)
+        except: dead.append(ws)
+    for ws in dead:
+        if ws in ws_clients: ws_clients.remove(ws)
+
+def _theater_msg() -> str:
+    """Construit le message JSON 'theater' depuis le théâtre actif."""
+    tp = get_theater()
+    lat_min, lat_max, lon_min, lon_max = tp.bbox
+    c_lat = (lat_min + lat_max) / 2
+    c_lon = (lon_min + lon_max) / 2
+    span  = max(lat_max - lat_min, lon_max - lon_min)
+    zoom  = 6 if span > 20 else 7 if span > 15 else 8
+    return json.dumps({"type": "theater", "data": {
+        "name": get_theater_name(),
+        "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
+        "bbox": {"lat_min": lat_min, "lat_max": lat_max,
+                 "lon_min": lon_min, "lon_max": lon_max},
+    }})
+
 # ── Broadcast loop — pousse les données BMS à tous les WS ────────
 _bms_last_reconnect: float = 0.0
 _BMS_RECONNECT_INTERVAL = 5.0
@@ -811,13 +835,7 @@ async def broadcast_loop() -> None:
 
             if pos and ws_clients:
                 # 1. Position ownship
-                dead: list = []
-                msg_ac = json.dumps({"type": "aircraft", "data": pos})
-                for ws in list(ws_clients):
-                    try:    await ws.send_text(msg_ac)
-                    except: dead.append(ws)
-                for ws in dead:
-                    if ws in ws_clients: ws_clients.remove(ws)
+                await _broadcast(json.dumps({"type": "aircraft", "data": pos}))
 
                 # 2. Contacts radar/datalink BMS (DrawingData — no god mode)
                 own_lat = pos.get("lat"); own_lon = pos.get("lon")
@@ -825,52 +843,23 @@ async def broadcast_loop() -> None:
                     bms.ptr1, own_lat=own_lat, own_lon=own_lon,
                     ptr2=bms.ptr2 if bms.ptr2 else 0
                 ) if bms.ptr1 else []
-                msg_r = json.dumps({"type": "radar", "data": radar_c})
-                for ws in list(ws_clients):
-                    try:    await ws.send_text(msg_r)
-                    except: pass
+                await _broadcast(json.dumps({"type": "radar", "data": radar_c}))
 
                 # 3. Contacts ACMI/TRTT coalition
                 acmi_c = get_acmi_contacts(own_lat=own_lat, own_lon=own_lon)
                 if acmi_c:
-                    msg_acmi = json.dumps({"type": "acmi", "data": acmi_c})
-                    for ws in list(ws_clients):
-                        try:    await ws.send_text(msg_acmi)
-                        except: pass
+                    await _broadcast(json.dumps({"type": "acmi", "data": acmi_c}))
 
                 # Theater + MK markpoints + HSD lines — broadcast si données dispo
                 if bms.connected and ptr_str:
                     if _thr_changed:
-                        tp = get_theater()
-                        lat_min, lat_max, lon_min, lon_max = tp.bbox
-                        c_lat = (lat_min + lat_max) / 2
-                        c_lon = (lon_min + lon_max) / 2
-                        span  = max(lat_max-lat_min, lon_max-lon_min)
-                        zoom  = 6 if span > 20 else 7 if span > 15 else 8
-                        msg_thr = json.dumps({"type": "theater", "data": {
-                            "name": get_theater_name(),
-                            "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
-                            "bbox": {"lat_min": lat_min, "lat_max": lat_max,
-                                     "lon_min": lon_min, "lon_max": lon_max},
-                        }})
-                        for ws in list(ws_clients):
-                            try:    await ws.send_text(msg_thr)
-                            except: pass
-                    msg_mk = json.dumps({"type": "mk_marks", "data": _mk_marks})
-                    for ws in list(ws_clients):
-                        try:    await ws.send_text(msg_mk)
-                        except: pass
-                    msg_hsd = json.dumps({"type": "hsd_lines", "data": _hsd})
-                    for ws in list(ws_clients):
-                        try:    await ws.send_text(msg_hsd)
-                        except: pass
+                        await _broadcast(_theater_msg())
+                    await _broadcast(json.dumps({"type": "mk_marks", "data": _mk_marks}))
+                    await _broadcast(json.dumps({"type": "hsd_lines", "data": _hsd}))
 
             # 5. Statut connexion
             if ws_clients:
-                status_msg = json.dumps({"type": "status", "data": {"connected": bms.connected}})
-                for ws in list(ws_clients):
-                    try:    await ws.send_text(status_msg)
-                    except: pass
+                await _broadcast(json.dumps({"type": "status", "data": {"connected": bms.connected}}))
 
         except Exception as e:
             logger.debug(f"broadcast_loop: {e}")
@@ -879,7 +868,6 @@ async def broadcast_loop() -> None:
 
 #  RADAR — OSBEntity (FalconSharedMemoryArea, BMS 4.38)
 #  Offset 0x0C78 · 40 bytes/entité · max 150
-import math as _math
 
 _ENT_NAMES={1:"F-16",2:"F-15",3:"F/A-18",4:"A-10",5:"F-117",
             6:"MiG-29",7:"Su-27",8:"MiG-21",9:"MiG-23",10:"Su-25",
@@ -963,14 +951,14 @@ def get_radar_contacts(ptr1: int, own_lat=None, own_lon=None, ptr2: int = 0) -> 
             lb = blob[off+32:off+40].split(b'\x00')[0].decode('ascii', errors='replace').strip()
             if lat_r == 0.0 and lon_r == 0.0: continue
             if not 1 <= ca <= 4: continue
-            lat = _math.degrees(lat_r); lon = _math.degrees(lon_r)
+            lat = math.degrees(lat_r); lon = math.degrees(lon_r)
             if not (25 <= lat <= 50 and 110 <= lon <= 145): continue
             if own_lat and own_lon and abs(lat-own_lat)<0.002 and abs(lon-own_lon)<0.002: continue
             res.append({"lat": round(lat,5), "lon": round(lon,5),
                         "alt": round(abs(z)/100)*100, "camp": int(ca),
                         "type_name": _ENT_NAMES.get(int(et), f"T{et}"),
                         "callsign": lb,
-                        "heading": round(_math.degrees(hr)%360, 1),
+                        "heading": round(math.degrees(hr)%360, 1),
                         "speed": round(sp)})
         except Exception as ex:
             logger.debug(f"DrawingData[{i}]: {ex}")
@@ -1033,21 +1021,7 @@ async def upload_mission(file: UploadFile = File(...)):
             if _pts:
                 changed = detect_theater_from_coords_multi(_pts)
                 if changed:
-                    tp = get_theater()
-                    lat_min, lat_max, lon_min, lon_max = tp.bbox
-                    c_lat = (lat_min + lat_max) / 2
-                    c_lon = (lon_min + lon_max) / 2
-                    span  = max(lat_max-lat_min, lon_max-lon_min)
-                    zoom  = 6 if span > 20 else 7 if span > 15 else 8
-                    msg_thr = json.dumps({"type": "theater", "data": {
-                        "name": get_theater_name(),
-                        "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
-                        "bbox": {"lat_min": lat_min, "lat_max": lat_max,
-                                 "lon_min": lon_min, "lon_max": lon_max},
-                    }})
-                    for ws in list(ws_clients):
-                        try:    await ws.send_text(msg_thr)
-                        except: pass
+                    await _broadcast(_theater_msg())
         if cfg.has_section("STPT"):
             for key, val in cfg["STPT"].items():
                 parts = val.split(",")
@@ -1126,8 +1100,9 @@ def _find_latest_ini() -> tuple[str, float]:
     best = max(files, key=os.path.getmtime)
     return best, os.path.getmtime(best)
 
-def _parse_ini_file(path: str) -> dict:
-    """Parse un .ini BMS et retourne mission_data."""
+def _parse_ini_file(path: str) -> tuple:
+    """Parse un .ini BMS et retourne mission_data. Retourne aussi si le théâtre a changé."""
+    _ini_theater_changed = False
     try:
         with open(path, encoding="latin-1") as f:
             raw = f.read()
@@ -1147,7 +1122,9 @@ def _parse_ini_file(path: str) -> dict:
                             _pts.append((_x, _y))
                     except: pass
             if _pts:
+                _before = get_theater_name()
                 detect_theater_from_coords_multi(_pts)
+                _ini_theater_changed = (get_theater_name() != _before)
         if cfg.has_section("STPT"):
             for key, val in cfg["STPT"].items():
                 parts = val.split(",")
@@ -1179,10 +1156,10 @@ def _parse_ini_file(path: str) -> dict:
         result = {"route": route, "threats": threats, "flightplan": fplan}
         mission_data.clear(); mission_data.update(result)
         logger.info(f"INI auto-chargé: {os.path.basename(path)} — {len(route)} steerpoints, {len(threats)} PPT")
-        return result
+        return result, _ini_theater_changed
     except Exception as e:
         logger.error(f"INI parse error: {e}")
-        return {}
+        return {}, False
 
 async def _ini_watcher_loop():
     """Tâche asyncio: surveille et charge automatiquement le dernier .ini BMS.
@@ -1196,7 +1173,9 @@ async def _ini_watcher_loop():
                 if path and (path != _ini_last_path or mtime > _ini_last_mtime + 1):
                     _ini_last_path = path
                     _ini_last_mtime = mtime
-                    _parse_ini_file(path)
+                    _, theater_changed = _parse_ini_file(path)
+                    if theater_changed and ws_clients:
+                        await _broadcast(_theater_msg())
         except Exception as e:
             logger.debug(f"INI watcher: {e}")
         await asyncio.sleep(3)

@@ -53,9 +53,9 @@ def _reg(name: str, lon0: float, k0: float, FE: float, FN: float,
 #       If you have a theater not listed, check its terrain header for the
 #       correct TMERC parameters and add an entry here.
 _reg("Korea",     lon0=127.5,  k0=0.9996, FE=512000.0, FN=-3749290.0,
-     bbox=(30.0, 45.0, 118.0, 135.0))
+     bbox=(30.0, 46.0, 117.0, 137.0))
 _reg("Korea KTO", lon0=127.5,  k0=0.9996, FE=512000.0, FN=-3749290.0,
-     bbox=(30.0, 45.0, 118.0, 135.0))
+     bbox=(30.0, 46.0, 117.0, 137.0))
 _reg("Balkans",   lon0=20.0,   k0=0.9996, FE=500000.0, FN=0.0,
      bbox=(35.0, 50.0, 12.0,  32.0))
 _reg("Israel",    lon0=35.0,   k0=0.9996, FE=500000.0, FN=-3113000.0,
@@ -226,9 +226,12 @@ def detect_theater_from_coords_multi(points: List[Tuple[float, float]]) -> bool:
             best_dist = total_dist
             best_key = key
 
-    if best_key:
+    if best_key and best_hits >= 2:
         return set_active_theater(THEATER_DB[best_key].name)
-    logger.warning("detect_theater_from_coords_multi: no theater matched")
+    if best_key and best_hits == 1:
+        logger.warning(f"detect_theater_from_coords_multi: only 1 hit for '{best_key}', keeping current theater")
+    else:
+        logger.warning("detect_theater_from_coords_multi: no theater matched")
     return False
 
 

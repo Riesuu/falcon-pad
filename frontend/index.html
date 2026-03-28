@@ -8,6 +8,18 @@
 <link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="/static/css/style.css"/>
+<script>
+// Redirect deprecated Firefox mouse event properties used by Leaflet
+// so Firefox doesn't fire deprecation warnings in the console.
+(function(){
+  try{
+    if(typeof PointerEvent!=='undefined'&&'mozPressure' in PointerEvent.prototype)
+      Object.defineProperty(PointerEvent.prototype,'mozPressure',{get(){return this.pressure;},configurable:true});
+    if(typeof MouseEvent!=='undefined'&&'mozInputSource' in MouseEvent.prototype)
+      Object.defineProperty(MouseEvent.prototype,'mozInputSource',{get(){return 0;},configurable:true});
+  }catch(e){}
+})();
+</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
@@ -80,7 +92,8 @@
     </svg>
   </button>
 
-  <button class="tool-btn active" id="airportBtn" title="Airports">
+
+<button class="tool-btn active" id="airportBtn" title="Airports">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19 4c-2 0-4 0-5.5 1.5L10 9 1.8 7.2c-.5-.1-.9.4-.8.9L3 11l3-1 .8 2.8L5 14l2 2 1.2-1.8L10 15l-1 3 3.1 1c.4.1 1-.3.9-.8z"/>
     </svg>
