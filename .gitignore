@@ -15,7 +15,7 @@ build/
 .eggs/
 pip-wheel-metadata/
 MANIFEST
-.claude
+.claude/
 # ── Environnements virtuels ───────────────────────────────────
 .venv/
 venv/
