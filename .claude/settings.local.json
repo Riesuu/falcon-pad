@@ -3,7 +3,9 @@
     "allow": [
       "Bash(python -c \":*)",
       "WebFetch(domain:forum.falcon-bms.com)",
-      "Bash(python -c \"import sys; sys.path.insert\\(0, r''c:\\\\Users\\\\Lyes\\\\Documents\\\\00_DEV''\\); import theaters; print\\(''theaters OK —'', list\\(theaters.THEATER_DB.keys\\(\\)\\)\\)\")"
+      "Bash(python -c \"import sys; sys.path.insert\\(0, r''c:\\\\Users\\\\Lyes\\\\Documents\\\\00_DEV''\\); import theaters; print\\(''theaters OK —'', list\\(theaters.THEATER_DB.keys\\(\\)\\)\\)\")",
+      "Bash(python -m pytest tests/tests.py tests/test_theaters.py tests/test_stringdata.py tests/test_mission.py tests/test_trtt.py -v --tb=short)",
+      "Bash(pip install:*)"
     ]
   }
 }

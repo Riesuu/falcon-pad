@@ -159,6 +159,27 @@ class TestGetPptThreats:
         strings = _read(blob, reader)
         assert get_ppt_threats(strings) == []
 
+    def test_agl_ft_ground_unit(self):
+        """Un PT au sol (z == grnd_elev) doit avoir agl_ft == 0."""
+        blob, reader = _blob_with_navpoints(
+            (58, "PT", KOR_X, KOR_Y, 100.0, 100.0, "SA-8", 18288.0),  # z == grnd_elev
+        )
+        strings = _read(blob, reader)
+        ppts = get_ppt_threats(strings)
+        assert len(ppts) == 1
+        assert ppts[0]["agl_ft"] == 0
+
+    def test_agl_ft_airborne(self):
+        """Un PT en altitude (z >> grnd_elev) doit avoir agl_ft > 0."""
+        # z=200 en dizaines de pieds → alt=2000ft, grnd_elev=0 → agl=2000ft
+        blob, reader = _blob_with_navpoints(
+            (59, "PT", KOR_X, KOR_Y, 200.0, 0.0, "F-16", 0.0),
+        )
+        strings = _read(blob, reader)
+        ppts = get_ppt_threats(strings)
+        assert len(ppts) == 1
+        assert ppts[0]["agl_ft"] == 2000
+
 
 # ── get_dl_markpoints ────────────────────────────────────────────────────────
 

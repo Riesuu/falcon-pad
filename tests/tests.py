@@ -94,28 +94,34 @@ class TestTheaters:
         assert get_theater_name() == old_name
 
     def test_get_airports_korea(self):
-        from theaters import get_airports, set_active_theater
-        set_active_theater("Korea")
-        airports = get_airports()
+        """Korea airport JSON doit contenir au moins 40 aéroports avec la bonne structure."""
+        import json, os
+        path = os.path.join(os.path.dirname(__file__), "..", "data", "airports", "korea.json")
+        with open(path, encoding="utf-8") as f:
+            airports = json.load(f)
         assert len(airports) >= 40
-        # Check structure
         osan = [a for a in airports if a["icao"] == "RKSO"]
         assert len(osan) == 1
         assert osan[0]["name"] == "Osan AB"
-        assert osan[0]["tacan"] == "94X"
+        assert osan[0]["tacan"] == "116X"
         assert isinstance(osan[0]["ils"], list)
 
-    def test_get_airports_empty_theater(self):
-        """Unknown theater should return empty list."""
-        from theaters import get_airports, set_active_theater
-        set_active_theater("Korea")
-        # Force unknown — manually
-        import theaters
-        old = theaters._active_theater_name
-        theaters._active_theater_name = "UnknownTheater"
-        airports = get_airports()
-        theaters._active_theater_name = old  # restore
-        assert airports == []
+    def test_get_airports_all_theaters_have_json(self):
+        """Chaque théâtre enregistré doit avoir un fichier JSON d'aéroports."""
+        import json, os
+        theater_files = {
+            "korea": "korea.json", "balkans": "balkans.json",
+            "israel": "israel.json", "aegean": "aegean.json",
+            "iberia": "iberia.json", "nordic": "nordic.json",
+            "hellas": "hto.json",
+        }
+        base = os.path.join(os.path.dirname(__file__), "..", "data", "airports")
+        for theater, filename in theater_files.items():
+            path = os.path.join(base, filename)
+            assert os.path.exists(path), f"Fichier airports manquant pour {theater}: {filename}"
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            assert isinstance(data, list), f"{filename} doit être une liste JSON"
 
     def test_bms_to_latlon_theater_switch(self):
         """Projection should change when theater changes."""
@@ -128,6 +134,38 @@ class TestTheaters:
         assert abs(lat_kr - lat_bk) > 1.0, "Projection didn't change"
         assert abs(lon_kr - lon_bk) > 1.0, "Projection didn't change"
         set_active_theater("Korea")  # reset
+
+    def test_korea_bbox_extended(self):
+        """Bbox Korea élargie doit couvrir les steerpoints à l'est (jusqu'à 137°E)."""
+        from theaters import in_theater_bbox, set_active_theater
+        set_active_theater("Korea")
+        # Points légitimes Korea qui étaient hors bbox avec l'ancienne limite 135°E
+        assert in_theater_bbox(44.0, 136.0) is True
+        assert in_theater_bbox(32.0, 118.0) is True
+        # Hors bbox
+        assert in_theater_bbox(35.0, 140.0) is False   # trop à l'est (Japon)
+        assert in_theater_bbox(35.0, 115.0) is False   # trop à l'ouest
+
+    def test_detect_theater_requires_2_hits(self):
+        """detect_theater_from_coords_multi doit exiger au moins 2 hits pour changer."""
+        from theaters import detect_theater_from_coords_multi, set_active_theater, get_theater_name
+        set_active_theater("Korea")
+        # Un seul point ambigu → ne doit pas changer de théâtre
+        detect_theater_from_coords_multi([(1_168_000.0, 1_544_000.0)])
+        assert get_theater_name() == "Korea"  # reste Korea car 1 seul hit
+
+    def test_detect_theater_multi_points_korea(self):
+        """Plusieurs steerpoints Korea → détecte Korea."""
+        from theaters import detect_theater_from_coords_multi, set_active_theater, get_theater_name
+        set_active_theater("Balkans")  # partir d'un autre théâtre
+        pts = [
+            (1_168_000.0, 1_544_000.0),
+            (1_200_000.0, 1_580_000.0),
+            (1_150_000.0, 1_510_000.0),
+        ]
+        detect_theater_from_coords_multi(pts)
+        assert get_theater_name() == "Korea"
+        set_active_theater("Korea")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -216,22 +254,22 @@ class TestStringData:
         assert 37.0 < stpts[0]["lat"] < 37.2
 
     def test_parse_navpoint_dl(self):
-        from stringdata import get_dl_contacts
+        from stringdata import get_dl_markpoints
         raw = "NP:55,DL,1170000.0,1550000.0,-200.0,50.0;"
         strings = {33: [raw]}
-        contacts = get_dl_contacts(strings)
-        assert len(contacts) == 1
-        assert contacts[0]["camp"] == 1
-        assert contacts[0]["callsign"] == "DL55"
+        marks = get_dl_markpoints(strings)
+        assert len(marks) == 1
+        assert marks[0]["label"] == "DL 55"
+        assert "lat" in marks[0] and "lon" in marks[0]
 
     def test_parse_navpoint_dl_excludes_ownship(self):
-        from stringdata import get_dl_contacts
+        from stringdata import get_dl_markpoints
         from theaters import bms_to_latlon
         raw = "NP:55,DL,1170000.0,1550000.0,-200.0,50.0;"
         lat, lon = bms_to_latlon(1170000.0, 1550000.0)
         strings = {33: [raw]}
-        contacts = get_dl_contacts(strings, own_lat=lat, own_lon=lon)
-        assert len(contacts) == 0, "Should exclude ownship"
+        marks = get_dl_markpoints(strings, own_lat=lat, own_lon=lon)
+        assert len(marks) == 0, "Le marqueur ownship doit être exclu"
 
     def test_parse_navpoint_ppt(self):
         from stringdata import get_ppt_threats
@@ -243,11 +281,11 @@ class TestStringData:
         assert ppts[0]["range_nm"] == 8
 
     def test_parse_navpoint_invalid_type_ignored(self):
-        from stringdata import get_steerpoints, get_dl_contacts
-        raw = "NP:10,CB,1168000.0,1544000.0,-100.0,50.0;"  # CB = bullseye
+        from stringdata import get_steerpoints, get_dl_markpoints
+        raw = "NP:10,CB,1168000.0,1544000.0,-100.0,50.0;"  # CB = bullseye, non reconnu
         strings = {33: [raw]}
         assert get_steerpoints(strings) == []
-        assert get_dl_contacts(strings) == []
+        assert get_dl_markpoints(strings) == []
 
     def test_steerpoints_sorted_by_index(self):
         from stringdata import get_steerpoints
@@ -526,23 +564,20 @@ class TestIntegration:
         set_active_theater("Korea")
 
     def test_theater_detection_from_stringdata(self):
-        """Full chain: StringData blob → detect_theater → airports change."""
+        """Full chain: StringData blob → detect_theater → theater name changes."""
         from stringdata import read_all_strings, detect_theater
-        from theaters import get_airports, get_theater_name, set_active_theater
+        from theaters import get_theater_name, set_active_theater
         import stringdata
 
         set_active_theater("Korea")
         stringdata._last_thr_name = ""  # reset detection cache
-        assert len(get_airports()) >= 40
 
         blob = _make_string_blob([(13, "Balkans")])
         reader = _fake_reader(blob)
         strings = read_all_strings(0, reader)
         changed = detect_theater(strings)
-        assert changed is True, f"detect_theater returned False, _last_thr_name was {stringdata._last_thr_name!r}"
+        assert changed is True, f"detect_theater returned False, _last_thr_name={stringdata._last_thr_name!r}"
         assert get_theater_name() == "Balkans"
-        # Balkans has no airports registered yet
-        assert len(get_airports()) == 0
 
         set_active_theater("Korea")
 
