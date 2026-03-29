@@ -1,8 +1,12 @@
 // Falcon-Pad — map.js
 // Leaflet map, tiles, aircraft rendering, compass, bullseye,
-// ruler/arrow tools, annotations, mission overlay, airports, 
+// ruler/arrow tools, annotations, mission overlay, airports,
 // IDM markpoints, ACMI contacts
 // Copyright (C) 2024 Riesu — GNU GPL v3
+
+/** Escape HTML special chars to prevent XSS */
+function _esc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
 // Loaded BEFORE panels.js and websocket.js
 
 
@@ -878,14 +882,14 @@ function buildApPopup(ap) {
   const col  = isNK ? '#f87171' : '#60a5fa';
 
   // Ligne 1 : ICAO · TACAN · TOUR
-  const parts = [`<span class="ap-l1-icao" style="color:${col}">${ap.icao}</span>`];
+  const parts = [`<span class="ap-l1-icao" style="color:${col}">${_esc(ap.icao)}</span>`];
   if (ap.tacan) {
     parts.push(`<span class="ap-l1-dot">·</span>`);
-    parts.push(`<span class="ap-l1-tacan">${ap.tacan}</span>`);
+    parts.push(`<span class="ap-l1-tacan">${_esc(ap.tacan)}</span>`);
   }
   if (ap.freq) {
     parts.push(`<span class="ap-l1-dot">·</span>`);
-    parts.push(`<span class="ap-l1-freq">${ap.freq}</span>`);
+    parts.push(`<span class="ap-l1-freq">${_esc(ap.freq)}</span>`);
   }
   const line1 = `<div class="ap-l1">${parts.join('')}</div>`;
 
@@ -894,9 +898,9 @@ function buildApPopup(ap) {
   if (ap.ils && ap.ils.length) {
     const chips = ap.ils.map(i =>
       `<div class="ap-ils-chip">
-        <span class="ap-ils-rwy">RWY ${i.rwy}</span>
-        <span class="ap-ils-freq">${i.freq}</span>
-        <span class="ap-ils-crs">${i.crs}°</span>
+        <span class="ap-ils-rwy">RWY ${_esc(i.rwy)}</span>
+        <span class="ap-ils-freq">${_esc(i.freq)}</span>
+        <span class="ap-ils-crs">${_esc(i.crs)}°</span>
       </div>`
     ).join('');
     line2 = `<div class="ap-l2">${chips}</div>`;

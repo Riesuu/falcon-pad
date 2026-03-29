@@ -372,20 +372,20 @@ function clRender(){
       const badge=cnt.done>0?`<span class="cl-section-count">${cnt.done}/${cnt.total}</span>`
                              :`<span class="cl-section-count">${cnt.total}</span>`;
       html+=`<div class="cl-section${isOpen?' open':''}" onclick="clToggleSec(this,'${sec.replace(/'/g,"\\'")}')">
-        ${row.section}${badge}</div>`;
+        ${_esc(row.section)}${badge}</div>`;
       html+=`<div class="cl-group${isOpen?' open':''}">`;
       groupOpen=true;
     } else if(row.note){
-      html+=`<div class="cl-note">&#9888; ${row.note}</div>`;
+      html+=`<div class="cl-note">&#9888; ${_esc(row.note)}</div>`;
     } else {
       const key=`${sec}_${row.n}`;
       const chk=!!clState[key];
       total++;if(chk)done++;
       html+=`<div class="cl-row${chk?' done':''}" onclick="clToggle('${key}',this)">
         <input type="checkbox" class="cl-cb"${chk?' checked':''} onclick="event.stopPropagation();clToggle('${key}',this.closest('.cl-row'))">
-        <span class="cl-num">${row.n}</span>
-        <span class="cl-item">${row.item}<br><span style="font-size:10px;color:#475569">${row.loc}</span></span>
-        <span class="cl-status">${row.status}</span>
+        <span class="cl-num">${_esc(row.n)}</span>
+        <span class="cl-item">${_esc(row.item)}<br><span style="font-size:10px;color:#475569">${_esc(row.loc)}</span></span>
+        <span class="cl-status">${_esc(row.status)}</span>
       </div>`;
     }
   });
@@ -498,16 +498,20 @@ function briefingRenderList(files) {
     return;
   }
   list.innerHTML = files.map(f => {
+    const eName = _esc(f.name);
+    const eExt  = _esc(f.ext);
     const iconCls = f.ext === 'pdf' ? 'pdf' : (f.ext === 'docx' ? 'docx' : 'img');
-    const label   = f.ext.toUpperCase();
+    const label   = eExt.toUpperCase();
     const isActive = _briefActive === f.name ? ' active' : '';
-    return `<div class="brief-file-item${isActive}" onclick="briefingOpen('${f.name}','${f.ext}')" data-name="${f.name}">
+    const safeName = f.name.replace(/'/g,"\\'");
+    const safeExt  = f.ext.replace(/'/g,"\\'");
+    return `<div class="brief-file-item${isActive}" onclick="briefingOpen('${safeName}','${safeExt}')" data-name="${eName}">
       <div class="brief-file-icon ${iconCls}">${label}</div>
       <div class="brief-file-info">
-        <div class="brief-file-name">${f.name}</div>
-        <div class="brief-file-meta">${f.size_kb} KB · ${f.modified}</div>
+        <div class="brief-file-name">${eName}</div>
+        <div class="brief-file-meta">${_esc(f.size_kb)} KB · ${_esc(f.modified)}</div>
       </div>
-      <span class="brief-file-del" onclick="event.stopPropagation();briefingDelete('${f.name}')" title="Delete">✕</span>
+      <span class="brief-file-del" onclick="event.stopPropagation();briefingDelete('${safeName}')" title="Delete">✕</span>
     </div>`;
   }).join('');
 }
@@ -696,8 +700,9 @@ function buildGpsSteers(route) {
   route.forEach((sp, i) => {
     const chip = document.createElement('div');
     chip.className = 'steer-chip' + (i === _activeSteerIdx ? ' active' : '');
-    chip.innerHTML = `<span class="steer-num">STPT ${i+1}</span>
-      <span class="steer-fl">FL${String(Math.round(Math.abs(sp.alt)/100)).padStart(3,'0')}</span>`;
+    const num=document.createElement('span');num.className='steer-num';num.textContent='STPT '+(i+1);
+    const fl=document.createElement('span');fl.className='steer-fl';fl.textContent='FL'+String(Math.round(Math.abs(sp.alt)/100)).padStart(3,'0');
+    chip.appendChild(num);chip.appendChild(fl);
     chip.onclick = () => {
       _activeSteerIdx = i;
       document.querySelectorAll('.steer-chip').forEach((c,j) => c.classList.toggle('active', j===i));

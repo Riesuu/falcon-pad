@@ -12,7 +12,12 @@
       "Bash(python -m pytest tests/ -x -q)",
       "Bash(python -m pytest tests/tests.py -x -q)",
       "Bash(python -m pytest tests/ -q)",
-      "Bash(python -c \"print\\(sum\\(1 for _ in open\\(''''falcon_pad.py'''', encoding=''''utf-8''''\\)\\)\\)\")"
+      "Bash(python -c \"print\\(sum\\(1 for _ in open\\(''''falcon_pad.py'''', encoding=''''utf-8''''\\)\\)\\)\")",
+      "Bash(curl -sL \"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\")",
+      "Bash(openssl dgst:*)",
+      "Bash(openssl base64:*)",
+      "Bash(curl -sL \"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\")",
+      "Bash(curl -sL \"https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js\")"
     ]
   }
 }
