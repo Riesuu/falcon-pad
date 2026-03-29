@@ -500,18 +500,21 @@ function briefingRenderList(files) {
   list.innerHTML = files.map(f => {
     const eName = _esc(f.name);
     const eExt  = _esc(f.ext);
-    const iconCls = f.ext === 'pdf' ? 'pdf' : (f.ext === 'docx' ? 'docx' : 'img');
+    const iconCls = f.ext === 'pdf' ? 'pdf' : (f.ext === 'docx' ? 'docx' : (f.ext === 'html' || f.ext === 'htm' ? 'html' : 'img'));
     const label   = eExt.toUpperCase();
+    const isBms   = f.source === 'bms';
+    const badge   = isBms ? '<span class="brief-bms-badge">BMS</span>' : '';
     const isActive = _briefActive === f.name ? ' active' : '';
     const safeName = f.name.replace(/'/g,"\\'");
     const safeExt  = f.ext.replace(/'/g,"\\'");
+    const delBtn   = isBms ? '' : `<span class="brief-file-del" onclick="event.stopPropagation();briefingDelete('${safeName}')" title="Delete">✕</span>`;
     return `<div class="brief-file-item${isActive}" onclick="briefingOpen('${safeName}','${safeExt}')" data-name="${eName}">
       <div class="brief-file-icon ${iconCls}">${label}</div>
       <div class="brief-file-info">
-        <div class="brief-file-name">${eName}</div>
+        <div class="brief-file-name">${eName}${badge}</div>
         <div class="brief-file-meta">${_esc(f.size_kb)} KB · ${_esc(f.modified)}</div>
       </div>
-      <span class="brief-file-del" onclick="event.stopPropagation();briefingDelete('${safeName}')" title="Delete">✕</span>
+      ${delBtn}
     </div>`;
   }).join('');
 }

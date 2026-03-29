@@ -64,10 +64,11 @@ MemReader = Callable[[int, int], Optional[bytes]]
 #   ThrTerrdatadir=34,                              ← VERSION 4
 #   VoiceHelpers=35,                                ← VERSION 5
 
-STRID_BMS_EXE        = 0
-STRID_BMS_BASEDIR    = 2
-STRID_BMS_USER_DIR   = 6
-STRID_BMS_CONFIG_DIR = 9
+STRID_BMS_EXE          = 0
+STRID_BMS_BASEDIR      = 2
+STRID_BMS_USER_DIR     = 6
+STRID_BMS_BRIEFINGS    = 8
+STRID_BMS_CONFIG_DIR   = 9
 STRID_THR_NAME       = 13
 STRID_THR_CAMPAIGN   = 14
 STRID_THR_TERRAIN    = 15
@@ -174,6 +175,12 @@ def get_bms_user_dir(strings: Dict[int, List[str]]) -> Optional[str]:
 def get_campaign_dir(strings: Dict[int, List[str]]) -> Optional[str]:
     """Extract active theater campaign directory from StringData (ID 14)."""
     entries = strings.get(STRID_THR_CAMPAIGN, [])
+    return entries[0].strip() if entries else None
+
+
+def get_bms_briefings_dir(strings: Dict[int, List[str]]) -> Optional[str]:
+    """Extract BMS Briefings directory from StringData (ID 8)."""
+    entries = strings.get(STRID_BMS_BRIEFINGS, [])
     return entries[0].strip() if entries else None
 
 

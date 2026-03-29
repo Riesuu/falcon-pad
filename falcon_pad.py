@@ -34,9 +34,9 @@ import radar
 import trtt
 import mission
 from sharedmem import BMSSharedMemory, safe_read
-from stringdata import (detect_theater, get_campaign_dir, get_hsd_lines,
-                        get_mk_markpoints, get_ppt_threats, get_steerpoints,
-                        read_all_strings)
+from stringdata import (detect_theater, get_bms_briefings_dir, get_campaign_dir,
+                        get_hsd_lines, get_mk_markpoints, get_ppt_threats,
+                        get_steerpoints, read_all_strings)
 from theaters import (detect_theater_from_coords_multi,
                       get_theater, get_theater_name, is_theater_detected)
 
@@ -100,10 +100,11 @@ def _theater_msg() -> str:
 _bms_last_reconnect = 0.0
 _BMS_RECONNECT_INTERVAL = 5.0
 _bms_campaign_dir = ""
+_bms_briefings_dir = ""
 
 
 async def broadcast_loop() -> None:
-    global _bms_last_reconnect, _bms_campaign_dir
+    global _bms_last_reconnect, _bms_campaign_dir, _bms_briefings_dir
     while True:
         try:
             if not bms.connected:
@@ -129,6 +130,9 @@ async def broadcast_loop() -> None:
                     _cd = get_campaign_dir(_strings)
                     if _cd:
                         _bms_campaign_dir = _cd
+                    _bd = get_bms_briefings_dir(_strings)
+                    if _bd:
+                        _bms_briefings_dir = _bd
                     _thr_changed = detect_theater(_strings)
                     _shm_route   = get_steerpoints(_strings)
                     _shm_threats = get_ppt_threats(_strings)
@@ -472,23 +476,36 @@ async def acmi_status():
 
 # ── Briefing ──────────────────────────────────────────────────────────────────
 
-_BRIEFING_ALLOWED = {".pdf", ".png", ".jpg", ".jpeg", ".docx"}
+_BRIEFING_ALLOWED = {".pdf", ".png", ".jpg", ".jpeg", ".docx", ".html", ".htm"}
 _BRIEFING_MAX_MB  = 50
 
 
-def _briefing_meta() -> list:
+def _scan_briefing_dir(bdir: str, source: str = "user") -> list:
+    """List briefing files in a directory. `source` marks origin (user / bms)."""
     from datetime import datetime as _dt
     files = []
-    bdir = config.BRIEFING_DIR
+    if not bdir or not os.path.isdir(bdir):
+        return files
     for fn in sorted(os.listdir(bdir)):
         ext = os.path.splitext(fn)[1].lower()
         if ext not in _BRIEFING_ALLOWED:
             continue
-        fp   = os.path.join(bdir, fn)
-        stat = os.stat(fp)
+        fp = os.path.join(bdir, fn)
+        try:
+            stat = os.stat(fp)
+        except OSError:
+            continue
         files.append({"name": fn, "ext": ext.lstrip("."),
                       "size_kb":  round(stat.st_size / 1024, 1),
-                      "modified": _dt.fromtimestamp(stat.st_mtime).strftime("%d/%m %H:%M")})
+                      "modified": _dt.fromtimestamp(stat.st_mtime).strftime("%d/%m %H:%M"),
+                      "source":   source})
+    return files
+
+
+def _briefing_meta() -> list:
+    files = _scan_briefing_dir(config.BRIEFING_DIR, "user")
+    if _bms_briefings_dir and _bms_briefings_dir != config.BRIEFING_DIR:
+        files += _scan_briefing_dir(_bms_briefings_dir, "bms")
     return files
 
 
@@ -525,17 +542,28 @@ async def briefing_delete(filename: str):
     return {"ok": True, "files": _briefing_meta()}
 
 
+def _resolve_briefing_file(filename: str) -> str:
+    """Find a briefing file in user dir or BMS dir. Raises 404 if not found."""
+    safe = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
+    fp = os.path.join(config.BRIEFING_DIR, safe)
+    if os.path.exists(fp):
+        return fp
+    if _bms_briefings_dir:
+        fp2 = os.path.join(_bms_briefings_dir, safe)
+        if os.path.exists(fp2):
+            return fp2
+    raise HTTPException(404, "Fichier introuvable")
+
+
 @app.get("/api/briefing/file/{filename}")
 async def briefing_serve(filename: str):
-    safe = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
-    fp   = os.path.join(config.BRIEFING_DIR, safe)
-    if not os.path.exists(fp):
-        raise HTTPException(404, "Fichier introuvable")
-    ext = os.path.splitext(safe)[1].lower()
+    fp = _resolve_briefing_file(filename)
+    ext = os.path.splitext(fp)[1].lower()
     if ext == ".docx":
         return await _docx_to_html(fp)
     mime = {".pdf": "application/pdf", ".png": "image/png",
-            ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(ext, "application/octet-stream")
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".html": "text/html", ".htm": "text/html"}.get(ext, "application/octet-stream")
     return FileResponse(fp, media_type=mime, headers={"Content-Disposition": "inline"})
 
 

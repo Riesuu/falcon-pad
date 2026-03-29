@@ -729,6 +729,8 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 .brief-file-icon.pdf{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2)}
 .brief-file-icon.img{background:rgba(74,222,128,.07);color:#4ade80;border:1px solid rgba(74,222,128,.15)}
 .brief-file-icon.docx{background:rgba(59,130,246,.08);color:#60a5fa;border:1px solid rgba(59,130,246,.18)}
+.brief-file-icon.html{background:rgba(251,191,36,.08);color:#fbbf24;border:1px solid rgba(251,191,36,.18)}
+.brief-bms-badge{display:inline-block;font-size:9px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.25);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:middle;letter-spacing:.5px}
 .brief-file-info{flex:1;min-width:0}
 .brief-file-name{
   font-family:system-ui,sans-serif;font-size:13px;font-weight:700;
