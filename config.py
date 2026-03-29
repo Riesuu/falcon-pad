@@ -53,8 +53,8 @@ def save(cfg: dict) -> None:
         os.makedirs(os.path.dirname(app_info.CONFIG_FILE), exist_ok=True)
         with open(app_info.CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).error(f"config save failed: {e}")
 
 
 APP_CONFIG:   dict = load()

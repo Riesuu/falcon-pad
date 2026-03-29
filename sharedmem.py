@@ -191,11 +191,11 @@ class BMSSharedMemory:
             logger.warning("get_position: safe_read failed")
             return None
 
-        hdg_f = float(hdg) % 360.0     # type: ignore[arg-type]
-        kias_f = float(kias)            # type: ignore[arg-type]
-        z_f = float(z)                  # type: ignore[arg-type]
-        lat_f = float(lat)              # type: ignore[arg-type]
-        lon_f = float(lon)              # type: ignore[arg-type]
+        hdg_f = hdg % 360.0
+        kias_f = kias
+        z_f = z
+        lat_f = lat
+        lon_f = lon
         alt = abs(z_f)
 
         # BMS time (seconds since midnight)

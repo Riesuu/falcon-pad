@@ -7,6 +7,7 @@ Copyright (C) 2024  Riesu <contact@falcon-charts.com>  GNU GPL v3
 # ── stdlib / framework ────────────────────────────────────────────────────────
 import asyncio
 import configparser
+import html as _html
 import json
 import logging
 import os
@@ -554,7 +555,7 @@ async def _docx_to_html(fp: str):
             else:
                 runs = ""
                 for r in p.runs:
-                    t = r.text.replace("&", "&amp;").replace("<", "&lt;")
+                    t = _html.escape(r.text)
                     if r.bold:   t = f"<strong>{t}</strong>"
                     if r.italic: t = f"<em>{t}</em>"
                     runs += t

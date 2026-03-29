@@ -43,15 +43,30 @@ _ini_last_path: str = ""
 _ini_last_mtime: float = 0.0
 _shm_mission_hash: str = ""
 
-# Default search paths for BMS .ini files (User\Config)
-INI_SEARCH_PATHS: List[str] = [
-    r"D:\Falcon BMS 4.38\User\Config\*.ini",
-    r"D:\Falcon BMS 4.38\User\Config\**\*.ini",
-    r"C:\Falcon BMS 4.38\User\Config\*.ini",
-    r"C:\Falcon BMS 4.38\User\Config\**\*.ini",
-    r"D:\Falcon BMS 4.37\User\Config\*.ini",
-    r"C:\Falcon BMS 4.37\User\Config\*.ini",
-]
+def _registry_ini_patterns() -> List[str]:
+    """Discover BMS install dirs from registry (all versions) and return glob patterns."""
+    patterns: List[str] = []
+    try:
+        import winreg
+        base = r"SOFTWARE\WOW6432Node\Benchmark Sims"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as root:
+            i = 0
+            while True:
+                try:
+                    subkey_name = winreg.EnumKey(root, i)
+                    i += 1
+                    if not subkey_name.lower().startswith("falcon bms"):
+                        continue
+                    with winreg.OpenKey(root, subkey_name) as sk:
+                        install_dir, _ = winreg.QueryValueEx(sk, "InstallDir")
+                    cfg = os.path.join(install_dir, "User", "Config")
+                    patterns.append(os.path.join(cfg, "*.ini"))
+                    patterns.append(os.path.join(cfg, "**", "*.ini"))
+                except OSError:
+                    break
+    except (OSError, ImportError):
+        pass
+    return patterns
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -75,7 +90,7 @@ def ini_status() -> dict:
 #  STPT PARSING (shared between upload and file watcher)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _parse_stpt_section(cfg: configparser.ConfigParser) -> dict:
+def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
     """
     Parse [STPT] section from a ConfigParser.
     Returns {"route": [...], "threats": [...], "flightplan": [...]}.
@@ -189,18 +204,7 @@ def find_latest_ini(extra_patterns: Optional[List[str]] = None) -> Tuple[str, fl
     Find the most recent .ini file containing [STPT].
     `extra_patterns` are prepended (e.g. from SharedMem BMS user dir or registry).
     """
-    patterns = list(extra_patterns or []) + list(INI_SEARCH_PATHS)
-
-    # Registry fallback
-    try:
-        import winreg
-        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                             r"SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.38")
-        install_dir, _ = winreg.QueryValueEx(key, "InstallDir")
-        patterns.insert(0, os.path.join(install_dir, "User", "Config", "*.ini"))
-        patterns.insert(1, os.path.join(install_dir, "User", "Config", "**", "*.ini"))
-    except (OSError, ImportError):
-        pass  # winreg not available (non-Windows) or BMS not installed
+    patterns = list(extra_patterns or []) + _registry_ini_patterns()
 
     files: List[str] = []
     for pat in patterns:
@@ -241,7 +245,7 @@ def parse_ini_file(path: str) -> dict:
     try:
         with open(path, encoding="latin-1") as f:
             raw = f.read()
-        cfg = configparser.ConfigParser()
+        cfg = configparser.RawConfigParser()
         cfg.optionxform = str  # type: ignore[assignment]
         cfg.read_string(raw)
         result = _parse_stpt_section(cfg)
@@ -269,7 +273,7 @@ async def ini_watcher_loop(get_extra_patterns=None) -> None:
                             glob patterns (e.g. from SharedMem BMS user dir).
     """
     global _ini_last_path, _ini_last_mtime
-    logger.info(f"INI watcher started — default paths: {INI_SEARCH_PATHS}")
+    logger.info("INI watcher started — paths from registry + SHM")
     _first_scan = True
 
     while True:
