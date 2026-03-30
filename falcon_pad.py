@@ -211,7 +211,7 @@ if __name__ == "__main__":
             p.setFont(QFont("Consolas", 11)); p.setPen(QPen(self.ACCENT))
             p.drawText(22, y, f"http://localhost:{SERVER_PORT}"); y += 25
             p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22, y, "RESEAU  —  Tablette / Mobile"); y += 17
+            p.drawText(22, y, "NETWORK"); y += 17
             p.setFont(QFont("Consolas", 11)); p.setPen(QPen(self.BLUE))
             p.drawText(22, y, f"http://{SERVER_IP}:{SERVER_PORT}"); y += 25
             p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
@@ -234,9 +234,8 @@ if __name__ == "__main__":
             p.drawRect(bx, by_, bw_, bh_)
             p.setPen(QPen(self.RED))
             p.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
-            p.drawText(bx, by_, bw_, bh_, Qt.AlignmentFlag.AlignCenter, "\u25a0  ARRET")
+            p.drawText(bx, by_, bw_, bh_, Qt.AlignmentFlag.AlignCenter, "\u25a0  PUSH TO EJECT")
             p.setPen(QPen(self.TXT_DIM)); p.setFont(QFont("Consolas", 7))
-            p.drawText(0, H-13, W, 12, Qt.AlignmentFlag.AlignCenter, "Le serveur sera arrete")
             p.end()
 
         def mousePressEvent(self, e):

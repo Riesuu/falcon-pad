@@ -331,8 +331,8 @@ def get_contacts(*, own_lat: Optional[float] = None,
         # Stale check (>30s = destroyed)
         if now - c.get('_ts', 0) > 30.0:
             continue
-        # Camp filter: only keep confirmed friendlies (camp=1)
-        if allies_only and c.get('camp', 3) != 1:
+        # Camp filter: exclude confirmed enemies (camp=2), keep friendlies + unknown
+        if allies_only and c.get('camp', 3) == 2:
             continue
         # Type filter: air only; 'other' kept only if recent (<10s)
         ct = c.get('type_name', 'other')

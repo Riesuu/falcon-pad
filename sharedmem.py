@@ -34,6 +34,7 @@ FD_X             = 0x000   # float, North ft
 FD_Y             = 0x004   # float, East ft
 FD_Z             = 0x008   # float, Down ft (negative = up)
 FD_KIAS          = 0x034   # float, knots
+FD_CURRENT_TIME  = 0x0A4   # int32, seconds since midnight (0–86400)
 FD_CURRENT_HDG   = 0x0BC   # float, true heading degrees 0–360
 
 # FlightData2 ("FalconSharedMemoryArea2")
@@ -200,7 +201,7 @@ class BMSSharedMemory:
 
         # BMS time (seconds since midnight)
         bms_time: Optional[int] = None
-        raw_t = safe_read(self.ptr2 + FD2_CURRENT_TIME, 4)
+        raw_t = safe_read(self.ptr1 + FD_CURRENT_TIME, 4)
         if raw_t:
             try:
                 bms_time = int(struct.unpack('<i', raw_t)[0])

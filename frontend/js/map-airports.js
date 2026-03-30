@@ -38,8 +38,8 @@ async function loadAirports() {
     apData = aps;
     const apNameOn = _apNameVisible;
     aps.forEach(ap => {
-      const isNK = ap.icao.startsWith('KP-') || ap.icao.startsWith('ZK');
-      const col = isNK ? 'rgba(248,113,113,.85)' : 'rgba(96,165,250,.85)';
+      const isEnemy = ap.side === 'red';
+      const col = isEnemy ? 'rgba(248,113,113,.85)' : 'rgba(96,165,250,.85)';
       const sz = 13;
       const sym = `<svg width="${sz}" height="${sz}" viewBox="0 0 13 13" style="cursor:pointer">
         <polygon points="6.5,1 12,6.5 6.5,12 1,6.5" fill="${col}" stroke="rgba(0,0,0,.7)" stroke-width="1.5"/>
@@ -50,7 +50,7 @@ async function loadAirports() {
       }).addTo(map);
       mIcon.bindPopup(buildApPopup(ap), {className:'', maxWidth:320, closeButton:true, offset:L.point(0,-6)});
       apIconMarkers.push(mIcon);
-      const apIcao = ap.icao.startsWith('KP-') ? ap.name : ap.icao;
+      const apIcao = ap.icao.startsWith('KP-') || ap.icao.length > 5 ? ap.name : ap.icao;
       const labelHtml = `<div style="pointer-events:none;line-height:1.2">
         <div style="font-family:'Consolas','Courier New',monospace;font-size:11px;font-weight:700;
           color:${col};letter-spacing:.8px;text-shadow:0 1px 4px #000,0 0 8px rgba(0,0,0,.9);

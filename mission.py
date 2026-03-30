@@ -507,6 +507,46 @@ def parse_ini_file(path: str) -> dict:
         return {}
 
 
+def merge_ini_supplements(path: str) -> bool:
+    """
+    Parse INI and merge radio/comms/airfields into mission_data
+    WITHOUT overwriting route/threats from SharedMem.
+    If SharedMem hasn't provided a route yet, also use the INI route.
+    """
+    global mission_data
+    try:
+        with open(path, encoding="latin-1") as f:
+            raw = f.read()
+        cfg = configparser.RawConfigParser()
+        cfg.optionxform = str  # type: ignore[assignment]
+        cfg.read_string(raw)
+        ini = _parse_stpt_section(cfg)
+        radio = _parse_radio_section(cfg)
+        comms = _parse_comms_section(cfg)
+
+        updated = dict(mission_data)
+        # Always merge radio/comms
+        if radio.get("uhf") or radio.get("vhf"):
+            updated["radio"] = radio
+        if comms:
+            updated["comms"] = comms
+        # Merge typed airfields (more precise than SHM guess)
+        if ini.get("airfields"):
+            updated["airfields"] = ini["airfields"]
+        # If SHM hasn't provided a route yet, use INI route
+        if not updated.get("route") and ini.get("route"):
+            updated["route"] = ini["route"]
+            updated["threats"] = ini.get("threats", [])
+            updated["flightplan"] = ini.get("flightplan", [])
+        mission_data = updated
+        logger.info(f"INI merge: {os.path.basename(path)} — "
+                    f"radio:{bool(radio.get('uhf'))} airfields:{bool(ini.get('airfields'))}")
+        return True
+    except Exception as e:
+        logger.debug(f"merge_ini_supplements: {e}")
+        return False
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  ASYNC WATCHER LOOP
 # ═══════════════════════════════════════════════════════════════════════════

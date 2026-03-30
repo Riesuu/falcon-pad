@@ -222,6 +222,25 @@ function updateZulu(){
 }
 updateZulu(); setInterval(updateZulu, 1000);
 
+// ── Mission clock (tab bar) ──────────────────────────────────────
+var _mclockBase = -1, _mclockWall = 0, _mclockLastBms = -1;
+function updateMissionClock(){
+  const el = document.getElementById('missionClock');
+  if (!el) return;
+  if (_bmsTimeSec != null && _bmsTimeSec !== _mclockLastBms) {
+    _mclockBase = _bmsTimeSec;
+    _mclockWall = Date.now();
+    _mclockLastBms = _bmsTimeSec;
+  }
+  if (_mclockBase < 0) return;
+  const secs = (_mclockBase + Math.floor((Date.now() - _mclockWall) / 1000)) % 86400;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'Z';
+}
+setInterval(updateMissionClock, 1000);
+
 // ── Fullscreen ───────────────────────────────────────────────────
 function toggleFullscreen(){
   if(!document.fullscreenElement){
@@ -622,9 +641,6 @@ function switchKbTab(name, el) {
         if(!af[role]) return;
         const sel = document.getElementById('kb-af-'+role+'-sel');
         if(!sel) return;
-        // Only auto-fill if user hasn't manually selected
-        const saved = localStorage.getItem('bms_af_'+role);
-        if(saved && saved !== af[role]) return;
         sel.value = af[role];
         localStorage.setItem('bms_af_'+role, af[role]);
         _showAfInfo(role, af[role]);
@@ -696,9 +712,6 @@ function switchKbTab(name, el) {
 const _kbPersist = {
   'kb-notes-ta':'bms_kb_notes',
   'kb-fplan-ta':'bms_kb_fplan',
-  'kb-callsign':'bms_kb_callsign','kb-package':'bms_kb_package',
-  'kb-tot':'bms_kb_tot','kb-tanker':'bms_kb_tanker',
-  'kb-bingo':'bms_kb_bingo',
   'kb-9l-1':'bms_9l_1','kb-9l-2':'bms_9l_2','kb-9l-3':'bms_9l_3',
   'kb-9l-4':'bms_9l_4','kb-9l-5':'bms_9l_5','kb-9l-6':'bms_9l_6',
   'kb-9l-7':'bms_9l_7','kb-9l-8':'bms_9l_8','kb-9l-9':'bms_9l_9',
