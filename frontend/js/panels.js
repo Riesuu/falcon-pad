@@ -80,6 +80,13 @@ function onElemColor(key, hex) {
   if(typeof window._setMapColor === 'function') window._setMapColor(key, hex);
 }
 
+function onBullColor(hex) {
+  C_BULL = hex;
+  saveUiPref({color_bull: hex});
+  // Refresh bullseye marker icon with new color
+  if(_bullMarker && _bullLat != null) { _bullMarker.setIcon(_bullIcon()); }
+}
+
 function onElemSize(key, val) {
   const v = parseFloat(val);
   const varMap = {draw:'S_DRAW',stpt:'S_STPT',fplan:'S_FPLAN',ppt:'S_PPT'};
@@ -116,6 +123,9 @@ function _syncElemControls(p) {
     if(cp && p['color_'+k]) cp.value = p['color_'+k];
     if(sl && p['size_'+k])  { sl.value = p['size_'+k]; if(sv) sv.textContent = p['size_'+k]; }
   });
+  // Bullseye color picker
+  const bullCp = document.getElementById('sp-c-bull');
+  if(bullCp && p.color_bull) bullCp.value = p.color_bull;
 }
 
 async function loadSettings() {
@@ -619,8 +629,28 @@ function switchKbTab(name, el) {
         localStorage.setItem('bms_af_'+role, af[role]);
         _showAfInfo(role, af[role]);
       });
+      _tryAutoFillBullseye();
     }).catch(()=>{});
   }
+
+  // Auto-fill bullseye: bearing/range from DEP airport to bullseye reference
+  var _bullAutoFilled = false;
+  function _tryAutoFillBullseye(){
+    if(_bullAutoFilled) return;
+    const el = document.getElementById('kb-bull-val');
+    if(!el) return;
+    const depIcao = localStorage.getItem('bms_af_dep');
+    if(!depIcao) return;
+    if(typeof _bullLat==='undefined'||_bullLat==null||_bullLon==null) return;
+    const ap = _afData.find(a=>a.icao===depIcao);
+    if(!ap) return;
+    const brg = bearingTo(ap.lat, ap.lon, _bullLat, _bullLon);
+    const nm  = haversineNm(ap.lat, ap.lon, _bullLat, _bullLon);
+    el.textContent = String(Math.round(brg)).padStart(3,'0')+'/'+Math.round(nm)+' NM';
+    _bullAutoFilled = true;
+  }
+  // Retry until bullseye data arrives from SharedMem
+  setInterval(_tryAutoFillBullseye, 3000);
 
   function _showAfInfo(role, icao){
     const el = document.getElementById('kb-af-'+role+'-info');
@@ -668,7 +698,7 @@ const _kbPersist = {
   'kb-fplan-ta':'bms_kb_fplan',
   'kb-callsign':'bms_kb_callsign','kb-package':'bms_kb_package',
   'kb-tot':'bms_kb_tot','kb-tanker':'bms_kb_tanker',
-  'kb-bull-val':'bms_kb_bull','kb-bingo':'bms_kb_bingo',
+  'kb-bingo':'bms_kb_bingo',
   'kb-9l-1':'bms_9l_1','kb-9l-2':'bms_9l_2','kb-9l-3':'bms_9l_3',
   'kb-9l-4':'bms_9l_4','kb-9l-5':'bms_9l_5','kb-9l-6':'bms_9l_6',
   'kb-9l-7':'bms_9l_7','kb-9l-8':'bms_9l_8','kb-9l-9':'bms_9l_9',

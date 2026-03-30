@@ -97,8 +97,9 @@ function _bullIcon() {
 function updateBullseye(lat, lon) {
   if (lat == null || lon == null) return;
   _bullLat = lat; _bullLon = lon;
-  if (_bullMarker) { _bullMarker.setLatLng([lat, lon]); }
-  else { _bullMarker = L.marker([lat, lon], { icon: _bullIcon(), zIndexOffset: 500, interactive: false }).addTo(map); }
+  var bullOn = document.getElementById('bullBtn')?.classList.contains('active') !== false;
+  if (_bullMarker) { _bullMarker.setLatLng([lat, lon]); _bullMarker.setIcon(_bullIcon()); }
+  else if (bullOn) { _bullMarker = L.marker([lat, lon], { icon: _bullIcon(), zIndexOffset: 500, interactive: false }).addTo(map); }
   const el = document.getElementById('gps-bull');
   if (el && _lastAircraftData) {
     const brg = bearingTo(_lastAircraftData.lat, _lastAircraftData.lon, lat, lon);

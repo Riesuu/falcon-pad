@@ -176,3 +176,12 @@ document.getElementById('airportBtn')?.addEventListener('click',function(){
   document.getElementById('runwayBtn')?.classList.toggle('active',v);
   saveUiPref({airports_visible:v});
 });
+
+document.getElementById('bullBtn')?.addEventListener('click',function(){
+  const v=this.classList.toggle('active');
+  if(_bullMarker){
+    if(!v){try{map.removeLayer(_bullMarker)}catch(e){}}
+    else{try{_bullMarker.addTo(map)}catch(e){}}
+  }
+  saveUiPref({bull_visible:v});
+});

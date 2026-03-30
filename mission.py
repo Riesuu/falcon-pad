@@ -166,7 +166,7 @@ def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
 
     # Build airfields dict from type codes
     if _dep_pos or _land_positions:
-        af: dict = {}
+        af: dict = {"_typed": True}  # Flag: positions come from INI type codes
         if _dep_pos:
             af["dep"] = _dep_pos
         # First landing point = arrival; additional ones with different coords = alternate
@@ -183,36 +183,196 @@ def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
     return result
 
 
+def _dist_nm(lat1, lon1, lat2, lon2):
+    """Haversine distance in nautical miles."""
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat/2)**2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlon/2)**2)
+    return 3440.065 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+
+def _find_nearest_airport(lat, lon, airports, max_nm=5.0):
+    """Find nearest airport ICAO within max_nm, or None."""
+    best_icao, best_d = None, max_nm
+    for ap in airports:
+        d = _dist_nm(lat, lon, ap["lat"], ap["lon"])
+        if d < best_d:
+            best_d = d
+            best_icao = ap["icao"]
+    return best_icao
+
+
 def match_airfields_to_airports(airfields: dict, airports: list,
                                 max_nm: float = 5.0) -> dict:
     """
     Match airfield positions (from INI type codes) to known airports.
     Returns dict with dep/arr/alt keys → airport ICAO or None.
     """
-    def _dist_nm(lat1, lon1, lat2, lon2):
-        dlat = math.radians(lat2 - lat1)
-        dlon = math.radians(lon2 - lon1)
-        a = (math.sin(dlat/2)**2 +
-             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-             math.sin(dlon/2)**2)
-        return 3440.065 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-
-    def _find_nearest(pos):
-        if not pos or not airports:
-            return None
-        best_icao, best_d = None, max_nm
-        for ap in airports:
-            d = _dist_nm(pos["lat"], pos["lon"], ap["lat"], ap["lon"])
-            if d < best_d:
-                best_d = d
-                best_icao = ap["icao"]
-        return best_icao
-
     result = {}
     for role in ("dep", "arr", "alt"):
         pos = airfields.get(role)
-        result[role] = _find_nearest(pos) if pos else None
+        result[role] = _find_nearest_airport(pos["lat"], pos["lon"], airports, max_nm) if pos else None
     return result
+
+
+def find_airfields_from_route(route: list, airports: list,
+                              max_nm: float = 5.0) -> dict:
+    """
+    Scan all route steerpoints to find dep/arr/alt by proximity to known airports.
+    Used when type codes are not available (SharedMem path).
+    - dep = first steerpoint matching an airport (from start)
+    - arr = last steerpoint matching a different airport (from end)
+    - alt = next distinct airport match (from end, different from dep and arr)
+    """
+    if not route or not airports:
+        return {"dep": None, "arr": None, "alt": None}
+
+    # Match each steerpoint to nearest airport
+    matches = [_find_nearest_airport(wp["lat"], wp["lon"], airports, max_nm)
+               for wp in route]
+
+    # dep = first match from start
+    dep = next((icao for icao in matches if icao), None)
+
+    # arr = last match from end, different from dep
+    arr = next((icao for icao in reversed(matches) if icao and icao != dep), None)
+    # If no different airport found, last match (round trip to same base)
+    if arr is None:
+        arr = next((icao for icao in reversed(matches) if icao), None)
+
+    # alt = any other distinct airport (scan from end)
+    seen = {dep, arr}
+    alt = next((icao for icao in reversed(matches) if icao and icao not in seen), None)
+
+    return {"dep": dep, "arr": arr, "alt": alt}
+
+
+def _parse_radio_section(cfg: configparser.RawConfigParser) -> dict:
+    """
+    Parse [Radio] section from a BMS DTC .ini file.
+    Returns {"uhf": [...], "vhf": [...], "ils": [...]}.
+    Frequencies converted from integer kHz to MHz float.
+    """
+    result: dict = {"uhf": [], "vhf": [], "ils": []}
+    if not cfg.has_section("Radio"):
+        return result
+    radio = cfg["Radio"]
+    for band, count, divisor in [("UHF", 20, 1000.0), ("VHF", 20, 1000.0), ("ILS", 4, 100.0)]:
+        for i in range(1, count + 1):
+            raw = radio.get(f"{band}_{i}", "0")
+            comment = radio.get(f"{band}_COMMENT_{i}", "")
+            try:
+                val = int(raw)
+                if val <= 0:
+                    continue
+                freq = round(val / divisor, 3)
+                result[band.lower()].append({"num": i, "freq": freq, "comment": comment})
+            except (ValueError, TypeError):
+                continue
+    return result
+
+
+def _parse_comms_section(cfg: configparser.RawConfigParser) -> dict:
+    """Parse [COMMS] section from a BMS DTC .ini file (TACAN, ILS)."""
+    if not cfg.has_section("COMMS"):
+        return {}
+    comms = cfg["COMMS"]
+    result: dict = {}
+    try:
+        ch = int(comms.get("TACAN Channel", "0"))
+        band = "Y" if comms.get("TACAN Band", "0") == "1" else "X"
+        if ch > 0:
+            result["tacan"] = f"{ch}{band}"
+    except (ValueError, TypeError):
+        pass
+    try:
+        ils = int(comms.get("ILS Frequency", "0"))
+        if ils > 0:
+            result["ils_freq"] = round(ils / 100.0, 2)
+    except (ValueError, TypeError):
+        pass
+    try:
+        result["ils_crs"] = int(comms.get("ILS CRS", "0"))
+    except (ValueError, TypeError):
+        pass
+    return result
+
+
+def match_radio_to_airports(radio: dict, airports: list) -> dict:
+    """
+    Cross-reference radio presets labeled DEP/ARR/ALT with airport frequencies.
+    Matches VHF preset frequencies against airport freq field.
+    Returns dict with dep/arr/alt → ICAO or None.
+    """
+    if not radio or not airports:
+        return {"dep": None, "arr": None, "alt": None}
+
+    # Build freq → ICAO lookup from airport database
+    freq_to_icao: dict = {}
+    for ap in airports:
+        try:
+            f = float(ap.get("freq", 0))
+            if f > 0:
+                freq_to_icao[round(f, 3)] = ap["icao"]
+        except (ValueError, TypeError):
+            continue
+
+    result: dict = {"dep": None, "arr": None, "alt": None}
+
+    for preset in radio.get("vhf", []):
+        comment = (preset.get("comment") or "").upper()
+        freq = preset["freq"]
+        matched = freq_to_icao.get(freq)
+        if not matched:
+            # Tolerance ±25 kHz for rounding differences
+            for db_f, icao in freq_to_icao.items():
+                if abs(freq - db_f) < 0.026:
+                    matched = icao
+                    break
+        if matched:
+            if "DEP" in comment and not result["dep"]:
+                result["dep"] = matched
+            elif "ARR" in comment and not result["arr"]:
+                result["arr"] = matched
+            elif "ALT" in comment and not result["alt"]:
+                result["alt"] = matched
+
+    return result
+
+
+def load_radio_from_dir(config_dir: str) -> bool:
+    """
+    Find and load [Radio]+[COMMS] from the most recent .ini in a BMS config dir.
+    Used to get radio presets from the pilot profile when SharedMem is active.
+    Returns True if radio data was loaded.
+    """
+    global mission_data
+    if not config_dir or not os.path.isdir(config_dir):
+        return False
+    try:
+        candidates = glob.glob(os.path.join(config_dir, "*.ini"))
+        if not candidates:
+            return False
+        best = max(candidates, key=os.path.getmtime)
+        with open(best, encoding="latin-1") as f:
+            raw = f.read()
+        cfg = configparser.RawConfigParser()
+        cfg.optionxform = str  # type: ignore[assignment]
+        cfg.read_string(raw)
+        radio = _parse_radio_section(cfg)
+        comms = _parse_comms_section(cfg)
+        if radio.get("uhf") or radio.get("vhf"):
+            mission_data = dict(mission_data)
+            mission_data["radio"] = radio
+            mission_data["comms"] = comms
+            logger.info(f"Radio presets loaded from {os.path.basename(best)} "
+                        f"({len(radio.get('uhf',[]))} UHF, {len(radio.get('vhf',[]))} VHF)")
+            return True
+    except Exception as e:
+        logger.debug(f"load_radio_from_dir: {e}")
+    return False
 
 
 def parse_ini_content(text: str) -> dict:
@@ -220,7 +380,10 @@ def parse_ini_content(text: str) -> dict:
     cfg = configparser.RawConfigParser()
     cfg.optionxform = str  # type: ignore[assignment]
     cfg.read_string(text)
-    return _parse_stpt_section(cfg)
+    result = _parse_stpt_section(cfg)
+    result["radio"] = _parse_radio_section(cfg)
+    result["comms"] = _parse_comms_section(cfg)
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -243,6 +406,14 @@ def update_from_shm(route: list, threats: list) -> None:
     new_data["route"] = route
     if threats:
         new_data["threats"] = threats
+    # Preserve INI type-code airfields if available (more precise than SHM guess)
+    existing_af = mission_data.get("airfields", {})
+    if route and len(route) >= 2 and not existing_af.get("_typed"):
+        new_data["airfields"] = {
+            "dep": {"lat": route[0]["lat"], "lon": route[0]["lon"]},
+            "arr": {"lat": route[-1]["lat"], "lon": route[-1]["lon"]},
+        }
+    # radio/comms keys are preserved by dict copy
     mission_data = new_data
     logger.info(f"SHM steerpoints: {len(route)} WP, {len(threats)} PPT "
                 f"(theater: {get_theater_name()})")
@@ -319,11 +490,17 @@ def parse_ini_file(path: str) -> dict:
         cfg.optionxform = str  # type: ignore[assignment]
         cfg.read_string(raw)
         result = _parse_stpt_section(cfg)
+        result["radio"] = _parse_radio_section(cfg)
+        result["comms"] = _parse_comms_section(cfg)
         mission_data = result
         route = result.get("route", [])
         threats = result.get("threats", [])
+        radio = result.get("radio", {})
+        n_uhf = len(radio.get("uhf", []))
+        n_vhf = len(radio.get("vhf", []))
         logger.info(f"INI loaded: {os.path.basename(path)} — "
-                    f"{len(route)} steerpoints, {len(threats)} PPT")
+                    f"{len(route)} steerpoints, {len(threats)} PPT, "
+                    f"{n_uhf} UHF, {n_vhf} VHF presets")
         return result
     except Exception as e:
         logger.error(f"INI parse error: {e}")

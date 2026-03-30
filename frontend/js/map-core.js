@@ -132,7 +132,7 @@ var C_HSD_L4 = '#f87171';
 var C_STPT  = '#e2e8f0'; var S_STPT  = 5;
 var C_FPLAN = '#f59e0b'; var S_FPLAN = 4;
 var C_PPT   = '#ef4444'; var S_PPT   = 1.2; var S_PPT_DOT = 5;
-var C_BULL  = '#fbbf24'; var S_BULL  = 8;
+var C_BULL  = '#60a5fa'; var S_BULL  = 8;
 var C_MK    = '#fbbf24'; var S_MK    = 2.5;
 
 function applyUiPrefs(p) {
@@ -149,6 +149,7 @@ function applyUiPrefs(p) {
   if(p.size_fplan)  S_FPLAN = p.size_fplan;
   if(p.color_ppt)   C_PPT   = p.color_ppt;
   if(p.size_ppt)    S_PPT   = p.size_ppt;
+  if(p.color_bull)  C_BULL  = p.color_bull;
   if(p.active_color && COLORS.includes(p.active_color)) {
     activeColor = p.active_color;
     C_DRAW = p.active_color;
@@ -182,6 +183,10 @@ async function loadUiPrefs(){
     if(p.airports_visible===false){airportMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});document.getElementById('airportBtn')?.classList.remove('active');}
     if(p.runways_visible===false){runwaysVisible=false;document.getElementById('runwayBtn')?.classList.remove('active');runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});}
     if(p.ap_name_visible===true){document.getElementById('apNameBtn')?.classList.add('active');apLabelMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});}
+    if(p.bull_visible===false){
+      if(_bullMarker){try{map.removeLayer(_bullMarker)}catch(e){}_bullMarker=null;}
+      document.getElementById('bullBtn')?.classList.remove('active');
+    }
     if(p.rwy_offsets){ try{ rwyOffsets = JSON.parse(p.rwy_offsets); }catch(e){} }
     if(p.annotations){ try{ _restoreNotes(JSON.parse(p.annotations)); }catch(e){} }
     if(_missionCache) _redrawMission();

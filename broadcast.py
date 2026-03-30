@@ -19,9 +19,9 @@ import time as _time
 import config
 import mission
 import trtt
-from stringdata import (detect_theater, get_bms_briefings_dir, get_campaign_dir,
-                        get_hsd_lines, get_mk_markpoints, get_ppt_threats,
-                        get_steerpoints, read_all_strings)
+from stringdata import (detect_theater, get_bms_briefings_dir, get_bms_user_dir,
+                        get_campaign_dir, get_hsd_lines, get_mk_markpoints,
+                        get_ppt_threats, get_steerpoints, read_all_strings)
 from theaters import detect_theater_from_coords_multi, get_theater, get_theater_name
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,12 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                     if _bd:
                         bms_briefings_dir = _bd
                     _thr_changed = detect_theater(_strings)
+                    # Load radio presets from pilot INI if not yet loaded
+                    if not mission.mission_data.get("radio"):
+                        _ud = get_bms_user_dir(_strings)
+                        if _ud:
+                            _cfg_dir = os.path.join(_ud, "Config")
+                            mission.load_radio_from_dir(_cfg_dir)
                     _shm_route   = get_steerpoints(_strings)
                     _shm_threats = get_ppt_threats(_strings)
                     if (_shm_route or _shm_threats) and ws_clients:

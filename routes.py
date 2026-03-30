@@ -67,10 +67,46 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     @app.get("/api/mission/airfields")
     async def get_mission_airfields():
         af = mission.mission_data.get("airfields")
-        if not af:
-            return {"dep": None, "arr": None, "alt": None}
         ap_list = airports.load(get_theater_name()) if is_theater_detected() else []
-        return mission.match_airfields_to_airports(af, ap_list)
+
+        # 1. INI type-code airfields (type=1 takeoff, type=7 landing) — most precise
+        if af and af.get("_typed"):
+            return mission.match_airfields_to_airports(af, ap_list)
+
+        # 2. Radio preset matching (DEP/ARR/ALT labeled VHF frequencies)
+        radio = mission.mission_data.get("radio")
+        if radio and ap_list:
+            radio_match = mission.match_radio_to_airports(radio, ap_list)
+            if radio_match.get("dep"):
+                # Fill missing arr/alt from route scanning
+                route = mission.mission_data.get("route", [])
+                if route and ap_list:
+                    route_match = mission.find_airfields_from_route(route, ap_list)
+                    if not radio_match.get("arr"):
+                        radio_match["arr"] = route_match.get("arr")
+                    if not radio_match.get("alt"):
+                        radio_match["alt"] = route_match.get("alt")
+                return radio_match
+
+        # 3. Route scanning (all steerpoints against airports)
+        route = mission.mission_data.get("route", [])
+        if route and ap_list:
+            result = mission.find_airfields_from_route(route, ap_list)
+            if result.get("dep") or result.get("arr"):
+                return result
+
+        # 4. Fallback to position-based matching
+        if af:
+            return mission.match_airfields_to_airports(af, ap_list)
+
+        return {"dep": None, "arr": None, "alt": None}
+
+    @app.get("/api/mission/radio")
+    async def get_mission_radio():
+        return {
+            "radio": mission.mission_data.get("radio", {}),
+            "comms": mission.mission_data.get("comms", {}),
+        }
 
     @app.post("/api/upload")
     async def upload_mission(file: UploadFile = File(...)):
@@ -180,6 +216,8 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         size_fplan:       Optional[float] = None
         color_ppt:        Optional[str]   = None
         size_ppt:         Optional[float] = None
+        color_bull:       Optional[str]   = None
+        bull_visible:     Optional[bool]  = None
         size_stpt_line:   Optional[float] = None
         size_fplan_line:  Optional[float] = None
         size_ppt_dot:     Optional[float] = None
@@ -198,13 +236,13 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     async def ui_prefs_save(p: UiPrefsModel):
         hex_re = r"#[0-9a-fA-F]{6}$"
         for key in ("active_color", "color_draw", "color_stpt", "color_fplan", "color_ppt",
-                    "color_hsd_l1", "color_hsd_l2", "color_hsd_l3", "color_hsd_l4"):
+                    "color_bull", "color_hsd_l1", "color_hsd_l2", "color_hsd_l3", "color_hsd_l4"):
             val = getattr(p, key)
             if val is not None and re.match(hex_re, val):
                 ui_prefs.prefs[key] = val
         if p.layer is not None and p.layer in ("dark", "osm", "satellite", "terrain"):
             ui_prefs.prefs["layer"] = p.layer
-        for key in ("ppt_visible", "airports_visible", "runways_visible", "ap_name_visible"):
+        for key in ("ppt_visible", "airports_visible", "runways_visible", "ap_name_visible", "bull_visible"):
             val = getattr(p, key)
             if val is not None:
                 ui_prefs.prefs[key] = val

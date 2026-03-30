@@ -35,6 +35,7 @@ DEFAULTS: dict = {
     "color_stpt":       "#e2e8f0", "size_stpt":      5,   "size_stpt_line":  2,
     "color_fplan":      "#f59e0b", "size_fplan":     4,   "size_fplan_line": 2,
     "color_ppt":        "#ef4444", "size_ppt":       1.2, "size_ppt_dot":    5,
+    "color_bull":       "#60a5fa", "bull_visible":   True,
     # HSD line colors L1–L4
     "color_hsd_l1":     "#4ade80",
     "color_hsd_l2":     "#60a5fa",
