@@ -30,7 +30,6 @@ import app_info
 import config
 import ui_prefs
 import airports
-import radar
 import trtt
 import mission
 from sharedmem import BMSSharedMemory, safe_read
@@ -68,7 +67,7 @@ bms = BMSSharedMemory()
 # ── WebSocket clients ─────────────────────────────────────────────────────────
 ws_clients: List[WebSocket] = []
 
-# ── Broadcast helpers ─────────────────────────────────────────────────────────
+# ── Broadcast helpers ─────────────────────────────────────────────────────────<
 async def _broadcast(msg: str) -> None:
     dead = []
     for ws in list(ws_clients):
@@ -114,7 +113,7 @@ async def broadcast_loop() -> None:
                     was = bms.connected
                     bms.try_reconnect()
                     if not was and bms.connected:
-                        radar.reset()
+                        logger.info("BMS reconnected")
 
             pos = bms.get_position() if bms.connected else None
 
@@ -146,13 +145,7 @@ async def broadcast_loop() -> None:
                 await _broadcast(json.dumps({"type": "aircraft", "data": pos}))
                 own_lat = pos.get("lat")
                 own_lon = pos.get("lon")
-                radar_c = radar.get_contacts(
-                    bms.shm_ptrs, bms.ptr1,
-                    own_lat=own_lat, own_lon=own_lon,
-                    ptr2=bms.ptr2 or 0,
-                ) if bms.ptr1 else []
-                await _broadcast(json.dumps({"type": "radar", "data": radar_c}))
-                acmi_c = trtt.get_contacts(own_lat=own_lat, own_lon=own_lon)
+                acmi_c = trtt.get_contacts(own_lat=own_lat, own_lon=own_lon, allies_only=True)
                 if acmi_c:
                     await _broadcast(json.dumps({"type": "acmi", "data": acmi_c}))
                 if bms.connected and ptr_str:
@@ -175,7 +168,7 @@ async def _ini_watcher_loop() -> None:
     _last_mtime = 0.0
     while True:
         try:
-            if not (bms.connected and mission.mission_data.get("route")):
+            if not bms.connected:
                 extra = ([os.path.join(_bms_campaign_dir, "*.ini")]
                          if (_bms_campaign_dir and os.path.isdir(_bms_campaign_dir)) else None)
                 path, mtime = mission.find_latest_ini(extra)

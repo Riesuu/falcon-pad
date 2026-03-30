@@ -17,7 +17,22 @@
       "Bash(openssl dgst:*)",
       "Bash(openssl base64:*)",
       "Bash(curl -sL \"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\")",
-      "Bash(curl -sL \"https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js\")"
+      "Bash(curl -sL \"https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js\")",
+      "Bash(ls -la frontend/js/map*.js)",
+      "Read(//c/Users/Lyes/Documents/00_DEV/**)",
+      "Bash(grep -hP 'function \\\\w+' frontend/js/map-*.js)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Bash(done)",
+      "Bash(grep -h \"^function \" map-*.js panels.js websocket.js)",
+      "Bash(cut -d'\\(' -f1)",
+      "Bash(grep -oh \"getElementById\\(''''[^'''']*''''\\)\" *.js)",
+      "Read(//tmp/**)",
+      "Bash(ls frontend/js/map-*.js frontend/js/panels.js frontend/js/websocket.js)",
+      "Bash(while read:*)",
+      "Bash(do node:*)",
+      "Bash(echo \"  $f: OK\")",
+      "Bash(echo \"  $f: ERROR\")"
     ]
   }
 }

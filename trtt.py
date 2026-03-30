@@ -331,9 +331,8 @@ def get_contacts(*, own_lat: Optional[float] = None,
         # Stale check (>30s = destroyed)
         if now - c.get('_ts', 0) > 30.0:
             continue
-        # Camp filter: in solo BMS often sends camp=3 (unknown) because
-        # Color isn't injected immediately — exclude only confirmed enemies
-        if allies_only and c.get('camp', 3) == 2:
+        # Camp filter: only keep confirmed friendlies (camp=1)
+        if allies_only and c.get('camp', 3) != 1:
             continue
         # Type filter: air only; 'other' kept only if recent (<10s)
         ct = c.get('type_name', 'other')
