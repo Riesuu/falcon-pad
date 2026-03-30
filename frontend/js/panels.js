@@ -580,6 +580,88 @@ function switchKbTab(name, el) {
   if(name==='chklist') setTimeout(clRender,0);
 }
 
+// ── Airfield selectors (DEP / ARR / ALT) ───────────────────────
+(function(){
+  var _afData = []; // cached airport list
+
+  function _loadAirfields(){
+    fetch('/api/airports').then(r=>r.json()).then(aps=>{
+      _afData = aps;
+      ['dep','arr','alt'].forEach(role=>{
+        const sel = document.getElementById('kb-af-'+role+'-sel');
+        if(!sel) return;
+        sel.innerHTML = '<option value="">— Select —</option>';
+        aps.forEach(ap=>{
+          const o = document.createElement('option');
+          o.value = ap.icao;
+          o.textContent = ap.icao + ' — ' + ap.name;
+          sel.appendChild(o);
+        });
+        // Restore saved selection
+        const saved = localStorage.getItem('bms_af_'+role);
+        if(saved) { sel.value = saved; _showAfInfo(role, saved); }
+      });
+      // Auto-detect from mission INI type codes
+      _autoDetectAirfields();
+    }).catch(()=>{});
+  }
+
+  function _autoDetectAirfields(){
+    fetch('/api/mission/airfields').then(r=>r.json()).then(af=>{
+      ['dep','arr','alt'].forEach(role=>{
+        if(!af[role]) return;
+        const sel = document.getElementById('kb-af-'+role+'-sel');
+        if(!sel) return;
+        // Only auto-fill if user hasn't manually selected
+        const saved = localStorage.getItem('bms_af_'+role);
+        if(saved && saved !== af[role]) return;
+        sel.value = af[role];
+        localStorage.setItem('bms_af_'+role, af[role]);
+        _showAfInfo(role, af[role]);
+      });
+    }).catch(()=>{});
+  }
+
+  function _showAfInfo(role, icao){
+    const el = document.getElementById('kb-af-'+role+'-info');
+    if(!el) return;
+    if(!icao){ el.innerHTML=''; return; }
+    const ap = _afData.find(a=>a.icao===icao);
+    if(!ap){ el.innerHTML='<span style="color:#475569">No data</span>'; return; }
+    var html = '';
+    if(ap.tacan) html += '<div class="af-row"><span class="af-lbl">TCN</span><span class="af-val">'+ap.tacan+'</span></div>';
+    if(ap.freq)  html += '<div class="af-row"><span class="af-lbl">TWR</span><span class="af-val">'+ap.freq+' MHz</span></div>';
+    if(ap.ils && ap.ils.length){
+      ap.ils.forEach(function(ils){
+        var parts = '<span class="af-lbl">ILS</span><span class="af-val">RWY '+ils.rwy;
+        if(ils.freq) parts += ' · '+ils.freq+' MHz';
+        parts += ' · CRS '+ils.crs+'°</span>';
+        html += '<div class="af-row af-ils">'+parts+'</div>';
+      });
+    }
+    el.innerHTML = html || '<span style="color:#475569">No nav data</span>';
+  }
+
+  ['dep','arr','alt'].forEach(function(role){
+    var sel = document.getElementById('kb-af-'+role+'-sel');
+    if(!sel) return;
+    sel.addEventListener('change',function(){
+      localStorage.setItem('bms_af_'+role, sel.value);
+      _showAfInfo(role, sel.value);
+    });
+  });
+
+  // Load on startup + refresh when theater changes
+  _loadAirfields();
+  var _afTheater = null;
+  setInterval(function(){
+    if(typeof _currentTheater!=='undefined' && _currentTheater !== _afTheater){
+      _afTheater = _currentTheater;
+      _loadAirfields();
+    }
+  }, 5000);
+})();
+
 // Persister kneeboard (notes, plan de vol, 9-line)
 const _kbPersist = {
   'kb-notes-ta':'bms_kb_notes',

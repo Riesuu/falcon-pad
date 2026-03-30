@@ -340,6 +340,9 @@ def get_contacts(*, own_lat: Optional[float] = None,
             continue
         if ct == 'other' and (now - c.get('_ts', 0)) > 10.0:
             continue
+        # Altitude filter: skip aircraft on the ground (< 500 ft)
+        if c.get('alt', 0) < 500:
+            continue
         # Range filter
         if own_lat is not None and own_lon is not None and max_nm < 9999.0:
             dlat = c['lat'] - own_lat

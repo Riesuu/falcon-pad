@@ -30,6 +30,8 @@ import os
 import time
 from typing import List, Optional, Tuple
 
+import math
+
 from theaters import bms_to_latlon, in_theater_bbox, get_theater_name
 
 logger = logging.getLogger(__name__)
@@ -93,11 +95,18 @@ def ini_status() -> dict:
 def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
     """
     Parse [STPT] section from a ConfigParser.
-    Returns {"route": [...], "threats": [...], "flightplan": [...]}.
+    Returns {"route": [...], "threats": [...], "flightplan": [],
+             "airfields": {"dep": {lat,lon}, "arr": [{lat,lon},...]}}.
+
+    BMS INI target type codes:
+        0=waypoint, 1=takeoff, 2=target, 7=landing, 8=IP
     """
     route: List[dict] = []
     threats: List[dict] = []
     fplan: List[dict] = []
+    # Collect takeoff (type=1) and landing (type=7) positions
+    _dep_pos = None
+    _land_positions: List[dict] = []
 
     if not cfg.has_section("STPT"):
         return {"route": route, "threats": threats, "flightplan": fplan}
@@ -136,13 +145,74 @@ def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
                         "num": ppt_num, "index": len(threats),
                     })
             else:
+                # Extract type code (4th field) for target_/stpt_ entries
+                type_code = -1
+                if (kl.startswith("target") or kl.startswith("stpt") or kl.startswith("steerpoint")) and len(parts) >= 4:
+                    try:
+                        type_code = int(float(parts[3]))
+                    except (ValueError, TypeError):
+                        pass
+                if type_code == 1 and _dep_pos is None:
+                    _dep_pos = {"lat": lat, "lon": lon}
+                elif type_code == 7:
+                    _land_positions.append({"lat": lat, "lon": lon})
                 route.append({"lat": lat, "lon": lon, "alt": z,
                               "index": len(route)})
         except (ValueError, TypeError) as e:
             logger.debug(f"STPT parse skip key={key}: {e}")
             continue
 
-    return {"route": route, "threats": threats, "flightplan": fplan}
+    result = {"route": route, "threats": threats, "flightplan": fplan}
+
+    # Build airfields dict from type codes
+    if _dep_pos or _land_positions:
+        af: dict = {}
+        if _dep_pos:
+            af["dep"] = _dep_pos
+        # First landing point = arrival; additional ones with different coords = alternate
+        if _land_positions:
+            af["arr"] = _land_positions[0]
+            for lp in _land_positions[1:]:
+                # Different position from arrival? → alternate
+                if (abs(lp["lat"] - af["arr"]["lat"]) > 0.01 or
+                        abs(lp["lon"] - af["arr"]["lon"]) > 0.01):
+                    af["alt"] = lp
+                    break
+        result["airfields"] = af
+
+    return result
+
+
+def match_airfields_to_airports(airfields: dict, airports: list,
+                                max_nm: float = 5.0) -> dict:
+    """
+    Match airfield positions (from INI type codes) to known airports.
+    Returns dict with dep/arr/alt keys → airport ICAO or None.
+    """
+    def _dist_nm(lat1, lon1, lat2, lon2):
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = (math.sin(dlat/2)**2 +
+             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+             math.sin(dlon/2)**2)
+        return 3440.065 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+    def _find_nearest(pos):
+        if not pos or not airports:
+            return None
+        best_icao, best_d = None, max_nm
+        for ap in airports:
+            d = _dist_nm(pos["lat"], pos["lon"], ap["lat"], ap["lon"])
+            if d < best_d:
+                best_d = d
+                best_icao = ap["icao"]
+        return best_icao
+
+    result = {}
+    for role in ("dep", "arr", "alt"):
+        pos = airfields.get(role)
+        result[role] = _find_nearest(pos) if pos else None
+    return result
 
 
 def parse_ini_content(text: str) -> dict:

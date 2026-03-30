@@ -32,7 +32,11 @@
       "Bash(while read:*)",
       "Bash(do node:*)",
       "Bash(echo \"  $f: OK\")",
-      "Bash(echo \"  $f: ERROR\")"
+      "Bash(echo \"  $f: ERROR\")",
+      "Bash(find . -name *.ini -path */test*)",
+      "Bash(python3 -m py_compile /c/Users/Lyes/Documents/00_DEV/falcon_pad.py /c/Users/Lyes/Documents/00_DEV/mission.py /c/Users/Lyes/Documents/00_DEV/trtt.py /c/Users/Lyes/Documents/00_DEV/stringdata.py /c/Users/Lyes/Documents/00_DEV/sharedmem.py /c/Users/Lyes/Documents/00_DEV/theaters.py /c/Users/Lyes/Documents/00_DEV/airports.py /c/Users/Lyes/Documents/00_DEV/config.py /c/Users/Lyes/Documents/00_DEV/app_info.py /c/Users/Lyes/Documents/00_DEV/ui_prefs.py)",
+      "Bash(__NEW_LINE_207fd855fe4e24cb__ echo:*)",
+      "Bash(grep \"/api/trtt\" /c/Users/Lyes/Documents/00_DEV/frontend/js/*.js)"
     ]
   }
 }

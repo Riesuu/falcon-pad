@@ -441,8 +441,7 @@
     </svg>
     <span class="kb-header-title">KNEEBOARD</span>
     <div class="kb-tabs">
-      <div class="kb-tab active" data-kbtab="chklist" style="--kt:#22d3ee" onclick="switchKbTab('chklist',this)">CHKLIST</div>
-      <div class="kb-tab"        data-kbtab="comms"    style="--kt:#4ade80" onclick="switchKbTab('comms',this)">COMMS</div>
+      <div class="kb-tab active" data-kbtab="chklist" style="--kt:#22d3ee" onclick="switchKbTab('chklist',this)">CHECKLIST</div>
       <div class="kb-tab"        data-kbtab="fplan"    style="--kt:#60a5fa" onclick="switchKbTab('fplan',this)">FLIGHT PLAN</div>
       <div class="kb-tab"        data-kbtab="notes"    style="--kt:#fbbf24" onclick="switchKbTab('notes',this)">NOTES</div>
       <div class="kb-tab"        data-kbtab="cas"      style="--kt:#f97316" onclick="switchKbTab('cas',this)">9-LINE</div>
@@ -450,23 +449,6 @@
     </div>
   </div>
   <div class="kb-body">
-
-    <!-- ── COMMS LADDER ── -->
-    <div class="kb-page" id="kb-comms">
-      <table class="freq-table">
-        <thead><tr><th>ROLE</th><th>UHF (MHz)</th><th>VHF / REMARK</th></tr></thead>
-        <tbody>
-          <tr><td>GUARD</td><td class="hi" style="color:#ef4444">243.000</td><td style="color:#ef4444">UHF Emergency</td></tr>
-          <tr><td>GUARD VHF</td><td class="hi" style="color:#ef4444">121.500</td><td style="color:#ef4444">VHF Emergency</td></tr>
-          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS</b></td><td class="hi">268.800</td><td>Alpha — Corée BMS</td></tr>
-          <tr style="background:rgba(74,222,128,.04)"><td><b>AWACS Bravo</b></td><td class="hi">265.400</td><td>Secondary</td></tr>
-          <tr><td>Tanker CH11</td><td class="hi">317.175</td><td>A/R standard</td></tr>
-          <tr><td>Tanker CH12</td><td class="hi">340.200</td><td>Backup</td></tr>
-          <tr><td>SAR / CSAR</td><td class="hi">282.800</td><td>Combat SAR</td></tr>
-          <tr><td>JTAC (def.)</td><td class="hi">305.000</td><td>Interop CAS</td></tr>
-        </tbody>
-      </table>
-    </div>
 
     <!-- ── FLIGHT PLAN ── -->
     <div class="kb-page" id="kb-fplan">
@@ -494,6 +476,30 @@
         <div class="kb-field-group">
           <div class="kb-field-lbl">BINGO FUEL</div>
           <input class="kb-input" id="kb-bingo" placeholder="3500 lbs" autocomplete="off">
+        </div>
+      </div>
+      <!-- Airfields -->
+      <div class="kb-airfields">
+        <div class="kb-af-block" id="kb-af-dep">
+          <div class="kb-af-header" style="border-color:rgba(74,222,128,.3)">
+            <span class="kb-af-tag" style="color:#4ade80">DEP</span>
+            <select class="kb-af-select" id="kb-af-dep-sel"><option value="">— Select —</option></select>
+          </div>
+          <div class="kb-af-info" id="kb-af-dep-info"></div>
+        </div>
+        <div class="kb-af-block" id="kb-af-arr">
+          <div class="kb-af-header" style="border-color:rgba(96,165,250,.3)">
+            <span class="kb-af-tag" style="color:#60a5fa">ARR</span>
+            <select class="kb-af-select" id="kb-af-arr-sel"><option value="">— Select —</option></select>
+          </div>
+          <div class="kb-af-info" id="kb-af-arr-info"></div>
+        </div>
+        <div class="kb-af-block" id="kb-af-alt">
+          <div class="kb-af-header" style="border-color:rgba(251,191,36,.3)">
+            <span class="kb-af-tag" style="color:#fbbf24">ALT</span>
+            <select class="kb-af-select" id="kb-af-alt-sel"><option value="">— Select —</option></select>
+          </div>
+          <div class="kb-af-info" id="kb-af-alt-info"></div>
         </div>
       </div>
       <div class="kb-field-lbl" style="margin-bottom:6px">MISSION NOTES</div>
