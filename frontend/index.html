@@ -500,9 +500,21 @@
       <textarea class="kb-notes" id="kb-fplan-ta" placeholder="Objectif, menaces, règles d'engagement…" style="height:120px"></textarea>
     </div>
 
-    <!-- ── NOTES LIBRES ── -->
+    <!-- ── NOTES LIBRES (texte + dessin stylet) ── -->
     <div class="kb-page" id="kb-notes">
+      <div class="kb-notes-toolbar">
+        <button class="kb-notes-mode active" id="kbNoteTextBtn" title="Text">T</button>
+        <button class="kb-notes-mode" id="kbNoteDrawBtn" title="Draw">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        </button>
+        <button class="kb-notes-clear" id="kbNoteClearBtn" title="Clear drawing">&#9003;</button>
+        <div class="kb-notes-color">
+          <div class="kb-notes-swatch" id="kbNoteColorSwatch" style="background:#94a3b8"></div>
+          <input type="color" id="kbNoteColorInput" value="#94a3b8">
+        </div>
+      </div>
       <textarea class="kb-notes" id="kb-notes-ta" placeholder="Notes libres…"></textarea>
+      <canvas class="kb-notes-canvas" id="kb-notes-cvs"></canvas>
     </div>
 
     <!-- ── 9-LINE CAS — T.O. 1F-16-1CL-1-1 ── -->

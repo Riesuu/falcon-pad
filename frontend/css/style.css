@@ -666,8 +666,38 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 .freq-table td:first-child{color:#e2e8f0;font-weight:700}
 .freq-table td.hi{color:#4ade80;font-family:'Consolas','Courier New',monospace}
 /* Notes */
-.kb-notes{width:100%;height:100%;resize:none;background:transparent;border:none;outline:none;
+.kb-notes{width:100%;flex:1;resize:none;background:transparent;border:none;outline:none;
   font-family:'Consolas','Courier New',monospace;font-size:14px;color:#94a3b8;line-height:1.8;padding:4px 0}
+#kb-notes{display:none;flex-direction:column}
+#kb-notes.active{display:flex}
+.kb-notes-toolbar{
+  display:flex;align-items:center;gap:6px;padding:0 0 8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:8px;flex-shrink:0;
+}
+.kb-notes-mode{
+  width:28px;height:28px;border-radius:3px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.04);color:rgba(255,255,255,.4);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+  transition:all .15s;
+}
+.kb-notes-mode:hover{background:rgba(251,191,36,.1);color:#fbbf24;border-color:rgba(251,191,36,.3)}
+.kb-notes-mode.active{background:rgba(251,191,36,.15);color:#fbbf24;border-color:rgba(251,191,36,.4)}
+.kb-notes-clear{
+  width:28px;height:28px;border-radius:3px;border:1px solid rgba(239,68,68,.15);
+  background:rgba(239,68,68,.06);color:rgba(239,68,68,.5);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  transition:all .15s;margin-left:4px;
+}
+.kb-notes-clear:hover{background:rgba(239,68,68,.15);color:#f87171}
+.kb-notes-color{
+  position:relative;width:22px;height:22px;border-radius:3px;border:1px solid rgba(255,255,255,.15);
+  overflow:hidden;cursor:pointer;margin-left:auto;
+}
+.kb-notes-swatch{position:absolute;inset:0;border-radius:2px;pointer-events:none}
+.kb-notes-color input[type=color]{position:absolute;width:200%;height:200%;top:-50%;left:-50%;cursor:pointer;border:none;padding:0;opacity:0}
+.kb-notes-canvas{
+  flex:1;width:100%;cursor:crosshair;display:none;touch-action:none;
+  border-radius:2px;background:rgba(255,255,255,.02);
+}
 
 /* ═══ BRIEFING PANEL ════════════════════════════════════════════ */
 #panel-briefing{
