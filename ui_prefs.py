@@ -31,7 +31,7 @@ DEFAULTS: dict = {
     "runways_visible":  True,
     "ap_name_visible":  False,
     # Map element colors & sizes
-    "color_draw":       "#3b82f6",
+    "color_draw":       "#3b82f6",  "size_draw":      3,
     "color_stpt":       "#e2e8f0", "size_stpt":      5,   "size_stpt_line":  2,
     "color_fplan":      "#f59e0b", "size_fplan":     4,   "size_fplan_line": 2,
     "color_ppt":        "#ef4444", "size_ppt":       1.2, "size_ppt_dot":    5,

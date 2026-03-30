@@ -9,8 +9,8 @@ var apLabelMarkers= [];
 var apIconMarkers = [];
 
 function buildApPopup(ap) {
-  const isNK = ap.icao.startsWith('KP-') || ap.icao.startsWith('ZK');
-  const col  = isNK ? '#f87171' : '#60a5fa';
+  const isEnemy = ap.side === 'red';
+  const col  = isEnemy ? '#f87171' : '#60a5fa';
   const parts = [`<span class="ap-l1-icao" style="color:${col}">${_esc(ap.icao)}</span>`];
   if (ap.tacan) { parts.push(`<span class="ap-l1-dot">·</span>`); parts.push(`<span class="ap-l1-tacan">${_esc(ap.tacan)}</span>`); }
   if (ap.freq)  { parts.push(`<span class="ap-l1-dot">·</span>`); parts.push(`<span class="ap-l1-freq">${_esc(ap.freq)}</span>`); }
@@ -143,17 +143,20 @@ function renderRunways() {
   }
   if (_currentTheater && _currentTheater.toLowerCase().startsWith('korea')) {
     RUNWAY_DATA.forEach(r => {
-      const isNK = r.icao.startsWith('KP-') || r.icao.startsWith('ZK');
-      const col     = isNK ? 'rgba(248,113,113,.75)' : 'rgba(148,185,220,.8)';
-      const fillCol = isNK ? 'rgba(220,60,60,.18)'   : 'rgba(120,160,200,.15)';
+      const apMatch = (apData || []).find(a => a.icao === r.icao);
+      const isEnemy = apMatch ? apMatch.side === 'red' : false;
+      const col     = isEnemy ? 'rgba(248,113,113,.75)' : 'rgba(148,185,220,.8)';
+      const fillCol = isEnemy ? 'rgba(220,60,60,.18)'   : 'rgba(120,160,200,.15)';
       _drawRwyPoly(r.c.map(pt => applyOffset(pt, r.icao)), col, fillCol);
     });
   }
   const koreaIcaos = new Set(RUNWAY_DATA.map(r => r.icao));
   const seenKeys   = new Set();
-  const col = 'rgba(148,185,220,.8)', fillCol = 'rgba(120,160,200,.15)';
   (apData || []).forEach(ap => {
     if (koreaIcaos.has(ap.icao) || !ap.ils || ap.ils.length === 0) return;
+    const isEnemy = ap.side === 'red';
+    const col     = isEnemy ? 'rgba(248,113,113,.75)' : 'rgba(148,185,220,.8)';
+    const fillCol = isEnemy ? 'rgba(220,60,60,.18)'   : 'rgba(120,160,200,.15)';
     ap.ils.forEach(ils => {
       const crs = parseFloat(ils.crs);
       if (isNaN(crs)) return;

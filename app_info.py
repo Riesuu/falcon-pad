@@ -29,7 +29,6 @@ BASE_DIR     = _resolve_base_dir()
 CONFIG_DIR   = _os.path.join(BASE_DIR, "config")
 LOG_DIR      = _os.path.join(BASE_DIR, "logs")
 BRIEFING_DIR = _os.path.join(BASE_DIR, "briefing")
-IMAGES_DIR   = _os.path.join(BASE_DIR, "frontend", "images")
 CONFIG_FILE  = _os.path.join(CONFIG_DIR, "falcon_pad_config.json")
 
 # Créer les dossiers nécessaires

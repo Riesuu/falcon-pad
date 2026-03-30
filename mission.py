@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-falcon_pad.mission — BMS mission data: INI parsing, watcher, state management.
+falcon_pad.mission — BMS mission data: INI parsing, state management.
 
 Manages the `mission_data` global which contains steerpoints, PPT threats,
 and flight plan lines. Data can come from:
@@ -15,14 +15,12 @@ Public API:
     update_from_shm(route, threats) — update from SharedMem steerpoints
     find_latest_ini(extra_patterns)  — find most recent .ini with [STPT]
     parse_ini_file(path)      — parse and set mission_data from file
-    ini_watcher_loop()        — async loop (call from lifespan)
 
 Copyright (C) 2024  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations
 
-import asyncio
 import configparser
 import glob
 import logging
@@ -507,79 +505,3 @@ def parse_ini_file(path: str) -> dict:
         return {}
 
 
-def merge_ini_supplements(path: str) -> bool:
-    """
-    Parse INI and merge radio/comms/airfields into mission_data
-    WITHOUT overwriting route/threats from SharedMem.
-    If SharedMem hasn't provided a route yet, also use the INI route.
-    """
-    global mission_data
-    try:
-        with open(path, encoding="latin-1") as f:
-            raw = f.read()
-        cfg = configparser.RawConfigParser()
-        cfg.optionxform = str  # type: ignore[assignment]
-        cfg.read_string(raw)
-        ini = _parse_stpt_section(cfg)
-        radio = _parse_radio_section(cfg)
-        comms = _parse_comms_section(cfg)
-
-        updated = dict(mission_data)
-        # Always merge radio/comms
-        if radio.get("uhf") or radio.get("vhf"):
-            updated["radio"] = radio
-        if comms:
-            updated["comms"] = comms
-        # Merge typed airfields (more precise than SHM guess)
-        if ini.get("airfields"):
-            updated["airfields"] = ini["airfields"]
-        # If SHM hasn't provided a route yet, use INI route
-        if not updated.get("route") and ini.get("route"):
-            updated["route"] = ini["route"]
-            updated["threats"] = ini.get("threats", [])
-            updated["flightplan"] = ini.get("flightplan", [])
-        mission_data = updated
-        logger.info(f"INI merge: {os.path.basename(path)} — "
-                    f"radio:{bool(radio.get('uhf'))} airfields:{bool(ini.get('airfields'))}")
-        return True
-    except Exception as e:
-        logger.debug(f"merge_ini_supplements: {e}")
-        return False
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  ASYNC WATCHER LOOP
-# ═══════════════════════════════════════════════════════════════════════════
-
-async def ini_watcher_loop(get_extra_patterns=None) -> None:
-    """
-    Async loop: watches for new/changed .ini files and auto-loads them.
-
-    Args:
-        get_extra_patterns: optional callable returning List[str] of extra
-                            glob patterns (e.g. from SharedMem BMS user dir).
-    """
-    global _ini_last_path, _ini_last_mtime
-    logger.info("INI watcher started — paths from registry + SHM")
-    _first_scan = True
-
-    while True:
-        try:
-            extra = get_extra_patterns() if get_extra_patterns else None
-            path, mtime = find_latest_ini(extra)
-
-            if _first_scan:
-                _first_scan = False
-                if path:
-                    logger.info(f"INI watcher: found {path} "
-                                f"(age={time.time() - mtime:.0f}s)")
-                else:
-                    logger.warning("INI watcher: no .ini found in search paths")
-
-            if path and (path != _ini_last_path or mtime > _ini_last_mtime + 1):
-                _ini_last_path = path
-                _ini_last_mtime = mtime
-                parse_ini_file(path)
-        except Exception as e:
-            logger.debug(f"INI watcher: {e}")
-        await asyncio.sleep(3)

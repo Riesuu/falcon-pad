@@ -39,7 +39,6 @@ FD_CURRENT_HDG   = 0x0BC   # float, true heading degrees 0–360
 
 # FlightData2 ("FalconSharedMemoryArea2")
 FD2_AAUZ          = 0x014   # float, baro altitude ft
-FD2_CURRENT_TIME  = 0x02C   # int32, BMS seconds since midnight (0–86400)
 FD2_PILOTS_ONLINE = 0x260   # uint8, pilot count in MP
 FD2_LAT           = 0x408   # float, latitude WGS-84 degrees
 FD2_LON           = 0x40C   # float, longitude WGS-84 degrees
