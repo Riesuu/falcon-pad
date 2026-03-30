@@ -38,7 +38,8 @@
       "Bash(__NEW_LINE_207fd855fe4e24cb__ echo:*)",
       "Bash(grep \"/api/trtt\" /c/Users/Lyes/Documents/00_DEV/frontend/js/*.js)",
       "Bash(find /c/Users/Lyes/Documents/00_DEV -type f \\\\\\(-name *.md -o -name *.txt -o -name *.rst \\\\\\))",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Users\\\\Lyes\\\\Documents\\\\00_DEV\\\\dist\\\\'' -ErrorAction SilentlyContinue | Select-Object Name,Length\")"
     ]
   }
 }

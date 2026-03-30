@@ -28,10 +28,8 @@ from sharedmem import BMSSharedMemory, safe_read
 logger = logging.getLogger(__name__)
 
 # ── Paths / constants ─────────────────────────────────────────────────────────
-ASSETS_DIR   = os.path.join(app_info.BASE_DIR, "assets")
-FRONTEND_DIR = os.path.join(app_info.BASE_DIR, "frontend")
-if not os.path.isdir(FRONTEND_DIR):
-    FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
+ASSETS_DIR   = os.path.join(app_info.BUNDLE_DIR, "assets")
+FRONTEND_DIR = os.path.join(app_info.BUNDLE_DIR, "frontend")
 
 
 def _get_local_ip() -> str:
@@ -114,7 +112,17 @@ if __name__ == "__main__":
     import threading as _th
 
     def _run_server():
-        uvicorn.run(app, host="0.0.0.0", port=SERVER_PORT, log_level="warning")
+        try:
+            uvicorn.run(
+                app,
+                host="0.0.0.0",
+                port=SERVER_PORT,
+                log_level="warning",
+                log_config=None,
+                access_log=False,
+            )
+        except Exception:
+            logger.exception("Uvicorn server thread crashed")
 
     _th.Thread(target=_run_server, daemon=True).start()
 

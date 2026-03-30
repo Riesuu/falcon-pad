@@ -25,7 +25,14 @@ def _resolve_base_dir() -> str:
         return _os.path.dirname(_sys.executable)
     return _os.path.dirname(_os.path.abspath(__file__))
 
+def _resolve_bundle_dir() -> str:
+    """Dossier contenant les fichiers embarqués (frontend, data). _MEIPASS en --onefile."""
+    if getattr(_sys, 'frozen', False):
+        return getattr(_sys, '_MEIPASS', _os.path.dirname(_sys.executable))
+    return _os.path.dirname(_os.path.abspath(__file__))
+
 BASE_DIR     = _resolve_base_dir()
+BUNDLE_DIR   = _resolve_bundle_dir()
 CONFIG_DIR   = _os.path.join(BASE_DIR, "config")
 LOG_DIR      = _os.path.join(BASE_DIR, "logs")
 BRIEFING_DIR = _os.path.join(BASE_DIR, "briefing")
