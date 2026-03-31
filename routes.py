@@ -69,24 +69,17 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         af = mission.mission_data.get("airfields")
         ap_list = airports.load(get_theater_name()) if is_theater_detected() else []
 
-        # 1. INI type-code airfields (type=1 takeoff, type=7 landing) — most precise
+        # 1. Radio preset matching (VHF presets 1-9 + COMMS TACAN/ILS)
+        radio = mission.mission_data.get("radio")
+        comms = mission.mission_data.get("comms")
+        if radio and ap_list:
+            radio_match = mission.match_radio_to_airports(radio, ap_list, comms)
+            if radio_match.get("dep"):
+                return radio_match
+
+        # 2. INI type-code airfields (type=1 takeoff, type=7 landing)
         if af and af.get("_typed"):
             return mission.match_airfields_to_airports(af, ap_list)
-
-        # 2. Radio preset matching (DEP/ARR/ALT labeled VHF frequencies)
-        radio = mission.mission_data.get("radio")
-        if radio and ap_list:
-            radio_match = mission.match_radio_to_airports(radio, ap_list)
-            if radio_match.get("dep"):
-                # Fill missing arr/alt from route scanning
-                route = mission.mission_data.get("route", [])
-                if route and ap_list:
-                    route_match = mission.find_airfields_from_route(route, ap_list)
-                    if not radio_match.get("arr"):
-                        radio_match["arr"] = route_match.get("arr")
-                    if not radio_match.get("alt"):
-                        radio_match["alt"] = route_match.get("alt")
-                return radio_match
 
         # 3. Route scanning (all steerpoints against airports)
         route = mission.mission_data.get("route", [])
