@@ -30,6 +30,7 @@ from typing import List, Optional, Tuple
 
 import math
 
+import app_info
 from theaters import bms_to_latlon, in_theater_bbox, get_theater_name
 
 logger = logging.getLogger(__name__)
@@ -48,18 +49,17 @@ def _registry_ini_patterns() -> List[str]:
     patterns: List[str] = []
     try:
         import winreg
-        base = r"SOFTWARE\WOW6432Node\Benchmark Sims"
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as root:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, app_info.BMS_REGISTRY_BASE) as root:
             i = 0
             while True:
                 try:
                     subkey_name = winreg.EnumKey(root, i)
                     i += 1
-                    if not subkey_name.lower().startswith("falcon bms"):
+                    if not subkey_name.lower().startswith(app_info.BMS_REGISTRY_PREFIX):
                         continue
                     with winreg.OpenKey(root, subkey_name) as sk:
-                        install_dir, _ = winreg.QueryValueEx(sk, "InstallDir")
-                    cfg = os.path.join(install_dir, "User", "Config")
+                        install_dir, _ = winreg.QueryValueEx(sk, app_info.BMS_REGISTRY_KEY)
+                    cfg = os.path.join(install_dir, *app_info.BMS_USER_CONFIG_SUB)
                     patterns.append(os.path.join(cfg, "*.ini"))
                     patterns.append(os.path.join(cfg, "**", "*.ini"))
                 except OSError:
@@ -126,8 +126,8 @@ def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
             elif "ppt" in kl:
                 try:
                     r_ft = float(parts[3])
-                    range_m = int(r_ft * 0.3048)
-                    range_nm = max(1, round(r_ft / 6076.12))
+                    range_m = int(r_ft * app_info.FT_TO_M)
+                    range_nm = max(1, round(r_ft / app_info.FT_TO_NM_DIVISOR))
                 except (ValueError, IndexError):
                     range_m = 27800
                     range_nm = 15
@@ -188,10 +188,10 @@ def _dist_nm(lat1, lon1, lat2, lon2):
     a = (math.sin(dlat/2)**2 +
          math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
          math.sin(dlon/2)**2)
-    return 3440.065 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return app_info.GREAT_CIRCLE_NM * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
 
-def _find_nearest_airport(lat, lon, airports, max_nm=5.0):
+def _find_nearest_airport(lat, lon, airports, max_nm=app_info.AIRPORT_SEARCH_NM):
     """Find nearest airport ICAO within max_nm, or None."""
     best_icao, best_d = None, max_nm
     for ap in airports:
@@ -203,7 +203,7 @@ def _find_nearest_airport(lat, lon, airports, max_nm=5.0):
 
 
 def match_airfields_to_airports(airfields: dict, airports: list,
-                                max_nm: float = 5.0) -> dict:
+                                max_nm: float = app_info.AIRPORT_SEARCH_NM) -> dict:
     """
     Match airfield positions (from INI type codes) to known airports.
     Returns dict with dep/arr/alt keys → airport ICAO or None.
@@ -216,7 +216,7 @@ def match_airfields_to_airports(airfields: dict, airports: list,
 
 
 def find_airfields_from_route(route: list, airports: list,
-                              max_nm: float = 5.0) -> dict:
+                              max_nm: float = app_info.AIRPORT_SEARCH_NM) -> dict:
     """
     Scan all route steerpoints to find dep/arr/alt by proximity to known airports.
     Used when type codes are not available (SharedMem path).

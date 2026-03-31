@@ -27,9 +27,9 @@ import app_info
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
 _DEFAULTS: dict = {
-    "port":         8000,
+    "port":         app_info.DEFAULT_PORT,
     "briefing_dir": app_info.BRIEFING_DIR,
-    "broadcast_ms": 200,
+    "broadcast_ms": app_info.DEFAULT_BROADCAST_MS,
     "theme":        "dark",
 }
 
@@ -63,7 +63,7 @@ os.makedirs(BRIEFING_DIR, exist_ok=True)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
-LOG_FILE = os.path.join(app_info.LOG_DIR, "falcon_pad.log")
+LOG_FILE = os.path.join(app_info.LOG_DIR, app_info.LOG_FILENAME)
 
 
 class _Fmt(logging.Formatter):
@@ -72,7 +72,7 @@ class _Fmt(logging.Formatter):
         return f"[{ts}] [{r.levelname:<8}] {r.getMessage()}"
 
 
-_fh = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
+_fh = RotatingFileHandler(LOG_FILE, maxBytes=app_info.LOG_MAX_BYTES, backupCount=app_info.LOG_BACKUP_COUNT, encoding="utf-8")
 _fh.setLevel(logging.DEBUG)
 _ch = logging.StreamHandler(sys.stdout)
 _ch.setLevel(logging.INFO)

@@ -223,7 +223,7 @@ if __name__ == "__main__":
             p.setFont(QFont("Consolas", 11)); p.setPen(QPen(self.BLUE))
             p.drawText(22, y, f"http://{SERVER_IP}:{SERVER_PORT}"); y += 25
             p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22, y, "FALCON BMS 4.38"); y += 17
+            p.drawText(22, y, app_info.BMS.upper()); y += 17
             dc = self.ACCENT if self._bms_ok else self.RED
             p.setBrush(QBrush(dc)); p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(22, y-9, 10, 10)

@@ -496,7 +496,7 @@ function switchTab(name, btn) {
   // Charger la Charts iframe au premier clic
   if (name === 'charts' && !_chartsLoaded) {
     _chartsLoaded = true;
-    document.getElementById('charts-frame').src = (window._appInfo && window._appInfo.website) || 'https://www.falcon-charts.com';
+    document.getElementById('charts-frame').src = (window._appInfo && window._appInfo.charts) || 'https://www.falcon-charts.com';
   }
 
   // Refresh GPS data immédiatement

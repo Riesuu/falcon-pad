@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 
 import app_info
 
-HOST:        str = "127.0.0.1"
-PORT:        int = 42674
+HOST:        str = app_info.TRTT_HOST
+PORT:        int = app_info.TRTT_PORT
 CLIENT_NAME: str = f"{app_info.NAME}-{app_info.AUTHOR}"
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -106,10 +106,10 @@ def _client_loop() -> None:
     while _running:
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5.0)
+            sock.settimeout(app_info.TRTT_HANDSHAKE_TIMEOUT)
             logger.info(f"TRTT: connecting to {HOST}:{PORT}...")
             sock.connect((HOST, PORT))
-            sock.settimeout(10.0)
+            sock.settimeout(app_info.TRTT_INITIAL_TIMEOUT)
 
             # ── Handshake ────────────────────────────────────────
             hs = b""
@@ -127,7 +127,7 @@ def _client_loop() -> None:
             ).encode('utf-8')
             sock.sendall(client_hs)
             _connected = True
-            sock.settimeout(30.0)
+            sock.settimeout(app_info.TRTT_RECEIVE_TIMEOUT)
             buf = ""
             obj_props = {}
             ref_lon = ref_lat = 0.0
@@ -271,13 +271,13 @@ def _client_loop() -> None:
             _connected = False
             with _lock:
                 _contacts.clear()
-            logger.debug(f"TRTT disconnected: {ex} — retry in 5s")
+            logger.debug(f"TRTT disconnected: {ex} — retry in {app_info.TRTT_RECONNECT_SLEEP}s")
             try:
                 if sock is not None:
                     sock.close()
             except OSError:
                 pass  # socket already closed
-            time.sleep(5)
+            time.sleep(app_info.TRTT_RECONNECT_SLEEP)
 
     _connected = False
     logger.info("TRTT client stopped")

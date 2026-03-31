@@ -27,8 +27,9 @@ from theaters import detect_theater_from_coords_multi, get_theater, get_theater_
 logger = logging.getLogger(__name__)
 
 # ── State (shared with falcon_pad via module-level access) ────────────────────
+import app_info
+
 _bms_last_reconnect = 0.0
-_BMS_RECONNECT_INTERVAL = 5.0
 bms_campaign_dir = ""
 bms_briefings_dir = ""
 
@@ -78,7 +79,7 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
         try:
             if not bms.connected:
                 now = _time.time()
-                if now - _bms_last_reconnect >= _BMS_RECONNECT_INTERVAL:
+                if now - _bms_last_reconnect >= app_info.BMS_RECONNECT_S:
                     _bms_last_reconnect = now
                     was = bms.connected
                     bms.try_reconnect()
@@ -121,7 +122,7 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                 await broadcast(ws_clients, json.dumps({"type": "aircraft", "data": pos}))
                 own_lat = pos.get("lat")
                 own_lon = pos.get("lon")
-                acmi_c = trtt.get_contacts(own_lat=own_lat, own_lon=own_lon, allies_only=True, max_nm=240.0)
+                acmi_c = trtt.get_contacts(own_lat=own_lat, own_lon=own_lon, allies_only=True, max_nm=app_info.ACMI_CONTACT_NM)
                 if acmi_c:
                     await broadcast(ws_clients, json.dumps({"type": "acmi", "data": acmi_c}))
                 if bms.connected and ptr_str:
@@ -135,7 +136,7 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
 
         except Exception as e:
             logger.debug(f"broadcast_loop: {e}")
-        await asyncio.sleep(config.APP_CONFIG.get("broadcast_ms", 200) / 1000.0)
+        await asyncio.sleep(config.APP_CONFIG.get("broadcast_ms", app_info.DEFAULT_BROADCAST_MS) / 1000.0)
 
 
 # ── INI watcher loop ─────────────────────────────────────────────────────────
@@ -174,4 +175,4 @@ async def ini_watcher_loop(bms, ws_clients) -> None:
                         await broadcast(ws_clients, json.dumps({"type": "mission", "data": mission.mission_data}))
         except Exception as e:
             logger.debug(f"INI watcher: {e}")
-        await asyncio.sleep(3)
+        await asyncio.sleep(app_info.BMS_RECONNECT_S)

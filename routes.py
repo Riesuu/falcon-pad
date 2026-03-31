@@ -157,7 +157,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 changed.append("briefing_dir")
             except Exception as e:
                 raise HTTPException(400, f"Dossier invalide: {e}")
-        if s.broadcast_ms is not None and 50 <= s.broadcast_ms <= 2000:
+        if s.broadcast_ms is not None and app_info.BROADCAST_MS_MIN <= s.broadcast_ms <= app_info.BROADCAST_MS_MAX:
             config.APP_CONFIG["broadcast_ms"] = s.broadcast_ms
             changed.append("broadcast_ms")
         if s.theme is not None and s.theme in ("dark", "light"):
@@ -176,6 +176,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     async def app_info_route():
         return {"name": app_info.SHORT, "version": app_info.VERSION,
                 "author": app_info.AUTHOR, "website": app_info.WEBSITE,
+                "charts": app_info.CHARTS,
                 "github": app_info.GITHUB, "bms": app_info.BMS}
 
     @app.get("/api/theater")
@@ -279,8 +280,8 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 "config_bms": "set g_bTacviewRealTime 1  (User/config/Falcon BMS User.cfg)"}
 
     # ── Briefing ─────────────────────────────────────────────────
-    _BRIEFING_ALLOWED = {".pdf", ".png", ".jpg", ".jpeg", ".docx", ".html", ".htm"}
-    _BRIEFING_MAX_MB  = 50
+    _BRIEFING_ALLOWED = app_info.BRIEFING_ALLOWED_EXT
+    _BRIEFING_MAX_MB  = app_info.BRIEFING_MAX_MB
 
     def _scan_briefing_dir(bdir, source="user"):
         from datetime import datetime as _dt
