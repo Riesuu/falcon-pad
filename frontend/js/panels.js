@@ -630,7 +630,12 @@ function switchKbTab(name, el) {
         const saved = localStorage.getItem('bms_af_'+role);
         if(saved) { sel.value = saved; _showAfInfo(role, saved); }
       });
-      // Auto-detect from mission INI type codes
+      // Check merged layout from saved values
+      _updateMergedLayout({
+        dep: localStorage.getItem('bms_af_dep'),
+        arr: localStorage.getItem('bms_af_arr'),
+      });
+      // Auto-detect from mission data
       _autoDetectAirfields();
     }).catch(()=>{});
   }
@@ -645,8 +650,21 @@ function switchKbTab(name, el) {
         localStorage.setItem('bms_af_'+role, af[role]);
         _showAfInfo(role, af[role]);
       });
+      _updateMergedLayout(af);
       _tryAutoFillBullseye();
     }).catch(()=>{});
+  }
+
+  function _updateMergedLayout(af){
+    const grid   = document.querySelector('.kb-airfields');
+    const depBlk = document.getElementById('kb-af-dep');
+    const arrBlk = document.getElementById('kb-af-arr');
+    const depTag = depBlk ? depBlk.querySelector('.kb-af-tag') : null;
+    if(!grid||!depBlk||!arrBlk||!depTag) return;
+    const same = af.dep && af.arr && af.dep === af.arr;
+    arrBlk.style.display = same ? 'none' : '';
+    depTag.textContent   = same ? 'DEP / ARR' : 'DEP';
+    grid.style.gridTemplateColumns = same ? '1fr 1fr' : '1fr 1fr 1fr';
   }
 
   // Auto-fill bullseye: bearing/range from DEP airport to bullseye reference
@@ -676,7 +694,7 @@ function switchKbTab(name, el) {
     if(!ap){ el.innerHTML='<span style="color:#475569">No data</span>'; return; }
     var html = '';
     if(ap.tacan) html += '<div class="af-row"><span class="af-lbl">TCN</span><span class="af-val">'+ap.tacan+'</span></div>';
-    if(ap.freq)  html += '<div class="af-row"><span class="af-lbl">TWR</span><span class="af-val">'+ap.freq+' MHz</span></div>';
+    if(ap.freq)  html += '<div class="af-row"><span class="af-lbl">APP</span><span class="af-val">'+ap.freq+' MHz</span></div>';
     if(ap.ils && ap.ils.length){
       ap.ils.forEach(function(ils){
         var parts = '<span class="af-lbl">ILS</span><span class="af-val">RWY '+ils.rwy;
@@ -694,6 +712,10 @@ function switchKbTab(name, el) {
     sel.addEventListener('change',function(){
       localStorage.setItem('bms_af_'+role, sel.value);
       _showAfInfo(role, sel.value);
+      _updateMergedLayout({
+        dep: localStorage.getItem('bms_af_dep'),
+        arr: localStorage.getItem('bms_af_arr'),
+      });
     });
   });
 
@@ -706,6 +728,9 @@ function switchKbTab(name, el) {
       _loadAirfields();
     }
   }, 5000);
+
+  // Expose for WebSocket mission updates
+  window.refreshAirfields = _autoDetectAirfields;
 })();
 
 // Persister kneeboard (notes, plan de vol, 9-line)

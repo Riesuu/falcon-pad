@@ -298,65 +298,23 @@ def _parse_comms_section(cfg: configparser.RawConfigParser) -> dict:
     return result
 
 
-def match_radio_to_airports(radio: dict, airports: list,
-                            comms: dict | None = None) -> dict:
+def match_comms_to_airport(comms: dict, airports: list) -> str | None:
     """
-    Identify dep/arr/alt airports from radio presets 1-9 and COMMS data.
-    Matches VHF preset frequencies against airport tower frequencies.
-    First match = DEP, last different match = ARR, other distinct = ALT.
-    COMMS TACAN/ILS can confirm or set DEP.
+    Identify departure airport from COMMS TACAN channel.
+    The DTC COMMS TACAN is always set to the home/recovery base.
+    Returns ICAO or None.
     """
-    if not radio or not airports:
-        return {"dep": None, "arr": None, "alt": None}
+    if not comms or not airports:
+        return None
 
-    # Build freq → ICAO lookup from airport tower frequencies
-    freq_to_icao: dict = {}
+    tacan = comms.get("tacan", "")
+    if not tacan:
+        return None
+
     for ap in airports:
-        try:
-            f = float(ap.get("freq", 0))
-            if f > 0:
-                freq_to_icao[round(f, 3)] = ap["icao"]
-        except (ValueError, TypeError):
-            continue
-
-    # Match VHF presets 1-9 to airports (ordered by preset number)
-    matches: list = []
-    for preset in sorted(radio.get("vhf", []), key=lambda p: p["num"]):
-        if preset["num"] > 9:
-            continue
-        freq = preset["freq"]
-        matched = freq_to_icao.get(freq)
-        if not matched:
-            # Tolerance ±25 kHz for rounding differences
-            for db_f, icao in freq_to_icao.items():
-                if abs(freq - db_f) < 0.026:
-                    matched = icao
-                    break
-        if matched and matched not in matches:
-            matches.append(matched)
-
-    # dep = first match, arr = last different, alt = other distinct
-    dep = matches[0] if matches else None
-    arr = matches[-1] if len(matches) > 1 else None
-    seen = {dep, arr}
-    alt = next((icao for icao in matches if icao not in seen), None)
-
-    # COMMS TACAN can confirm or set DEP
-    if comms and comms.get("tacan"):
-        tacan_to_icao: dict = {}
-        for ap in airports:
-            t = ap.get("tacan", "")
-            if t:
-                tacan_to_icao[t.upper()] = ap["icao"]
-        tacan_icao = tacan_to_icao.get(comms["tacan"].upper())
-        if tacan_icao:
-            if dep and dep != tacan_icao:
-                # TACAN override — push old dep into matches
-                dep = tacan_icao
-            elif not dep:
-                dep = tacan_icao
-
-    return {"dep": dep, "arr": arr, "alt": alt}
+        if ap.get("tacan", "").upper() == tacan.upper():
+            return ap["icao"]
+    return None
 
 
 def load_radio_from_dir(config_dir: str) -> bool:

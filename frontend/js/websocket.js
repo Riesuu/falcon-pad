@@ -22,6 +22,7 @@ function connectWS(){
       missionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){}});missionMarkers=[];pptLabelMarkers=[];
       pptCircles.forEach(p=>{try{map.removeLayer(p)}catch(e){}});pptCircles=[];
       _renderMissionData(msg.data,true);
+      if(typeof refreshAirfields==='function') refreshAirfields();
     }
     if(msg.type==='mk_marks')updateMkMarkpoints(msg.data);
     if(msg.type==='hsd_lines')updateHsdLines(msg.data);
