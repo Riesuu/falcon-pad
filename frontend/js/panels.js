@@ -49,7 +49,7 @@ async function applyTRTTConfig(){
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('#trttPanel')&&!e.target.closest('#trttConfigBtn'))
-    document.getElementById('trttPanel').style.display='none';
+    {const _tp=document.getElementById('trttPanel');if(_tp)_tp.style.display='none';}
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -83,8 +83,7 @@ function onElemColor(key, hex) {
 function onBullColor(hex) {
   C_BULL = hex;
   saveUiPref({color_bull: hex});
-  // Refresh bullseye marker icon with new color
-  if(_bullMarker && _bullLat != null) { _bullMarker.setIcon(_bullIcon()); }
+  if(_bullLat != null) _buildBullseye(_bullLat, _bullLon);
 }
 
 function onElemSize(key, val) {
@@ -126,6 +125,8 @@ function _syncElemControls(p) {
   // Bullseye color picker
   const bullCp = document.getElementById('sp-c-bull');
   if(bullCp && p.color_bull) bullCp.value = p.color_bull;
+  const bullSz = document.getElementById('sp-s-bull');
+  if(bullSz && p.size_bull) bullSz.value = p.size_bull;
 }
 
 async function loadSettings() {

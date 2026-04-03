@@ -20,8 +20,9 @@ import config
 import mission
 import trtt
 from stringdata import (detect_theater, get_bms_briefings_dir, get_bms_user_dir,
-                        get_campaign_dir, get_hsd_lines, get_mk_markpoints,
-                        get_ppt_threats, get_steerpoints, read_all_strings)
+                        get_bullseye, get_campaign_dir, get_hsd_lines,
+                        get_mk_markpoints, get_ppt_threats, get_steerpoints,
+                        read_all_strings)
 from theaters import detect_theater_from_coords_multi, get_theater, get_theater_name
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,12 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                         await broadcast(ws_clients, json.dumps({"type": "mission", "data": mission.mission_data}))
                     _mk_marks = get_mk_markpoints(_strings)
                     _hsd      = get_hsd_lines(_strings)
+                    # Bullseye from StringData CB navpoint (fallback if FlightData2 is null)
+                    if pos and pos.get("bull_lat") is None:
+                        _bull = get_bullseye(_strings)
+                        if _bull:
+                            pos["bull_lat"] = _bull["lat"]
+                            pos["bull_lon"] = _bull["lon"]
 
             if pos and ws_clients:
                 await broadcast(ws_clients, json.dumps({"type": "aircraft", "data": pos}))

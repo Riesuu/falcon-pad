@@ -150,6 +150,7 @@ function applyUiPrefs(p) {
   if(p.color_ppt)   C_PPT   = p.color_ppt;
   if(p.size_ppt)    S_PPT   = p.size_ppt;
   if(p.color_bull)  C_BULL  = p.color_bull;
+  if(p.size_bull)   S_BULL  = p.size_bull;
   if(p.active_color && COLORS.includes(p.active_color)) {
     activeColor = p.active_color;
     C_DRAW = p.active_color;
@@ -184,7 +185,7 @@ async function loadUiPrefs(){
     if(p.runways_visible===false){runwaysVisible=false;document.getElementById('runwayBtn')?.classList.remove('active');runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});}
     if(p.ap_name_visible===true){document.getElementById('apNameBtn')?.classList.add('active');apLabelMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});}
     if(p.bull_visible===false){
-      if(_bullMarker){try{map.removeLayer(_bullMarker)}catch(e){}_bullMarker=null;}
+      _clearBullseye();
       document.getElementById('bullBtn')?.classList.remove('active');
     }
     if(p.rwy_offsets){ try{ rwyOffsets = JSON.parse(p.rwy_offsets); }catch(e){} }

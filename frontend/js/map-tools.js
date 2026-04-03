@@ -179,9 +179,7 @@ document.getElementById('airportBtn')?.addEventListener('click',function(){
 
 document.getElementById('bullBtn')?.addEventListener('click',function(){
   const v=this.classList.toggle('active');
-  if(_bullMarker){
-    if(!v){try{map.removeLayer(_bullMarker)}catch(e){}}
-    else{try{_bullMarker.addTo(map)}catch(e){}}
-  }
+  if(!v){ _clearBullseye(); }
+  else if(_bullLat!=null){ _buildBullseye(_bullLat, _bullLon); }
   saveUiPref({bull_visible:v});
 });

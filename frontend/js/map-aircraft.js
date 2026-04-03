@@ -71,39 +71,94 @@ map.on('dragstart', () => {
   }
 });
 
-// ── Bullseye ───────────────────────────────────────────────────
+// ── Bullseye (range rings) ─────────────────────────────────────
 var _bullMarker = null;
 var _bullLat = null, _bullLon = null;
+var _bullRings = [];       // L.circle layers
+var _bullRadials = [];     // L.polyline layers
+var _bullLabels = [];      // L.marker label layers
+var _NM_TO_M = 1852;
+var _BULL_RINGS_NM = [20, 40, 60, 80, 100];
+var _BULL_BEARINGS = [0, 45, 90, 135, 180, 225, 270, 315];
+var _BULL_BRG_LBL  = ['360','045','090','135','180','225','270','315'];
 
-function _bullIcon() {
-  const col = C_BULL;
-  const sz = Math.round(S_BULL * 3.5);
-  return L.divIcon({
-    html: `<svg width="${sz}" height="${sz}" viewBox="0 0 28 28" style="overflow:visible">
-      <circle cx="14" cy="14" r="11" fill="none" stroke="${col}" stroke-width="1.8" opacity=".85"/>
-      <circle cx="14" cy="14" r="6"  fill="none" stroke="${col}" stroke-width="1.4" opacity=".7"/>
-      <circle cx="14" cy="14" r="2"  fill="${col}" opacity=".9"/>
-      <line x1="14" y1="0"  x2="14" y2="7"  stroke="${col}" stroke-width="1.4" opacity=".7"/>
-      <line x1="14" y1="21" x2="14" y2="28" stroke="${col}" stroke-width="1.4" opacity=".7"/>
-      <line x1="0"  y1="14" x2="7"  y2="14" stroke="${col}" stroke-width="1.4" opacity=".7"/>
-      <line x1="21" y1="14" x2="28" y2="14" stroke="${col}" stroke-width="1.4" opacity=".7"/>
-      <text x="14" y="-4" text-anchor="middle"
-        style="font-family:'Consolas','Courier New',monospace;font-size:9px;fill:${col};letter-spacing:1px;font-weight:700">BULL</text>
-    </svg>`,
-    className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
+function _clearBullseye() {
+  _bullRings.forEach(function(c){try{map.removeLayer(c)}catch(e){}});
+  _bullRadials.forEach(function(l){try{map.removeLayer(l)}catch(e){}});
+  _bullLabels.forEach(function(l){try{map.removeLayer(l)}catch(e){}});
+  if(_bullMarker){try{map.removeLayer(_bullMarker)}catch(e){}}
+  _bullRings=[]; _bullRadials=[]; _bullLabels=[]; _bullMarker=null;
+}
+
+function _buildBullseye(lat, lon) {
+  _clearBullseye();
+  var col = C_BULL;
+  var w = S_BULL * 0.12;  // stroke weight (default 8 → ~1px)
+
+  // Center cross
+  _bullMarker = L.circleMarker([lat, lon], {
+    radius: 2, color: col, fillColor: col, fillOpacity: 1, weight: 1, interactive: false
+  }).addTo(map);
+
+  // Range rings every 20 NM
+  _BULL_RINGS_NM.forEach(function(nm) {
+    var ring = L.circle([lat, lon], {
+      radius: nm * _NM_TO_M, color: col, weight: w, fillOpacity: 0, opacity: 0.45,
+      interactive: false, dashArray: '8 6'
+    }).addTo(map);
+    _bullRings.push(ring);
+
+    // NM label below center (south side of each ring)
+    var labelLat = lat - (nm * _NM_TO_M) / 111320;
+    var label = L.marker([labelLat, lon], {
+      icon: L.divIcon({
+        html: '<span style="font:700 9px Consolas,monospace;color:'+col+';opacity:.5">'+nm+'</span>',
+        className: '', iconSize: [28, 12], iconAnchor: [14, 0]
+      }), interactive: false
+    }).addTo(map);
+    _bullLabels.push(label);
+  });
+
+  // 8 radial lines + bearing labels at outer ring
+  var maxM = _BULL_RINGS_NM[_BULL_RINGS_NM.length - 1] * _NM_TO_M;
+  var cosLat = Math.cos(lat * Math.PI / 180);
+  _BULL_BEARINGS.forEach(function(brg, i) {
+    var rad = brg * Math.PI / 180;
+    var dLat = (maxM * Math.cos(rad)) / 111320;
+    var dLon = (maxM * Math.sin(rad)) / (111320 * cosLat);
+    var endLat = lat + dLat, endLon = lon + dLon;
+
+    var line = L.polyline([[lat, lon], [endLat, endLon]], {
+      color: col, weight: w, opacity: 0.35, interactive: false, dashArray: '4 8'
+    }).addTo(map);
+    _bullRadials.push(line);
+
+    // Bearing label just outside outer ring
+    var lblM = maxM * 1.06;
+    var lblLat = lat + (lblM * Math.cos(rad)) / 111320;
+    var lblLon = lon + (lblM * Math.sin(rad)) / (111320 * cosLat);
+    var lbl = L.marker([lblLat, lblLon], {
+      icon: L.divIcon({
+        html: '<span style="font:700 10px Consolas,monospace;color:'+col+';opacity:.5">'+_BULL_BRG_LBL[i]+'</span>',
+        className: '', iconSize: [30, 14], iconAnchor: [15, 7]
+      }), interactive: false
+    }).addTo(map);
+    _bullLabels.push(lbl);
   });
 }
 
 function updateBullseye(lat, lon) {
   if (lat == null || lon == null) return;
+  var moved = (_bullLat !== lat || _bullLon !== lon);
   _bullLat = lat; _bullLon = lon;
   var bullOn = document.getElementById('bullBtn')?.classList.contains('active') !== false;
-  if (_bullMarker) { _bullMarker.setLatLng([lat, lon]); }
-  else if (bullOn) { _bullMarker = L.marker([lat, lon], { icon: _bullIcon(), zIndexOffset: 500, interactive: false }).addTo(map); }
-  const el = document.getElementById('gps-bull');
+  if (bullOn && (moved || _bullRings.length === 0)) {
+    _buildBullseye(lat, lon);
+  }
+  var el = document.getElementById('gps-bull');
   if (el && _lastAircraftData) {
-    const brg = bearingTo(_lastAircraftData.lat, _lastAircraftData.lon, lat, lon);
-    const nm  = haversineNm(_lastAircraftData.lat, _lastAircraftData.lon, lat, lon);
+    var brg = bearingTo(_lastAircraftData.lat, _lastAircraftData.lon, lat, lon);
+    var nm  = haversineNm(_lastAircraftData.lat, _lastAircraftData.lon, lat, lon);
     el.textContent = String(Math.round(brg)).padStart(3,'0') + '° / ' + nm.toFixed(1) + ' NM';
   }
 }

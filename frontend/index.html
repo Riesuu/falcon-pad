@@ -298,6 +298,11 @@
         <span class="sp-elem-lbl">Couleur</span>
         <input type="color" class="sp-cpick" id="sp-c-bull" value="#60a5fa" oninput="onBullColor(this.value)">
       </div>
+      <div class="sp-elem-row">
+        <span class="sp-elem-lbl">Épaisseur</span>
+        <input type="range" min="2" max="20" step="1" value="8" id="sp-s-bull" class="sp-range"
+          oninput="S_BULL=+this.value;saveUiPref({size_bull:+this.value});if(_bullLat!=null)_buildBullseye(_bullLat,_bullLon);">
+      </div>
 
     </div>
 

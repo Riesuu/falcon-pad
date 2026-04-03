@@ -293,6 +293,19 @@ def get_steerpoints(strings: Dict[int, List[str]]) -> List[dict]:
     ]
 
 
+def get_bullseye(strings: Dict[int, List[str]]) -> Optional[dict]:
+    """
+    Extract campaign bullseye (CB type) from StringData NavPoints.
+    Returns {"lat": ..., "lon": ...} or None.
+    """
+    entries = strings.get(STRID_NAVPOINT, [])
+    for raw in entries:
+        np = _parse_navpoint(raw)
+        if np and np["type"] == "CB":
+            return {"lat": np["lat"], "lon": np["lon"]}
+    return None
+
+
 def get_ppt_threats(strings: Dict[int, List[str]]) -> List[dict]:
     """
     Extract PPT (preplanned threats) from StringData NavPoints.

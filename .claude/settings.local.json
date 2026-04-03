@@ -40,7 +40,8 @@
       "Bash(find /c/Users/Lyes/Documents/00_DEV -type f \\\\\\(-name *.md -o -name *.txt -o -name *.rst \\\\\\))",
       "Bash(xargs grep:*)",
       "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Users\\\\Lyes\\\\Documents\\\\00_DEV\\\\dist\\\\'' -ErrorAction SilentlyContinue | Select-Object Name,Length\")",
-      "Bash(grep -r \"radioPanel\\\\|missionRadio\\\\|UHF_\\\\|VHF_\\\\|frequency\" c:UsersLyesDocuments00_DEVfrontend --include=*.html --include=*.js)"
+      "Bash(grep -r \"radioPanel\\\\|missionRadio\\\\|UHF_\\\\|VHF_\\\\|frequency\" c:UsersLyesDocuments00_DEVfrontend --include=*.html --include=*.js)",
+      "Bash(python -m pytest tests/ --tb=short -q)"
     ]
   }
 }

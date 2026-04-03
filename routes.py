@@ -216,6 +216,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         color_ppt:        Optional[str]   = None
         size_ppt:         Optional[float] = None
         color_bull:       Optional[str]   = None
+        size_bull:        Optional[float] = None
         bull_visible:     Optional[bool]  = None
         size_stpt_line:   Optional[float] = None
         size_fplan_line:  Optional[float] = None
@@ -246,7 +247,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             if val is not None:
                 ui_prefs.prefs[key] = val
         for key in ("size_draw", "size_stpt", "size_stpt_line", "size_fplan",
-                    "size_fplan_line", "size_ppt", "size_ppt_dot"):
+                    "size_fplan_line", "size_ppt", "size_ppt_dot", "size_bull"):
             val = getattr(p, key)
             if val is not None and 0.5 <= val <= 50:
                 ui_prefs.prefs[key] = val
