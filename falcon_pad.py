@@ -62,8 +62,11 @@ class _LocalOnlyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         client_ip = request.client.host if request.client else ""
         if not _is_local(client_ip):
-            return _StarResp("Acces refuse — reseau local uniquement", status_code=403)
-        return await call_next(request)
+            return _StarResp("Access denied — local network only", status_code=403)
+        resp = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return resp
 
 
 # ── App & lifespan ────────────────────────────────────────────────────────────
@@ -79,12 +82,12 @@ async def lifespan(_a):
     logger.info(f"  Log      : {config.LOG_FILE}")
     logger.info(f"  Briefing : {config.BRIEFING_DIR}")
     logger.info(f"  Config   : {app_info.CONFIG_FILE}")
-    logger.info(f"  BMS      : {'CONNECTE' if bms.connected else 'NON DETECTE'}")
+    logger.info(f"  BMS      : {'CONNECTED' if bms.connected else 'NOT DETECTED'}")
     logger.info(f"  Local    : http://localhost:{SERVER_PORT}       <- PC")
     logger.info(f"  Reseau   : http://{SERVER_IP}:{SERVER_PORT}  <- Tablette/Mobile")
     config.log_sep()
     yield
-    config.log_sep("ARRET")
+    config.log_sep("SHUTDOWN")
 
 
 app = FastAPI(title="Falcon-Pad", lifespan=lifespan)
@@ -229,7 +232,7 @@ if __name__ == "__main__":
             p.drawEllipse(22, y-9, 10, 10)
             p.setPen(QPen(dc))
             p.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
-            p.drawText(38, y, "CONNECTE" if self._bms_ok else "NON DETECTE"); y += 25
+            p.drawText(38, y, "CONNECTED" if self._bms_ok else "NOT DETECTED"); y += 25
             p.setPen(QPen(self.TXT_DIM))
             p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
             p.drawText(22, y, "LOGS"); y += 15

@@ -247,6 +247,12 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   transition:border-color .2s;
 }
 .sp-input:focus{border-color:rgba(74,222,128,.4)}
+.sp-toggle{
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+  border-radius:3px;padding:7px 16px;color:#e2e8f0;cursor:pointer;
+  font:700 12px Consolas,monospace;letter-spacing:1px;
+}
+.sp-toggle:active{background:rgba(255,255,255,.15)}
 .sp-hint{
   font-family:system-ui,sans-serif;font-size:10px;
   color:rgba(148,163,184,.3);line-height:1.4;
@@ -722,12 +728,23 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   color:#fbbf24;letter-spacing:1.5px;text-transform:uppercase;transition:all .2s;
 }
 .brief-upload-btn:hover{background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.5)}
-.brief-body{flex:1;display:flex;overflow:hidden}
+.brief-body{flex:1;display:flex;overflow:hidden;position:relative}
 .brief-sidebar{
   width:210px;flex-shrink:0;background:rgba(1,3,10,.98);
   border-right:1px solid rgba(255,255,255,.05);
   display:flex;flex-direction:column;overflow:hidden;
 }
+.brief-toggle{
+  flex-shrink:0;width:24px;align-self:stretch;z-index:5;
+  background:rgba(11,18,32,.95);border:none;
+  border-left:1px solid rgba(255,255,255,.08);
+  border-right:1px solid rgba(255,255,255,.08);
+  color:#94a3b8;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  padding:0;-webkit-tap-highlight-color:transparent;
+}
+.brief-toggle:active{background:rgba(255,255,255,.15)}
+.brief-toggle svg{display:block;pointer-events:none}
 .brief-sidebar-hdr{
   padding:8px 12px;font-family:system-ui,sans-serif;font-size:9px;
   font-weight:700;color:#3d6b52;letter-spacing:2px;text-transform:uppercase;
@@ -768,6 +785,12 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 .brief-empty{padding:28px 12px;text-align:center;font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;line-height:1.8}
 .brief-viewer{flex:1;overflow:hidden;position:relative;background:#04080f}
 .brief-viewer iframe{width:100%;height:100%;border:none}
+#briefPdfViewer{display:flex;flex-direction:column;height:100%}
+#briefPdfViewer .pdf-toolbar{display:flex;align-items:center;justify-content:center;gap:10px;padding:6px;background:#0b1220;flex-shrink:0}
+#briefPdfViewer .pdf-toolbar button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:3px;color:#e2e8f0;font:700 16px Consolas,monospace;width:32px;height:28px;cursor:pointer}
+#briefPdfViewer .pdf-toolbar button:active{background:rgba(255,255,255,.2)}
+#briefPdfViewer .pdf-zoom-lbl{font:700 12px Consolas,monospace;color:#94a3b8;min-width:40px;text-align:center}
+#briefPdfViewer .pdf-pages{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .brief-placeholder{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:10px;pointer-events:none;

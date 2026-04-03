@@ -43,9 +43,9 @@ async function applyTRTTConfig(){
   try{
     const r=await fetch('/api/trtt/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host,port})});
     const d=await r.json();
-    const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent=d.status==='ok'?'✓ '+d.trtt_host:'Erreur';
+    const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent=d.status==='ok'?'✓ '+d.trtt_host:'Error';
     setTimeout(()=>document.getElementById('trttPanel').style.display='none',1500);
-  }catch(e){const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Erreur: '+e.message;}
+  }catch(e){const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Error: '+e.message;}
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('#trttPanel')&&!e.target.closest('#trttConfigBtn'))
@@ -135,6 +135,8 @@ async function loadSettings() {
     document.getElementById('sp-port').value    = d.port         || 8000;
     document.getElementById('sp-briefdir').value= d.briefing_dir || '';
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
+    var ll = document.getElementById('sp-loglevel');
+    if (ll) { ll.dataset.val = d.log_level || 'production'; ll.textContent = (d.log_level || 'production').toUpperCase(); }
     // Sync couleurs & tailles des éléments
     _syncElemControls(d);
   } catch(e) {}
@@ -167,6 +169,7 @@ async function saveSettings() {
         port:         isNaN(port)  ? null : port,
         briefing_dir: bdir         || null,
         broadcast_ms: isNaN(bcast) ? null : bcast,
+        log_level:    (document.getElementById('sp-loglevel').dataset.val) || null,
       })
     });
     const d = await r.json();
@@ -512,6 +515,21 @@ function switchTab(name, btn) {
 // ══════════════════════════════════════════════════════════════════
 let _briefActive = null;
 
+var _briefSidebarHidden = false;
+function toggleBriefSidebar() {
+  var sb = document.getElementById('briefSidebar');
+  var btn = document.getElementById('briefToggle');
+  if (!sb || !btn) return;
+  _briefSidebarHidden = !_briefSidebarHidden;
+  if (_briefSidebarHidden) {
+    sb.style.setProperty('display', 'none', 'important');
+  } else {
+    sb.style.removeProperty('display');
+  }
+  var svg = btn.querySelector('svg');
+  if (svg) svg.style.transform = _briefSidebarHidden ? 'scaleX(-1)' : '';
+}
+
 function briefingLoadList() {
   fetch('/api/briefing/list')
     .then(r => r.json())
@@ -549,18 +567,107 @@ function briefingRenderList(files) {
   }).join('');
 }
 
+var _pdfZoom = 1.0;
+var _pdfDoc = null;
+var _pdfBaseScale = 1.0;
+
+function _pdfRedraw() {
+  var pdfDiv = document.getElementById('briefPdfViewer');
+  var inner = pdfDiv.querySelector('.pdf-pages');
+  if (!inner || !_pdfDoc) return;
+  var lbl = document.getElementById('pdfZoomLbl');
+  if (lbl) lbl.textContent = Math.round(_pdfZoom * 100) + '%';
+  inner.innerHTML = '';
+  var w = pdfDiv.clientWidth || 800;
+  // Render at 2x device pixels for crisp text
+  var dpr = window.devicePixelRatio || 1;
+  for (var p = 1; p <= _pdfDoc.numPages; p++) {
+    (function(num) {
+      _pdfDoc.getPage(num).then(function(page) {
+        _pdfBaseScale = w / page.getViewport({scale:1}).width;
+        var scale = _pdfBaseScale * dpr;
+        var vp = page.getViewport({scale: scale});
+        var canvas = document.createElement('canvas');
+        canvas.width = vp.width; canvas.height = vp.height;
+        canvas.style.width = (vp.width / dpr) + 'px';
+        canvas.style.height = (vp.height / dpr) + 'px';
+        canvas.style.display = 'block';
+        canvas.style.marginBottom = '2px';
+        inner.appendChild(canvas);
+        page.render({canvasContext: canvas.getContext('2d'), viewport: vp});
+      });
+    })(p);
+  }
+}
+
+function _pdfApplyZoom() {
+  var inner = document.querySelector('#briefPdfViewer .pdf-pages');
+  if (!inner) return;
+  inner.style.transformOrigin = 'top left';
+  inner.style.transform = 'scale(' + _pdfZoom + ')';
+  var lbl = document.getElementById('pdfZoomLbl');
+  if (lbl) lbl.textContent = Math.round(_pdfZoom * 100) + '%';
+}
+
+function _pdfInitPinch(container) {
+  var startDist = 0, startZoom = 1;
+  container.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      startDist = Math.sqrt(dx*dx + dy*dy);
+      startZoom = _pdfZoom;
+    }
+  }, {passive: false});
+  container.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      var dist = Math.sqrt(dx*dx + dy*dy);
+      _pdfZoom = Math.min(4, Math.max(1, startZoom * (dist / startDist)));
+      _pdfApplyZoom();
+    }
+  }, {passive: false});
+}
+
 function briefingOpen(name, ext) {
   _briefActive = name;
-  // Mettre à jour sélection visuelle
   document.querySelectorAll('.brief-file-item').forEach(el => {
     el.classList.toggle('active', el.dataset.name === name);
   });
-  const iframe = document.getElementById('briefIframe');
-  const ph     = document.getElementById('briefPlaceholder');
-  const url    = '/api/briefing/file/' + encodeURIComponent(name);
-  iframe.src   = url;
-  iframe.style.display = 'block';
-  ph.style.display     = 'none';
+  var iframe  = document.getElementById('briefIframe');
+  var pdfDiv  = document.getElementById('briefPdfViewer');
+  var ph      = document.getElementById('briefPlaceholder');
+  var url     = '/api/briefing/file/' + encodeURIComponent(name);
+  ph.style.display = 'none';
+
+  if (ext === 'pdf' && window._pdfjsReady) {
+    iframe.style.display = 'none';
+    pdfDiv.style.display = 'block';
+    _pdfZoom = 1.0;
+    pdfDiv.innerHTML =
+      '<div class="pdf-toolbar">' +
+        '<button onclick="_pdfZoom=Math.max(1,_pdfZoom-0.25);_pdfApplyZoom()">−</button>' +
+        '<span class="pdf-zoom-lbl" id="pdfZoomLbl">100%</span>' +
+        '<button onclick="_pdfZoom=Math.min(4,_pdfZoom+0.25);_pdfApplyZoom()">+</button>' +
+      '</div>' +
+      '<div class="pdf-pages"></div>';
+    _pdfInitPinch(pdfDiv.querySelector('.pdf-pages'));
+    window._pdfjsReady.then(function(pdfjsLib) {
+      if (!pdfjsLib) { iframe.src = url; iframe.style.display = 'block'; pdfDiv.style.display = 'none'; return; }
+      pdfjsLib.getDocument(url).promise.then(function(pdf) {
+        _pdfDoc = pdf;
+        _pdfZoom = 1.0;
+        _pdfRedraw();
+      }).catch(function() { iframe.src = url; iframe.style.display = 'block'; pdfDiv.style.display = 'none'; });
+    });
+  } else {
+    pdfDiv.style.display = 'none';
+    iframe.src = url;
+    iframe.style.display = 'block';
+  }
 }
 
 async function briefingUpload(files) {
@@ -577,7 +684,7 @@ async function briefingUpload(files) {
       const r = await fetch('/api/briefing/upload', {method:'POST', body:fd});
       const d = await r.json();
       if (d.files) lastFiles = d.files;
-    } catch(e) { console.error('Upload erreur:', e); }
+    } catch(e) { console.error('Upload error:', e); }
   }
   briefingRenderList(lastFiles);
   btn.innerHTML = origTxt;
@@ -597,7 +704,7 @@ async function briefingDelete(name) {
       document.getElementById('briefPlaceholder').style.display = 'flex';
     }
     briefingRenderList(d.files);
-  } catch(e) { console.error('Delete erreur:', e); }
+  } catch(e) { console.error('Delete error:', e); }
 }
 
 // ── Kneeboard subtabs ────────────────────────────────────────────
@@ -945,7 +1052,7 @@ function buildGpsSteers(route) {
   const count = document.getElementById('gps-steer-count');
   list.innerHTML = '';
   if (!route || !route.length) {
-    list.innerHTML = '<span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>';
+    list.innerHTML = '<span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">No flight plan loaded</span>';
     count.textContent = '0 WPT';
     return;
   }

@@ -142,6 +142,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         briefing_dir: Optional[str] = None
         broadcast_ms: Optional[int] = None
         theme:        Optional[str] = None
+        log_level:    Optional[str] = None
 
     @app.get("/api/settings")
     async def settings_get():
@@ -161,16 +162,25 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 config.BRIEFING_DIR = nd
                 changed.append("briefing_dir")
             except Exception as e:
-                raise HTTPException(400, f"Dossier invalide: {e}")
+                raise HTTPException(400, f"Invalid folder: {e}")
         if s.broadcast_ms is not None and app_info.BROADCAST_MS_MIN <= s.broadcast_ms <= app_info.BROADCAST_MS_MAX:
             config.APP_CONFIG["broadcast_ms"] = s.broadcast_ms
             changed.append("broadcast_ms")
         if s.theme is not None and s.theme in ("dark", "light"):
             config.APP_CONFIG["theme"] = s.theme
             changed.append("theme")
+        if s.log_level is not None and s.log_level in ("production", "debug"):
+            config.APP_CONFIG["log_level"] = s.log_level
+            import logging as _lg
+            lvl = _lg.DEBUG if s.log_level == "debug" else _lg.INFO
+            _lg.getLogger().setLevel(lvl)
+            for h in _lg.getLogger().handlers:
+                if isinstance(h, _lg.handlers.RotatingFileHandler):
+                    h.setLevel(lvl)
+            changed.append("log_level")
         config.save(config.APP_CONFIG)
         needs_restart = "port" in changed
-        logger.info(f"Settings: {changed}" + (" — RESTART requis (port)" if needs_restart else ""))
+        logger.info(f"Settings: {changed}" + (" — RESTART required (port)" if needs_restart else ""))
         return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": config.APP_CONFIG}
 
     @app.get("/api/server/info")
@@ -328,12 +338,12 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             raise HTTPException(400, f"Type non supporté: {ext}")
         data = await file.read()
         if len(data) > _BRIEFING_MAX_MB * 1024 * 1024:
-            raise HTTPException(400, f"Fichier trop lourd (max {_BRIEFING_MAX_MB} MB)")
+            raise HTTPException(400, f"File too large (max {_BRIEFING_MAX_MB} MB)")
         safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
         dest = os.path.join(config.BRIEFING_DIR, safe_name)
         with open(dest, "wb") as f:
             f.write(data)
-        logger.info(f"Briefing uploadé: {safe_name} ({len(data)//1024} KB)")
+        logger.info(f"Briefing uploaded: {safe_name} ({len(data)//1024} KB)")
         return {"ok": True, "name": safe_name, "files": _briefing_meta()}
 
     @app.delete("/api/briefing/delete/{filename}")
@@ -341,9 +351,9 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         safe = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
         fp   = os.path.join(config.BRIEFING_DIR, safe)
         if not os.path.exists(fp):
-            raise HTTPException(404, "Fichier introuvable")
+            raise HTTPException(404, "File not found")
         os.remove(fp)
-        logger.info(f"Briefing supprimé: {safe}")
+        logger.info(f"Briefing deleted: {safe}")
         return {"ok": True, "files": _briefing_meta()}
 
     def _resolve_briefing_file(filename):
@@ -356,7 +366,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             fp2 = os.path.join(bd, safe)
             if os.path.exists(fp2):
                 return fp2
-        raise HTTPException(404, "Fichier introuvable")
+        raise HTTPException(404, "File not found")
 
     @app.get("/api/briefing/file/{filename}")
     async def briefing_serve(filename: str):

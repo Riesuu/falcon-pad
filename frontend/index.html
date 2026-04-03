@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html><head><meta charset="UTF-8">
+<html lang="fr" translate="no"><head><meta charset="UTF-8">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,6 +23,8 @@
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js" integrity="sha384-WaInCl5qKhXVwIIJ/XMxRvjzCTIkZ1uH9Evm3mNtVtfXWhJGU3EkedDBaf/037Ew" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+<script>window._pdfjsReady=import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs').then(m=>{m.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';return m;}).catch(()=>null);</script>
 <style>
 /* Masquer le bouton "Bypass filter" de leaflet-rotate */
 .leaflet-control-rotate { display: none !important; }
@@ -243,6 +246,12 @@
       <input class="sp-input" id="sp-bcast" type="number" min="50" max="2000" placeholder="200"/>
       <span class="sp-hint">Position update rate (ms). 100 = smooth, 500 = eco.</span>
     </div>
+    <!-- Log level -->
+    <div class="sp-row">
+      <label class="sp-label">LOG LEVEL</label>
+      <button class="sp-toggle" id="sp-loglevel" onclick="this.dataset.val=this.dataset.val==='debug'?'production':'debug';this.textContent=this.dataset.val.toUpperCase();saveSettings()" data-val="production">PRODUCTION</button>
+      <span class="sp-hint">Click to toggle Production / Debug.</span>
+    </div>
     <div class="sp-divider"></div>
     <div class="sp-row">
       <label class="sp-label">MAP ELEMENT COLORS & SIZES</label>
@@ -250,7 +259,7 @@
       <!-- ── STEERPOINTS ── -->
       <div class="sp-group-label">STEERPOINTS</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">Ligne</span>
+        <span class="sp-elem-lbl">Line</span>
         <input type="color" class="sp-cpick" id="sp-c-stpt" value="#e2e8f0" oninput="onElemColor('stpt',this.value)">
         <input type="range" class="sp-slider" id="sp-s-stpt_line" min="1" max="10" step="0.5" value="2" oninput="onElemSize('stpt_line',this.value)">
         <span class="sp-sval" id="sp-sv-stpt_line">2</span>
@@ -265,7 +274,7 @@
       <!-- ── FLIGHT PLAN ── -->
       <div class="sp-group-label">FLIGHT PLAN</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">Ligne</span>
+        <span class="sp-elem-lbl">Line</span>
         <input type="color" class="sp-cpick" id="sp-c-fplan" value="#f59e0b" oninput="onElemColor('fplan',this.value)">
         <input type="range" class="sp-slider" id="sp-s-fplan_line" min="1" max="10" step="0.5" value="2" oninput="onElemSize('fplan_line',this.value)">
         <span class="sp-sval" id="sp-sv-fplan_line">2</span>
@@ -280,7 +289,7 @@
       <!-- ── PPT THREATS ── -->
       <div class="sp-group-label">PPT THREATS</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">Cercle</span>
+        <span class="sp-elem-lbl">Circle</span>
         <input type="color" class="sp-cpick" id="sp-c-ppt" value="#ef4444" oninput="onElemColor('ppt',this.value)">
         <input type="range" class="sp-slider" id="sp-s-ppt" min="0.5" max="10" step="0.5" value="1.2" oninput="onElemSize('ppt',this.value)">
         <span class="sp-sval" id="sp-sv-ppt">1.2</span>
@@ -295,11 +304,11 @@
       <!-- ── BULLSEYE ── -->
       <div class="sp-group-label">BULLSEYE</div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">Couleur</span>
+        <span class="sp-elem-lbl">Color</span>
         <input type="color" class="sp-cpick" id="sp-c-bull" value="#60a5fa" oninput="onBullColor(this.value)">
       </div>
       <div class="sp-elem-row">
-        <span class="sp-elem-lbl">Épaisseur</span>
+        <span class="sp-elem-lbl">Thickness</span>
         <input type="range" min="2" max="20" step="1" value="8" id="sp-s-bull" class="sp-range"
           oninput="S_BULL=+this.value;saveUiPref({size_bull:+this.value});if(_bullLat!=null)_buildBullseye(_bullLat,_bullLon);">
       </div>
@@ -421,7 +430,7 @@
     <span id="gps-steer-count" style="font-family:'Consolas','Courier New',monospace;font-size:9px;color:#3d6b52">0 WPT</span>
   </div>
   <div class="gps-steer-list" id="gps-steer-list">
-    <span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">Aucun plan de vol chargé</span>
+    <span style="font-family:system-ui,sans-serif;font-size:11px;color:#3d6b52;padding:4px 0">No flight plan loaded</span>
   </div>
 </div>
 
@@ -489,7 +498,7 @@
         </div>
       </div>
       <div class="kb-field-lbl" style="margin-bottom:6px">MISSION NOTES</div>
-      <textarea class="kb-notes" id="kb-fplan-ta" placeholder="Objectif, menaces, règles d'engagement…" style="height:120px"></textarea>
+      <textarea class="kb-notes" id="kb-fplan-ta" placeholder="Objective, threats, ROE…" style="height:120px"></textarea>
     </div>
 
     <!-- ── NOTES LIBRES (texte + dessin stylet) ── -->
@@ -505,7 +514,7 @@
           <input type="color" id="kbNoteColorInput" value="#94a3b8">
         </div>
       </div>
-      <textarea class="kb-notes" id="kb-notes-ta" placeholder="Notes libres…"></textarea>
+      <textarea class="kb-notes" id="kb-notes-ta" placeholder="Free notes…"></textarea>
       <canvas class="kb-notes-canvas" id="kb-notes-cvs"></canvas>
     </div>
 
@@ -826,12 +835,13 @@
   <input type="file" id="briefingFileInput" accept=".pdf,.png,.jpg,.jpeg,.docx" multiple onchange="briefingUpload(this.files)">
   <div class="brief-body">
     <!-- Sidebar -->
-    <div class="brief-sidebar">
+    <div class="brief-sidebar" id="briefSidebar">
       <div class="brief-sidebar-hdr">DOCUMENTS</div>
       <div class="brief-file-list" id="briefFileList">
         <div class="brief-empty">No documents<br>Import PDF, image<br>or Word (.docx)</div>
       </div>
     </div>
+    <button class="brief-toggle" id="briefToggle" onclick="toggleBriefSidebar()"><svg width="10" height="14" viewBox="0 0 10 14"><path d="M8 1L2 7l6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
     <!-- Viewer -->
     <div class="brief-viewer" id="briefViewer">
       <div class="brief-placeholder" id="briefPlaceholder">
@@ -842,6 +852,7 @@
         <span class="brief-placeholder-txt">Select a document</span>
       </div>
       <iframe id="briefIframe" src="about:blank" style="display:none"></iframe>
+      <div id="briefPdfViewer" style="display:none;overflow-y:auto;width:100%;height:100%"></div>
     </div>
   </div>
 </div>

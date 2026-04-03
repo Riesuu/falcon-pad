@@ -153,7 +153,7 @@ class BMSSharedMemory:
                     p = MapView(h, FILE_MAP_READ, 0, 0, 0)
                     if p:
                         self.shm_ptrs[name] = p
-                        logger.info(f"  SHM {name} = 0x{p:X}")
+                        logger.debug(f"  SHM {name} = 0x{p:X}")
 
             self.ptr1 = self.shm_ptrs.get("FalconSharedMemoryArea")
             self.ptr2 = self.shm_ptrs.get("FalconSharedMemoryArea2")

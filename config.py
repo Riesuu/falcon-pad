@@ -31,6 +31,7 @@ _DEFAULTS: dict = {
     "briefing_dir": app_info.BRIEFING_DIR,
     "broadcast_ms": app_info.DEFAULT_BROADCAST_MS,
     "theme":        "dark",
+    "log_level":    "production",
 }
 
 # ── Persistence ───────────────────────────────────────────────────────────────
@@ -72,16 +73,19 @@ class _Fmt(logging.Formatter):
         return f"[{ts}] [{r.levelname:<8}] {r.getMessage()}"
 
 
+_log_level_str = APP_CONFIG.get("log_level", "production")
+_file_level = logging.DEBUG if _log_level_str == "debug" else logging.INFO
+
 _fh = RotatingFileHandler(LOG_FILE, maxBytes=app_info.LOG_MAX_BYTES, backupCount=app_info.LOG_BACKUP_COUNT, encoding="utf-8")
-_fh.setLevel(logging.DEBUG)
+_fh.setLevel(_file_level)
 _ch = logging.StreamHandler(sys.stdout)
 _ch.setLevel(logging.INFO)
 _fh.setFormatter(_Fmt())
 _ch.setFormatter(_Fmt())
-logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _ch])
+logging.basicConfig(level=_file_level, handlers=[_fh, _ch])
 
 _log = logging.getLogger(__name__)
-_log.info(f"Logging initialized — {LOG_FILE}")
+_log.info(f"Logging initialized — {LOG_FILE} (mode: {_log_level_str})")
 
 
 def log_sep(t: str = "") -> None:

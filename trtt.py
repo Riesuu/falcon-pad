@@ -107,7 +107,7 @@ def _client_loop() -> None:
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(app_info.TRTT_HANDSHAKE_TIMEOUT)
-            logger.info(f"TRTT: connecting to {HOST}:{PORT}...")
+            logger.debug(f"TRTT: connecting to {HOST}:{PORT}...")
             sock.connect((HOST, PORT))
             sock.settimeout(app_info.TRTT_INITIAL_TIMEOUT)
 
