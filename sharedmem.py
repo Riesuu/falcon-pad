@@ -21,6 +21,7 @@ import logging
 import struct
 from typing import Dict, Optional
 
+import app_info
 from theaters import bms_to_latlon, in_theater_bbox
 
 logger = logging.getLogger(__name__)
@@ -166,7 +167,7 @@ class BMSSharedMemory:
                 self.shm_ptrs = {}
                 self.ptr1 = self.ptr2 = None
                 self.connected = False
-                logger.debug("BMS not detected — retry in 5s")
+                logger.debug(f"BMS not detected — retry in {app_info.BMS_RECONNECT_S}s")
         except Exception as e:
             self.shm_ptrs = {}
             self.ptr1 = self.ptr2 = None

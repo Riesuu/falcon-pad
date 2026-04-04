@@ -129,8 +129,8 @@ def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
                     range_m = int(r_ft * app_info.FT_TO_M)
                     range_nm = max(1, round(r_ft / app_info.FT_TO_NM_DIVISOR))
                 except (ValueError, IndexError):
-                    range_m = 27800
-                    range_nm = 15
+                    range_m = app_info.PPT_DEFAULT_RANGE_M
+                    range_nm = app_info.PPT_DEFAULT_RANGE_NM
                 name_ppt = parts[4].strip() if len(parts) > 4 else ""
                 try:
                     ppt_num = 56 + int(kl.replace("ppt_", "").strip())
@@ -331,7 +331,7 @@ def load_radio_from_dir(config_dir: str) -> bool:
         if not candidates:
             return False
         best = max(candidates, key=os.path.getmtime)
-        with open(best, encoding="latin-1") as f:
+        with open(best, encoding=app_info.INI_ENCODING) as f:
             raw = f.read()
         cfg = configparser.RawConfigParser()
         cfg.optionxform = str  # type: ignore[assignment]
@@ -459,7 +459,7 @@ def parse_ini_file(path: str) -> dict:
     """Parse a .ini file and set global mission_data."""
     global mission_data
     try:
-        with open(path, encoding="latin-1") as f:
+        with open(path, encoding=app_info.INI_ENCODING) as f:
             raw = f.read()
         cfg = configparser.RawConfigParser()
         cfg.optionxform = str  # type: ignore[assignment]

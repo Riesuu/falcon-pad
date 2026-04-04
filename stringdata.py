@@ -33,6 +33,7 @@ import re
 import struct
 from typing import Callable, Dict, List, Optional, Tuple
 
+import app_info
 from theaters import (
     bms_to_latlon,
     in_theater_bbox,
@@ -323,8 +324,8 @@ def get_ppt_threats(strings: Dict[int, List[str]]) -> List[dict]:
         if not np or np["type"] != "PT":
             continue
         range_ft = np.get("ppt_range_ft", 0.0)
-        range_m = int(range_ft * 0.3048) if range_ft > 0 else 27800
-        range_nm = max(1, round(range_ft / 6076.12)) if range_ft > 0 else 15
+        range_m = int(range_ft * app_info.FT_TO_M) if range_ft > 0 else app_info.PPT_DEFAULT_RANGE_M
+        range_nm = max(1, round(range_ft / app_info.FT_TO_NM_DIVISOR)) if range_ft > 0 else app_info.PPT_DEFAULT_RANGE_NM
         # z and grnd_elev are in tens of feet in BMS; AGL = (z - grnd_elev) * 10
         agl_ft = max(0, round((np["z"] - np["grnd_elev"]) * 10))
         ppts.append({

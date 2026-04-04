@@ -255,13 +255,13 @@ def _client_loop() -> None:
                             _contacts[obj_id] = {
                                 'lat':       round(lat, 5),
                                 'lon':       round(lon, 5),
-                                'alt':       round(alt_m * 3.28084),   # m → ft
+                                'alt':       round(alt_m * app_info.M_TO_FT),   # m → ft
                                 'camp':      p['color'],
                                 'callsign':  p['name'] or p['pilot'] or obj_id,
                                 'pilot':     p['pilot'],
                                 'type_name': at,
                                 'heading':   hdg,
-                                'speed':     round(float(props['IAS']) * 1.944) if props.get('IAS') else 0,
+                                'speed':     round(float(props['IAS']) * app_info.KT_PER_MS) if props.get('IAS') else 0,
                                 '_ts':       time.time(),
                             }
                     except Exception as ex:
@@ -383,5 +383,5 @@ def get_diagnostics() -> dict:
         "thread_alive":   _thread.is_alive() if _thread else False,
         "nb_contacts_raw": nb,
         "sample":         sample,
-        "config_bms":     "set g_bTacviewRealTime 1  (in User/config/Falcon BMS User.cfg)",
+        "config_bms":     app_info.BMS_CONFIG_HINT,
     }

@@ -55,17 +55,57 @@ FT_TO_NM_DIVISOR  = 6076.12
 GREAT_CIRCLE_NM   = 3440.065
 AIRPORT_SEARCH_NM = 5.0
 ACMI_CONTACT_NM   = 240.0
+PPT_DEFAULT_RANGE_M  = 27800
+PPT_DEFAULT_RANGE_NM = 15
+M_TO_FT           = 3.28084
+KT_PER_MS         = 1.944
+
+# ── Paths / filenames ───────────────────────────────────────────────────────
+FRONTEND_SUBDIR      = "frontend"
+IMAGES_SUBDIR        = "images"
+ICON_FILENAME        = "falcon_pad.ico"
+INDEX_HTML           = "index.html"
+CHECKLIST_REL_PATH   = ("data", "checklists", "f16_checklist.json")
+
+# ── Server / HTTP ───────────────────────────────────────────────────────────
+STATIC_ROUTE          = "/static"
+CACHE_CONTROL_STATIC  = "no-cache, must-revalidate"
+ACCESS_DENIED_MSG     = "Access denied — local network only"
+DNS_PROBE_HOST        = "8.8.8.8"
+DNS_PROBE_PORT        = 80
+INI_ENCODING          = "latin-1"
+BMS_CONFIG_HINT       = "set g_bTacviewRealTime 1  (User/config/Falcon BMS User.cfg)"
+
+# ── MIME types ──────────────────────────────────────────────────────────────
+MIME_MAP = {
+    ".pdf":  "application/pdf",
+    ".png":  "image/png",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".html": "text/html",
+    ".htm":  "text/html",
+}
+MIME_DEFAULT = "application/octet-stream"
+
+# ── Settings validation ─────────────────────────────────────────────────────
+VALID_THEMES     = ("dark", "light")
+VALID_LOG_LEVELS = ("production", "debug")
+VALID_LAYERS     = ("dark", "osm", "satellite", "terrain")
+PORT_MIN         = 1024
+PORT_MAX         = 65535
+SIZE_MIN         = 0.5
+SIZE_MAX         = 50.0
 
 import os as _os, sys as _sys
 
 def _resolve_base_dir() -> str:
-    """Retourne le dossier racine du projet — fonctionne en dev et en .exe PyInstaller."""
+    """Return project root — works in dev and .exe PyInstaller."""
     if getattr(_sys, 'frozen', False):
         return _os.path.dirname(_sys.executable)
     return _os.path.dirname(_os.path.abspath(__file__))
 
 def _resolve_bundle_dir() -> str:
-    """Dossier contenant les fichiers embarqués (frontend, data). _MEIPASS en --onefile."""
+    """Bundled assets directory (frontend, data). _MEIPASS in --onefile mode."""
     if getattr(_sys, 'frozen', False):
         return getattr(_sys, '_MEIPASS', _os.path.dirname(_sys.executable))
     return _os.path.dirname(_os.path.abspath(__file__))
@@ -77,6 +117,10 @@ LOG_DIR      = _os.path.join(BASE_DIR, "logs")
 BRIEFING_DIR = _os.path.join(BASE_DIR, "briefing")
 CONFIG_FILE  = _os.path.join(CONFIG_DIR, "falcon_pad_config.json")
 
-# Créer les dossiers nécessaires
+# Derived paths
+FRONTEND_DIR = _os.path.join(BUNDLE_DIR, FRONTEND_SUBDIR)
+ASSETS_DIR   = _os.path.join(FRONTEND_DIR, IMAGES_SUBDIR)
+
+# Create required directories
 for _d in (CONFIG_DIR, LOG_DIR, BRIEFING_DIR):
     _os.makedirs(_d, exist_ok=True)

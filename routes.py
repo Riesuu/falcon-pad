@@ -23,6 +23,7 @@ import config
 import mission
 import trtt
 import ui_prefs
+import ui_theme
 from theaters import (detect_theater_from_coords_multi,
                       get_theater, get_theater_name, is_theater_detected)
 
@@ -56,7 +57,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     @app.get("/api/checklist")
     async def get_checklist():
         import json as _json
-        _cl_path = os.path.join(app_info.BUNDLE_DIR, "data", "checklists", "f16_checklist.json")
+        _cl_path = os.path.join(app_info.BUNDLE_DIR, *app_info.CHECKLIST_REL_PATH)
         try:
             with open(_cl_path, encoding="utf-8") as f:
                 return _json.load(f)
@@ -119,7 +120,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     @app.post("/api/upload")
     async def upload_mission(file: UploadFile = File(...)):
         try:
-            content = (await file.read()).decode("latin-1")
+            content = (await file.read()).decode(app_info.INI_ENCODING)
             _cfg = configparser.RawConfigParser()
             _cfg.optionxform = str  # type: ignore[assignment]
             _cfg.read_string(content)
@@ -161,7 +162,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     @app.post("/api/settings")
     async def settings_save(s: SettingsModel):
         changed: list = []
-        if s.port is not None and 1024 <= s.port <= 65535 and s.port != config.APP_CONFIG.get("port"):
+        if s.port is not None and app_info.PORT_MIN <= s.port <= app_info.PORT_MAX and s.port != config.APP_CONFIG.get("port"):
             config.APP_CONFIG["port"] = s.port
             changed.append("port")
         if s.briefing_dir is not None and s.briefing_dir.strip():
@@ -176,10 +177,10 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         if s.broadcast_ms is not None and app_info.BROADCAST_MS_MIN <= s.broadcast_ms <= app_info.BROADCAST_MS_MAX:
             config.APP_CONFIG["broadcast_ms"] = s.broadcast_ms
             changed.append("broadcast_ms")
-        if s.theme is not None and s.theme in ("dark", "light"):
+        if s.theme is not None and s.theme in app_info.VALID_THEMES:
             config.APP_CONFIG["theme"] = s.theme
             changed.append("theme")
-        if s.log_level is not None and s.log_level in ("production", "debug"):
+        if s.log_level is not None and s.log_level in app_info.VALID_LOG_LEVELS:
             config.APP_CONFIG["log_level"] = s.log_level
             import logging as _lg
             from logging.handlers import RotatingFileHandler as _RFH
@@ -261,7 +262,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             val = getattr(p, key)
             if val is not None and re.match(hex_re, val):
                 ui_prefs.prefs[key] = val
-        if p.layer is not None and p.layer in ("dark", "osm", "satellite", "terrain"):
+        if p.layer is not None and p.layer in app_info.VALID_LAYERS:
             ui_prefs.prefs["layer"] = p.layer
         for key in ("ppt_visible", "airports_visible", "runways_visible", "ap_name_visible", "bull_visible"):
             val = getattr(p, key)
@@ -270,7 +271,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         for key in ("size_draw", "size_stpt", "size_stpt_line", "size_fplan",
                     "size_fplan_line", "size_ppt", "size_ppt_dot", "size_bull"):
             val = getattr(p, key)
-            if val is not None and 0.5 <= val <= 50:
+            if val is not None and app_info.SIZE_MIN <= val <= app_info.SIZE_MAX:
                 ui_prefs.prefs[key] = val
         for key in ("rwy_offsets", "annotations"):
             val = getattr(p, key)
@@ -292,7 +293,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     async def trtt_config(c: TrttConfigModel):
         if c.host:
             trtt.HOST = c.host.strip()
-        if c.port and 1024 <= c.port <= 65535:
+        if c.port and app_info.PORT_MIN <= c.port <= app_info.PORT_MAX:
             trtt.PORT = c.port
         logger.info(f"TRTT config: {trtt.HOST}:{trtt.PORT}")
         return {"status": "ok", "trtt_host": f"{trtt.HOST}:{trtt.PORT}"}
@@ -304,7 +305,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 "connected": diag.get("connected", False),
                 "thread_alive": diag.get("thread_alive", False),
                 "nb_contacts": diag.get("nb_contacts_raw", 0),
-                "config_bms": "set g_bTacviewRealTime 1  (User/config/Falcon BMS User.cfg)"}
+                "config_bms": app_info.BMS_CONFIG_HINT}
 
     # ── Briefing ─────────────────────────────────────────────────
     _BRIEFING_ALLOWED = app_info.BRIEFING_ALLOWED_EXT
@@ -346,7 +347,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         filename = file.filename or "unnamed"
         ext = os.path.splitext(filename)[1].lower()
         if ext not in _BRIEFING_ALLOWED:
-            raise HTTPException(400, f"Type non supporté: {ext}")
+            raise HTTPException(400, f"Unsupported file type: {ext}")
         data = await file.read()
         if len(data) > _BRIEFING_MAX_MB * 1024 * 1024:
             raise HTTPException(400, f"File too large (max {_BRIEFING_MAX_MB} MB)")
@@ -385,12 +386,11 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         ext = os.path.splitext(fp)[1].lower()
         if ext == ".docx":
             return await _docx_to_html(fp)
-        mime = {".pdf": "application/pdf", ".png": "image/png",
-                ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                ".html": "text/html", ".htm": "text/html"}.get(ext, "application/octet-stream")
+        mime = app_info.MIME_MAP.get(ext, app_info.MIME_DEFAULT)
         return FileResponse(fp, media_type=mime, headers={"Content-Disposition": "inline"})
 
     async def _docx_to_html(fp):
+        _err_style = ui_theme.DOCX_ERROR_STYLE
         try:
             from docx import Document as _Doc  # type: ignore[import-untyped]
             doc = _Doc(fp)
@@ -413,31 +413,26 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                     para_html.append(f"<p>{runs}</p>")
             body = "\n".join(para_html)
             html = (
-                '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
-                'body{background:#060a12;color:#cbd5e1;font-family:system-ui,-apple-system,'
-                "'Segoe UI',sans-serif;max-width:860px;margin:0 auto;padding:32px 24px;"
-                'font-size:15px;line-height:1.7}'
-                'h1{font-size:22px;color:#fbbf24}h2{font-size:16px;color:#94a3b8}'
-                'h3{font-size:13px;color:#4ade80}p{margin:4px 0;color:#94a3b8}'
-                'strong{color:#e2e8f0}em{color:#fbbf24}'
+                f'<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+                f'{ui_theme.DOCX_CSS}'
                 f'</style></head><body>{body}</body></html>'
             )
             return HTMLResponse(content=html)
         except ImportError:
             return HTMLResponse(
-                '<html><body style="background:#060a12;color:#ef4444;font-family:monospace;padding:40px">'
-                '<h2>python-docx non installé</h2><p><code>pip install python-docx</code></p></body></html>',
+                f'<html><body style="{_err_style}">'
+                f'<h2>python-docx not installed</h2><p><code>pip install python-docx</code></p></body></html>',
                 status_code=500)
         except Exception as e:
             return HTMLResponse(
-                f'<html><body style="background:#060a12;color:#ef4444;padding:40px;font-family:monospace">'
-                f'<h2>Erreur conversion DOCX</h2><pre>{e}</pre></body></html>',
+                f'<html><body style="{_err_style}">'
+                f'<h2>DOCX conversion error</h2><pre>{e}</pre></body></html>',
                 status_code=500)
 
     # ── Index ────────────────────────────────────────────────────
     @app.get("/")
     async def index():
-        idx = os.path.join(frontend_dir, "index.html")
+        idx = os.path.join(frontend_dir, app_info.INDEX_HTML)
         if os.path.exists(idx):
             return FileResponse(idx, media_type="text/html")
-        return HTMLResponse("<h1>Falcon-Pad — frontend/index.html manquant</h1>", status_code=500)
+        return HTMLResponse(f"<h1>{app_info.SHORT} — {app_info.INDEX_HTML} missing</h1>", status_code=500)

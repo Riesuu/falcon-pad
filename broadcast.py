@@ -161,7 +161,7 @@ async def ini_watcher_loop(bms, ws_clients) -> None:
                     _last_path  = path
                     _last_mtime = mtime
                     try:
-                        with open(path, encoding="latin-1") as _f:
+                        with open(path, encoding=app_info.INI_ENCODING) as _f:
                             _raw = _f.read()
                         _cfg = configparser.RawConfigParser()
                         _cfg.optionxform = str  # type: ignore[assignment]

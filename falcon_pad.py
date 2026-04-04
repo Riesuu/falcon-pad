@@ -27,30 +27,26 @@ from sharedmem import BMSSharedMemory, safe_read
 
 logger = logging.getLogger(__name__)
 
-# ── Paths / constants ─────────────────────────────────────────────────────────
-ASSETS_DIR   = os.path.join(app_info.BUNDLE_DIR, "frontend", "images")
-FRONTEND_DIR = os.path.join(app_info.BUNDLE_DIR, "frontend")
-
 
 def _get_local_ip() -> str:
     import socket as _s
     try:
         with _s.socket(_s.AF_INET, _s.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
+            s.connect((app_info.DNS_PROBE_HOST, app_info.DNS_PROBE_PORT))
             return s.getsockname()[0]
     except Exception:
-        return "0.0.0.0"
+        return app_info.DEFAULT_HOST
 
 
 SERVER_IP   = _get_local_ip()
 SERVER_PORT = int(config.APP_CONFIG["port"])
 
-# ── Singletons ────────────────────────────────────────────────────────────────
+# ── Singletons ────────────────────────────────────────────────────────────
 bms = BMSSharedMemory()
 ws_clients: List[WebSocket] = []
 
 
-# ── Middleware ────────────────────────────────────────────────────────────────
+# ── Middleware ────────────────────────────────────────────────────────────
 def _is_local(ip: str) -> bool:
     return (ip in ("127.0.0.1", "::1", "localhost") or
             ip.startswith("10.") or ip.startswith("192.168.") or
@@ -62,14 +58,14 @@ class _LocalOnlyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         client_ip = request.client.host if request.client else ""
         if not _is_local(client_ip):
-            return _StarResp("Access denied — local network only", status_code=403)
+            return _StarResp(app_info.ACCESS_DENIED_MSG, status_code=403)
         resp = await call_next(request)
-        if request.url.path.startswith("/static/"):
-            resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        if request.url.path.startswith(app_info.STATIC_ROUTE + "/"):
+            resp.headers["Cache-Control"] = app_info.CACHE_CONTROL_STATIC
         return resp
 
 
-# ── App & lifespan ────────────────────────────────────────────────────────────
+# ── App & lifespan ────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(_a):
     asyncio.create_task(broadcast_loop(bms, ws_clients, safe_read))
@@ -90,8 +86,8 @@ async def lifespan(_a):
     config.log_sep("SHUTDOWN")
 
 
-app = FastAPI(title="Falcon-Pad", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+app = FastAPI(title=app_info.SHORT, lifespan=lifespan)
+app.mount(app_info.STATIC_ROUTE, StaticFiles(directory=app_info.FRONTEND_DIR), name="static")
 app.add_middleware(_LocalOnlyMiddleware)
 
 # Register all API routes
@@ -101,7 +97,7 @@ register_routes(
     theater_msg_fn=theater_msg,
     get_briefings_dir=lambda: _bc.bms_briefings_dir,
     try_float_fn=_try_float,
-    frontend_dir=FRONTEND_DIR,
+    frontend_dir=app_info.FRONTEND_DIR,
     server_ip=SERVER_IP,
     server_port=SERVER_PORT,
 )
@@ -118,7 +114,7 @@ if __name__ == "__main__":
         try:
             uvicorn.run(
                 app,
-                host="0.0.0.0",
+                host=app_info.DEFAULT_HOST,
                 port=SERVER_PORT,
                 log_level="warning",
                 log_config=None,
@@ -131,55 +127,48 @@ if __name__ == "__main__":
 
     try:
         from PySide6.QtWidgets import QApplication, QWidget
-        from PySide6.QtCore    import Qt, QTimer, QPointF
+        from PySide6.QtCore    import Qt, QTimer
         from PySide6.QtGui     import (QPainter, QColor, QPen, QFont,
-                                       QPixmap, QIcon, QBrush, QPolygonF)
+                                       QIcon, QBrush)
     except ImportError:
         logger.error("PySide6 absent — pip install PySide6")
         raise SystemExit(0)
 
+    import ui_theme as _t
+
     class FalconPadWindow(QWidget):
-        W, H = 420, 350
-        BG         = QColor("#060a12")
-        BG2        = QColor("#0b1220")
-        ACCENT     = QColor("#4ade80")
-        ACCENT_DIM = QColor("#1f4d35")
-        RED        = QColor("#ef4444")
-        RED_DIM    = QColor("#1a0808")
-        RED_HOV    = QColor("#3d1010")
-        RED_OUT    = QColor("#7f2222")
-        EJECT_YEL  = QColor("#fbbf24")
-        EJECT_BLK  = QColor("#1a1a1a")
-        EJECT_STRP = QColor("#000000")
-        EJECT_HOV  = QColor("#fcd34d")
-        BLUE       = QColor("#60a5fa")
-        TXT_DIM    = QColor("#64748b")
-        TXT_MID    = QColor("#94a3b8")
+        W, H = _t.WIN_W, _t.WIN_H
+
+        # ── Color palette (from ui_theme) ────────────────────────
+        BG         = QColor(_t.BG)
+        BG2        = QColor(_t.BG2)
+        ACCENT     = QColor(_t.ACCENT)
+        ACCENT_DIM = QColor(_t.ACCENT_DIM)
+        RED        = QColor(_t.RED)
+        RED_DIM    = QColor(_t.RED_DIM)
+        RED_HOV    = QColor(_t.RED_HOV)
+        RED_OUT    = QColor(_t.RED_OUT)
+        BLUE       = QColor(_t.BLUE)
+        TXT_DIM    = QColor(_t.TXT_DIM)
+        TXT_MID    = QColor(_t.TXT_MID)
 
         def __init__(self):
             super().__init__()
             self.setFixedSize(self.W, self.H)
             self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
             self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-            self.setWindowTitle("Falcon-Pad")
-            _ico = os.path.join(ASSETS_DIR, "falcon_pad.ico")
+            self.setWindowTitle(app_info.SHORT)
+            _ico = os.path.join(app_info.ASSETS_DIR, app_info.ICON_FILENAME)
             if os.path.exists(_ico):
                 self.setWindowIcon(QIcon(_ico))
             screen = QApplication.primaryScreen().availableGeometry()
             self.move((screen.width()-self.W)//2, (screen.height()-self.H)//2)
-            self._logo = None
-            _lp = os.path.join(ASSETS_DIR, "logo.png")
-            if os.path.exists(_lp):
-                px = QPixmap(_lp)
-                if not px.isNull():
-                    self._logo = px.scaled(380, 64, Qt.AspectRatioMode.KeepAspectRatio,
-                                           Qt.TransformationMode.SmoothTransformation)
             self._drag_pos = self._btn_rect = self._min_rect = None
             self._btn_hover = self._min_hover = self._bms_ok = False
             self._timer = QTimer(self)
             self._timer.timeout.connect(self._poll_bms)
-            self._timer.start(3000)
-            QTimer.singleShot(600, self._poll_bms)
+            self._timer.start(_t.BMS_POLL_MS)
+            QTimer.singleShot(_t.BMS_POLL_INITIAL_MS, self._poll_bms)
             self.setMouseTracking(True)
             self.show()
 
@@ -196,60 +185,95 @@ if __name__ == "__main__":
             p = QPainter(self)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
             W, H = self.W, self.H
+
+            # Background
             p.fillRect(0, 0, W, H, self.BG)
-            p.fillRect(0, 0, W, 80, self.BG2)
-            p.fillRect(0, 0, W, 3, self.ACCENT)
+            p.fillRect(0, 0, W, _t.HEADER_H, self.BG2)
+            p.fillRect(0, 0, W, _t.ACCENT_LINE_H, self.ACCENT)
+
+            # Header separator
             p.setPen(QPen(self.ACCENT_DIM, 1))
-            p.drawLine(20, 80, W-20, 80)
-            rx, ry, rw, rh = W-36, 10, 24, 18
+            p.drawLine(_t.TITLE_X, _t.HEADER_H, W - _t.TITLE_X, _t.HEADER_H)
+
+            # Minimize button
+            rx = W - _t.MIN_BTN_MARGIN_R
+            ry = _t.MIN_BTN_Y
+            rw, rh = _t.MIN_BTN_W, _t.MIN_BTN_H
             self._min_rect = (rx, ry, rw, rh)
             mc = self.TXT_MID if self._min_hover else self.TXT_DIM
             p.setPen(QPen(mc, 1)); p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRect(rx, ry, rw, rh)
             p.setPen(QPen(mc, 2))
             p.drawLine(rx+5, ry+rh//2, rx+rw-5, ry+rh//2)
-            if self._logo:
-                lx = (W - self._logo.width()) // 2
-                p.drawPixmap(lx, 8, self._logo)
-            else:
-                p.setPen(QPen(self.ACCENT))
-                p.setFont(QFont("Consolas", 15, QFont.Weight.Bold))
-                p.drawText(20, 8, W-64, 40, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft, "FALCON-PAD")
-                p.setPen(QPen(self.TXT_DIM))
-                p.setFont(QFont("Consolas", 8))
-                p.drawText(20, 48, W-64, 20, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,
-                           f"v{app_info.VERSION}  ·  by {app_info.AUTHOR}")
-            y = 96
-            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22, y, "LOCAL"); y += 17
-            p.setFont(QFont("Consolas", 11)); p.setPen(QPen(self.ACCENT))
-            p.drawText(22, y, f"http://localhost:{SERVER_PORT}"); y += 25
-            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22, y, "NETWORK"); y += 17
-            p.setFont(QFont("Consolas", 11)); p.setPen(QPen(self.BLUE))
-            p.drawText(22, y, f"http://{SERVER_IP}:{SERVER_PORT}"); y += 25
-            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
-            p.drawText(22, y, app_info.BMS.upper()); y += 17
+
+            # Title
+            p.setPen(QPen(self.ACCENT))
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_TITLE, QFont.Weight.Bold))
+            p.drawText(_t.TITLE_X, _t.TITLE_Y, W-64, _t.TITLE_H,
+                       Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                       _t.LBL_TITLE)
+
+            # Subtitle
+            p.setPen(QPen(self.TXT_DIM))
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_SUBTITLE))
+            p.drawText(_t.TITLE_X, _t.SUBTITLE_Y, W-64, _t.SUBTITLE_H,
+                       Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                       f"v{app_info.VERSION}  \u00b7  by {app_info.AUTHOR}")
+
+            # Content area
+            y = _t.CONTENT_START_Y
+
+            # LOCAL
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
+            p.setPen(QPen(self.TXT_DIM))
+            p.drawText(_t.MARGIN_LEFT, y, _t.LBL_LOCAL); y += _t.LINE_LABEL_H
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_VALUE))
+            p.setPen(QPen(self.ACCENT))
+            p.drawText(_t.MARGIN_LEFT, y, f"http://localhost:{SERVER_PORT}"); y += _t.LINE_VALUE_H
+
+            # NETWORK
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
+            p.setPen(QPen(self.TXT_DIM))
+            p.drawText(_t.MARGIN_LEFT, y, _t.LBL_NETWORK); y += _t.LINE_LABEL_H
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_VALUE))
+            p.setPen(QPen(self.BLUE))
+            p.drawText(_t.MARGIN_LEFT, y, f"http://{SERVER_IP}:{SERVER_PORT}"); y += _t.LINE_VALUE_H
+
+            # BMS status
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
+            p.setPen(QPen(self.TXT_DIM))
+            p.drawText(_t.MARGIN_LEFT, y, app_info.BMS.upper()); y += _t.LINE_LABEL_H
             dc = self.ACCENT if self._bms_ok else self.RED
             p.setBrush(QBrush(dc)); p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(22, y-9, 10, 10)
+            p.drawEllipse(_t.MARGIN_LEFT, y-9, _t.STATUS_DOT_R, _t.STATUS_DOT_R)
             p.setPen(QPen(dc))
-            p.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
-            p.drawText(38, y, "CONNECTED" if self._bms_ok else "NOT DETECTED"); y += 25
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_STATUS, QFont.Weight.Bold))
+            lbl = _t.LBL_CONNECTED if self._bms_ok else _t.LBL_NOT_DETECTED
+            p.drawText(_t.MARGIN_LEFT + _t.STATUS_DOT_R + 6, y, lbl); y += _t.LINE_VALUE_H
+
+            # Logs
             p.setPen(QPen(self.TXT_DIM))
-            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
-            p.drawText(22, y, "LOGS"); y += 15
-            ls = app_info.LOG_DIR if len(app_info.LOG_DIR) <= 54 else "..." + app_info.LOG_DIR[-52:]
-            p.setFont(QFont("Consolas", 8)); p.drawText(22, y, ls)
-            bx, by_, bw_, bh_ = W//2-72, H-52, 144, 28
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
+            p.drawText(_t.MARGIN_LEFT, y, _t.LBL_LOGS); y += 15
+            ls = (app_info.LOG_DIR if len(app_info.LOG_DIR) <= _t.LOG_PATH_MAX_LEN
+                  else "..." + app_info.LOG_DIR[-_t.LOG_PATH_TAIL:])
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LOG_PATH))
+            p.drawText(_t.MARGIN_LEFT, y, ls)
+
+            # Eject button
+            bx = W // 2 - _t.EJECT_BTN_W // 2
+            by_ = H - _t.EJECT_BTN_MARGIN_BOTTOM
+            bw_, bh_ = _t.EJECT_BTN_W, _t.EJECT_BTN_H
             self._btn_rect = (bx, by_, bw_, bh_)
             p.setBrush(QBrush(self.RED_HOV if self._btn_hover else self.RED_DIM))
             p.setPen(QPen(self.RED if self._btn_hover else self.RED_OUT, 1))
             p.drawRect(bx, by_, bw_, bh_)
             p.setPen(QPen(self.RED))
-            p.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
-            p.drawText(bx, by_, bw_, bh_, Qt.AlignmentFlag.AlignCenter, "\u25a0  PUSH TO EJECT")
-            p.setPen(QPen(self.TXT_DIM)); p.setFont(QFont("Consolas", 7))
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_BUTTON, QFont.Weight.Bold))
+            p.drawText(bx, by_, bw_, bh_, Qt.AlignmentFlag.AlignCenter, _t.LBL_EJECT)
+
+            p.setPen(QPen(self.TXT_DIM))
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL))
             p.end()
 
         def mousePressEvent(self, e):
@@ -264,7 +288,7 @@ if __name__ == "__main__":
                 rx, ry, rw, rh = self._min_rect
                 if rx <= mx <= rx+rw and ry <= my <= ry+rh:
                     self.showMinimized(); return
-            if my < 80:
+            if my < _t.HEADER_H:
                 self._drag_pos = e.globalPosition().toPoint()
 
         def mouseMoveEvent(self, e):
@@ -300,7 +324,7 @@ if __name__ == "__main__":
             os.kill(os.getpid(), 9)
 
     _app = QApplication(sys.argv)
-    _app.setApplicationName("Falcon-Pad")
+    _app.setApplicationName(app_info.SHORT)
     _app.setApplicationVersion(app_info.VERSION)
     _win = FalconPadWindow()
     _app.exec()

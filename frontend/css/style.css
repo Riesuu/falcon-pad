@@ -976,14 +976,14 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
         }
         .cl-section{
           font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
-          color:#fff;letter-spacing:2px;text-transform:uppercase;
-          background:#0e4a52;padding:8px 10px;margin:8px 0 0;
+          color:#94a3b8;letter-spacing:2px;text-transform:uppercase;
+          background:rgba(255,255,255,.03);padding:8px 10px;margin:8px 0 0;
           border-left:3px solid #22d3ee;
           cursor:pointer;user-select:none;
           display:flex;align-items:center;gap:8px;
           transition:background .15s;
         }
-        .cl-section:hover{background:#125c66}
+        .cl-section:hover{background:rgba(255,255,255,.06)}
         .cl-section::before{
           content:'▶';font-size:8px;color:#22d3ee;
           transition:transform .2s;display:inline-block;
