@@ -127,7 +127,7 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 /* ═══ SYSTEM STATUS BAR (sous tab bar) ════════════════════════════ */
 #sysBar{
   position:fixed;bottom:56px;left:0;right:0;height:28px;z-index:1999;
-  background:rgba(4,10,24,.95);
+  background:#0d1117;
   border-top:1px solid rgba(74,222,128,.4);
   display:flex;align-items:center;padding:0 10px;gap:0;
   box-shadow:0 -4px 20px rgba(0,0,0,.6);
@@ -139,6 +139,8 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   display:flex;align-items:center;gap:6px;white-space:nowrap;
   pointer-events:none;
 }
+.sys-center-text{font-family:system-ui,sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,.6);letter-spacing:2px}
+.sys-center-ver{font-family:'Consolas',monospace;font-size:9px;color:rgba(74,222,128,.5);letter-spacing:1px}
 .sys-right{display:flex;align-items:center;gap:4px;margin-left:auto;flex-shrink:0}
 @media (max-width:900px){.sys-center{display:none}}
 @media (max-width:700px){.sys-fc{display:none}.sys-ip{display:none}}
@@ -153,18 +155,6 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   white-space:nowrap;
 }
 .sys-sep{width:1px;height:12px;background:rgba(255,255,255,.3);margin:0 8px;flex-shrink:0}
-.sys-sig{display:flex;align-items:center;gap:5px;}
-.sys-sig-line{width:18px;height:1px;background:linear-gradient(90deg,transparent,rgba(74,222,128,.3))}
-.sys-sig-line.r{background:linear-gradient(90deg,rgba(74,222,128,.3),transparent)}
-.sys-sig-text{
-  font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
-  color:rgba(255,255,255,.75);letter-spacing:2px;text-transform:uppercase;
-}
-.sys-sig-author{
-  font-family:'Consolas','Courier New',monospace;font-size:10px;
-  color:#4ade80;letter-spacing:1px;
-}
-.sys-sig-dot{width:3px;height:3px;border-radius:50%;background:rgba(74,222,128,.35);flex-shrink:0}
 
 /* Zulu */
 .sys-zulu{
@@ -253,6 +243,7 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   font:700 12px Consolas,monospace;letter-spacing:1px;
 }
 .sp-toggle:active{background:rgba(255,255,255,.15)}
+.sp-toggle[data-val="debug"]{color:#fbbf24;border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.1)}
 .sp-hint{
   font-family:system-ui,sans-serif;font-size:10px;
   color:rgba(148,163,184,.3);line-height:1.4;
@@ -972,26 +963,17 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
 
 /* ─── Section break ─── */
 
-        .cl-master{
-          cursor:pointer;user-select:none;
-          display:flex;align-items:center;gap:12px;margin-bottom:0;
-          padding:8px 12px;
+        .cl-header{
+          display:flex;align-items:center;gap:12px;
+          padding:8px 12px;margin-bottom:8px;
           background:rgba(34,211,238,.06);
           border:1px solid rgba(34,211,238,.15);
           border-radius:3px;
-          transition:background .15s;
         }
-        .cl-master:hover{background:rgba(34,211,238,.1)}
-        .cl-master-chevron{
-          font-size:10px;color:#22d3ee;transition:transform .25s;display:inline-block;
-        }
-        .cl-master.open .cl-master-chevron{transform:rotate(90deg)}
-        .cl-master-title{
+        .cl-header-title{
           font-family:system-ui,sans-serif;font-size:10px;font-weight:700;
           color:#22d3ee;letter-spacing:2px;text-transform:uppercase;
         }
-        .cl-master-body{overflow:hidden;max-height:0;transition:max-height .35s ease}
-        .cl-master-body.open{max-height:8000px;margin-top:6px}
         .cl-section{
           font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
           color:#fff;letter-spacing:2px;text-transform:uppercase;

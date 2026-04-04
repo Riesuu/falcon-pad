@@ -28,7 +28,7 @@ from sharedmem import BMSSharedMemory, safe_read
 logger = logging.getLogger(__name__)
 
 # ── Paths / constants ─────────────────────────────────────────────────────────
-ASSETS_DIR   = os.path.join(app_info.BUNDLE_DIR, "assets")
+ASSETS_DIR   = os.path.join(app_info.BUNDLE_DIR, "frontend", "images")
 FRONTEND_DIR = os.path.join(app_info.BUNDLE_DIR, "frontend")
 
 
@@ -131,9 +131,9 @@ if __name__ == "__main__":
 
     try:
         from PySide6.QtWidgets import QApplication, QWidget
-        from PySide6.QtCore    import Qt, QTimer
+        from PySide6.QtCore    import Qt, QTimer, QPointF
         from PySide6.QtGui     import (QPainter, QColor, QPen, QFont,
-                                       QPixmap, QIcon, QBrush)
+                                       QPixmap, QIcon, QBrush, QPolygonF)
     except ImportError:
         logger.error("PySide6 absent — pip install PySide6")
         raise SystemExit(0)
@@ -148,6 +148,10 @@ if __name__ == "__main__":
         RED_DIM    = QColor("#1a0808")
         RED_HOV    = QColor("#3d1010")
         RED_OUT    = QColor("#7f2222")
+        EJECT_YEL  = QColor("#fbbf24")
+        EJECT_BLK  = QColor("#1a1a1a")
+        EJECT_STRP = QColor("#000000")
+        EJECT_HOV  = QColor("#fcd34d")
         BLUE       = QColor("#60a5fa")
         TXT_DIM    = QColor("#64748b")
         TXT_MID    = QColor("#94a3b8")
@@ -164,11 +168,11 @@ if __name__ == "__main__":
             screen = QApplication.primaryScreen().availableGeometry()
             self.move((screen.width()-self.W)//2, (screen.height()-self.H)//2)
             self._logo = None
-            _lp = os.path.join(ASSETS_DIR, "logo_tk.png")
+            _lp = os.path.join(ASSETS_DIR, "logo.png")
             if os.path.exists(_lp):
                 px = QPixmap(_lp)
                 if not px.isNull():
-                    self._logo = px.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio,
+                    self._logo = px.scaled(380, 64, Qt.AspectRatioMode.KeepAspectRatio,
                                            Qt.TransformationMode.SmoothTransformation)
             self._drag_pos = self._btn_rect = self._min_rect = None
             self._btn_hover = self._min_hover = self._bms_ok = False
@@ -196,9 +200,7 @@ if __name__ == "__main__":
             p.fillRect(0, 0, W, 80, self.BG2)
             p.fillRect(0, 0, W, 3, self.ACCENT)
             p.setPen(QPen(self.ACCENT_DIM, 1))
-            p.drawRect(0, 0, W-1, H-1)
             p.drawLine(20, 80, W-20, 80)
-            p.drawLine(20, H-66, W-20, H-66)
             rx, ry, rw, rh = W-36, 10, 24, 18
             self._min_rect = (rx, ry, rw, rh)
             mc = self.TXT_MID if self._min_hover else self.TXT_DIM
@@ -206,16 +208,17 @@ if __name__ == "__main__":
             p.drawRect(rx, ry, rw, rh)
             p.setPen(QPen(mc, 2))
             p.drawLine(rx+5, ry+rh//2, rx+rw-5, ry+rh//2)
-            tx = 20
             if self._logo:
-                p.drawPixmap(12, 8, self._logo); tx = 88
-            p.setPen(QPen(self.ACCENT))
-            p.setFont(QFont("Consolas", 15, QFont.Weight.Bold))
-            p.drawText(tx, 8, W-tx-44, 40, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft, "FALCON-PAD")
-            p.setPen(QPen(self.TXT_DIM))
-            p.setFont(QFont("Consolas", 8))
-            p.drawText(tx, 48, W-tx-44, 20, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,
-                       f"v{app_info.VERSION}  ·  by {app_info.AUTHOR}")
+                lx = (W - self._logo.width()) // 2
+                p.drawPixmap(lx, 8, self._logo)
+            else:
+                p.setPen(QPen(self.ACCENT))
+                p.setFont(QFont("Consolas", 15, QFont.Weight.Bold))
+                p.drawText(20, 8, W-64, 40, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft, "FALCON-PAD")
+                p.setPen(QPen(self.TXT_DIM))
+                p.setFont(QFont("Consolas", 8))
+                p.drawText(20, 48, W-64, 20, Qt.AlignmentFlag.AlignVCenter|Qt.AlignmentFlag.AlignLeft,
+                           f"v{app_info.VERSION}  ·  by {app_info.AUTHOR}")
             y = 96
             p.setFont(QFont("Consolas", 7, QFont.Weight.Bold)); p.setPen(QPen(self.TXT_DIM))
             p.drawText(22, y, "LOCAL"); y += 17

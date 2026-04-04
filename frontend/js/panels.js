@@ -18,7 +18,7 @@
     }
     // Store for other uses (settings panel, about, etc.)
     window._appInfo = d;
-  } catch(e) { console.warn('app/info fetch failed:', e); }
+  } catch(e) { /* app/info fetch failed */ }
 })();
 
 function toggleTRTTPanel(){
@@ -56,7 +56,7 @@ document.addEventListener('click',e=>{
 //  SETTINGS
 // ══════════════════════════════════════════════════════════════════
 let _settingsOpen = false;
-// ── Couleurs & tailles par élément ──────────────────────────────
+// ── Element colors & sizes ──────────────────────────────────────
 const _ELEM_KEYS = ['stpt','fplan','ppt'];
 const _HSD_KEYS  = ['l1','l2','l3','l4'];
 
@@ -64,7 +64,7 @@ function onHsdColor(key, hex) {
   const varName = 'C_HSD_' + key.toUpperCase();
   if(typeof window[varName] !== 'undefined') window[varName] = hex;
   saveUiPref({['color_hsd_'+key]: hex});
-  // Redraw HSD lines immédiatement
+  // Redraw HSD lines immediately
   if(typeof _lastHsdLines !== 'undefined' && typeof updateHsdLines === 'function') updateHsdLines(_lastHsdLines);
 }
 
@@ -76,7 +76,7 @@ function onElemColor(key, hex) {
     document.querySelectorAll('.c-swatch').forEach(s=>s.classList.toggle('sel',s.dataset.color===hex));
   }
   saveUiPref({['color_'+key]: hex});
-  // Couleur : mise à jour directe des layers existants (pas de redraw)
+  // Color: direct update of existing layers (no redraw)
   if(typeof window._setMapColor === 'function') window._setMapColor(key, hex);
 }
 
@@ -93,7 +93,7 @@ function onElemSize(key, val) {
   const lbl = document.getElementById('sp-sv-'+key);
   if(lbl) lbl.textContent = v;
   saveUiPref({['size_'+key]: v});
-  // Taille : recréation nécessaire
+  // Size: recreation needed
   if(typeof window._setMapSize === 'function') window._setMapSize(key, v);
 }
 
@@ -137,7 +137,7 @@ async function loadSettings() {
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
     var ll = document.getElementById('sp-loglevel');
     if (ll) { ll.dataset.val = d.log_level || 'production'; ll.textContent = (d.log_level || 'production').toUpperCase(); }
-    // Sync couleurs & tailles des éléments
+    // Sync element colors & sizes
     _syncElemControls(d);
   } catch(e) {}
 }
@@ -200,13 +200,13 @@ document.getElementById('map').addEventListener('click', () => {
   if (_settingsOpen) toggleSettings();
 });
 
-// ── Horloge — BMS time prioritaire, fallback UTC ─────────────────
+// ── Clock — BMS time priority, fallback UTC ──────────────────────
 
 function updateZulu(){
   const el = document.getElementById('zuluClock');
   if (!el) return;
   let secs = null;
-  // Si BMS time reçu récemment (< 5s), interpoler depuis le timestamp
+  // If BMS time received recently (< 5s), interpolate from timestamp
   if (typeof _bmsTimeSec !== 'undefined' && _bmsTimeSec !== null && (Date.now() - _bmsTimeTs) < 5000) {
     const elapsed = Math.floor((Date.now() - _bmsTimeTs) / 1000);
     secs = (_bmsTimeSec + elapsed) % 86400;
@@ -248,9 +248,9 @@ setInterval(updateMissionClock, 1000);
 // ── Fullscreen ───────────────────────────────────────────────────
 function toggleFullscreen(){
   if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen().catch(e=>{});
+    document.documentElement.requestFullscreen().catch(()=>{});
   } else {
-    document.exitFullscreen().catch(e=>{});
+    document.exitFullscreen().catch(()=>{});
   }
 }
 document.addEventListener('fullscreenchange',()=>{
@@ -259,13 +259,13 @@ document.addEventListener('fullscreenchange',()=>{
   if(!btn||!icon) return;
   const fs = !!document.fullscreenElement;
   btn.style.color = fs ? 'rgba(74,222,128,.7)' : 'rgba(74,222,128,.3)';
-  // Changer icône : exit si fullscreen, enter si normal
+  // Toggle icon: exit if fullscreen, enter if normal
   icon.innerHTML = fs
     ? '<polyline points="9 3 3 3 3 9"/><polyline points="15 21 21 21 21 15"/><line x1="3" y1="3" x2="10" y2="10"/><line x1="21" y1="21" x2="14" y2="14"/>'
     : '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>';
 });
 
-// ── Affichage IP serveur ─────────────────────────────────────────
+// ── Server IP display ────────────────────────────────────────────
 (async function loadServerIp(){
   try{
     const d = await(await fetch('/api/server/info')).json();
@@ -288,88 +288,11 @@ document.addEventListener('click',e=>{
 });
 
 
-// ══ Checklist Ramp Start BMS 4.38 ═══════════════════════════════
-const CL_DATA=[
-  {section:'BOARDING'},
-  {n:1, item:'Canopy',            status:'Closed & locked',              loc:'sidewall & spider'},
-  {n:2, item:'Exterior Lights',   status:'ON',                           loc:'Ext Lightning panel'},
-  {n:3, item:'Engine Feed',       status:'NORM',                         loc:'Fuel panel'},
-  {n:4, item:'Elec. Power',       status:'Main Power ON',                loc:'Elec panel'},
-  {n:5, item:'ILS',               status:'Set as required',              loc:'Audio 2 panel'},
-  {n:6, item:'Radio & volume',    status:'ON / Set',                     loc:'Audio 1 panel'},
-  {n:7, item:'Radio Mode',        status:'Both UHF',                     loc:'Backup panel'},
-  {n:8, item:'Vol IVC/AI',        status:'Set as desired',               loc:'UHF Backup panel'},
-  {n:9, item:'Cockpit lights',    status:'Set as desired',               loc:'Lightning panel'},
-  {n:10,item:'Air Source',        status:'NORM',                         loc:'Air Cond panel'},
-  {n:11,item:'Anti-ice',          status:'ON',                           loc:'Anti-ice panel'},
-  {n:12,item:'Radio',             status:'IVC-UHF BACKUP 6 / 225.00',   loc:'callsign - ready to start engine'},
-  {section:'ENGINE START & CHECK'},
-  {n:1, item:'Throttle',          status:'Check / IDLE CUTOFF',          loc:'IRL & 3D'},
-  {n:2, item:'Start 2',           status:'ON — wait >20% RPM & SEC off', loc:'JFS panel'},
-  {n:3, item:'Idle Detent',       status:'Toggle',                       loc:'Throttle'},
-  {note:'FTIT <650 — OTHERWISE SHUTDOWN IMMEDIATELY! Hyd/oil >15PSI/40bar'},
-  {n:4, item:'RPM',               status:'CHECK 70%',                    loc:'Engine gauges'},
-  {n:5, item:'Master Caution',    status:'RESET',                        loc:'Left Eyebrow'},
-  {n:6, item:'FLCS',              status:'RESET',                        loc:'Flt control panel'},
-  {n:7, item:'Probe Heat',        status:'ON',                           loc:'Test panel'},
-  {n:8, item:'Master Caution',    status:'CHECK OFF',                    loc:'Left eyebrow'},
-  {n:9, item:'Probe Heat light',  status:'CHECK OFF',                    loc:'Caution panel'},
-  {section:'AVIONICS START'},
-  {n:1, item:'Avionics Power',    status:'ON — EGI ALIGN NORM',          loc:'Avionics Power panel'},
-  {n:2, item:'Sensors Power',     status:'ON — RDR ALT STD-BY',          loc:'Sensor power panel'},
-  {n:3, item:'Sym',               status:'Set as desired',               loc:'ICP'},
-  {n:4, item:'RWR',               status:'ON',                           loc:'Threat warning aux'},
-  {n:5, item:'EWS Power',         status:'ON',                           loc:'CMDS panel'},
-  {n:6, item:'HMCS',              status:'Set as desired',               loc:'HMCS panel'},
-  {n:7, item:'ECM',               status:'OPR ON',                       loc:'ECM panel'},
-  {n:8, item:'C&I',               status:'UFC',                          loc:'IFF panel'},
-  {n:9, item:'IFF Master',        status:'STAND-BY',                     loc:'IFF panel'},
-  {n:10,item:'INS',               status:'NAV (after READY)',            loc:'Avionics Power panel'},
-  {n:11,item:'MIDS',              status:'ON',                           loc:'Avionics Power panel'},
-  {n:12,item:'Test',              status:'Clear & check',                loc:'MFD'},
-  {n:13,item:'DTE Load',          status:'Load (after MIDS INIT)',       loc:'MFD'},
-  {n:14,item:'Radio freq & nav',  status:'Check',                        loc:'MFD & DED'},
-  {n:15,item:'Radio',             status:'IVC-VHF Flight',               loc:'callsign - radio check on victor'},
-  {section:'SETTINGS'},
-  {n:1, item:'Trim',              status:'Set as required',              loc:'Manual Trim panel'},
-  {n:2, item:'CatI/III',          status:'Set as required',              loc:'LG panel'},
-  {n:3, item:'RWR Mode',          status:'Set as desired',               loc:'Threat warning prime'},
-  {n:4, item:'HMCS',              status:'Aligned',                      loc:'ICP'},
-  {n:5, item:'TCN / ILS',         status:'Set as briefed',               loc:'ICP'},
-  {n:6, item:'Joker / Bingo',     status:'Set as briefed',               loc:'ICP'},
-  {n:7, item:'Data-link members', status:'Set as briefed',               loc:'ICP'},
-  {n:8, item:'Loadout (SMS)',      status:'Set as briefed',               loc:'MFD'},
-  {n:9, item:'Selective Jettison',status:'Pre-set as required',          loc:'MFD'},
-  {n:10,item:'TGP/WPN/HAD',       status:'ON and set',                   loc:'MFD'},
-  {n:11,item:'HDG - CRS',         status:'Set as required',              loc:'HSI'},
-  {n:12,item:'Alt Baro',          status:'Set',                          loc:'HUD panel'},
-  {n:13,item:'Seat',              status:'Adjust as desired',            loc:'Right sidewall'},
-  {section:'BEFORE TAXI'},
-  {n:1, item:'Anti-ice',          status:'AUTO (after 2min)',            loc:'Anti-ice panel'},
-  {n:2, item:'Oxygen supply',     status:'ON (after 2min)',              loc:'Oxygen regulator'},
-  {n:3, item:'RDR ALT',           status:'ON',                           loc:'SNSR Power panel'},
-  {n:4, item:'NWS',               status:'Engaged',                      loc:'Stick & Right indexer'},
-  {n:5, item:'FCR',               status:'CRM',                          loc:'MFD'},
-  {n:6, item:'Landing Lights',    status:'TAXI',                         loc:'GEAR panel'},
-  {n:7, item:'Seat',              status:'ARMED',                        loc:'Seat'},
-  {n:8, item:'IFF Master',        status:'NORM',                         loc:'IFF panel'},
-  {n:9, item:'Position Lights',   status:'FLASH',                        loc:'Ext Lightning panel'},
-  {n:10,item:'Radio',             status:'Ground',                       loc:'Remove EPU pins & remove chocks'},
-  {n:11,item:'Brakes',            status:'Check',                        loc:'Rudder/throttle'},
-  {n:12,item:'Master Caution',    status:'CHECK OFF',                    loc:'Eyebrow'},
-  {n:13,item:'F-ACK (PFL)',       status:'CHECK OFF',                    loc:'Eyebrow/PFL'},
-  {n:14,item:'Warning Lights',    status:'CHECK OFF',                    loc:'Caution panel'},
-  {n:15,item:'Radio',             status:'IVC',                          loc:'callsign - ready to taxi'},
-  {n:16,item:'Radio (Lead)',      status:'Ground',                       loc:'ready to taxi'},
-  {section:'BEFORE TAKE OFF (Hold Short)'},
-  {n:1, item:'Radio',             status:'IVC',                          loc:'callsign - holdshort'},
-  {n:2, item:'Pressure QNH',      status:'Set',                          loc:'Instr altimeter'},
-  {n:3, item:'Data-link BIT (Deputy)',status:'CONT & Send',              loc:'MFD & TQS'},
-  {n:4, item:'Landing Light',     status:'ON',                           loc:'LG panel'},
-  {n:5, item:'ACMI (Deputies)',   status:'Recording ON',                 loc:''},
-  {n:6, item:'Visor',             status:'Set as desired',               loc:'Helmet'},
-  {n:7, item:'Radio Tower (Lead)',status:'Ready for departure',          loc:''},
-];
+// ══ Checklist T.O. BMS1F-16CJ-1CL-1 (loaded from JSON) ═══════════
+var CL_DATA=[];
+fetch('/api/checklist').then(r=>r.json()).then(data=>{
+  if(data&&data.length){CL_DATA=data;clRender();}
+}).catch(()=>{});
 
 let clState={};
 try{clState=JSON.parse(localStorage.getItem('bms_cl_state')||'{}');}catch(e){}
@@ -395,7 +318,7 @@ function clRender(){
   });
 
   let html='',sec='',total=0,done=0,groupOpen=false;
-  CL_DATA.forEach((row,idx)=>{
+  CL_DATA.forEach(row=>{
     if(row.section){
       // Close previous group
       if(groupOpen) html+='</div>';
@@ -404,7 +327,8 @@ function clRender(){
       const cnt=secCounts[sec]||{total:0,done:0};
       const badge=cnt.done>0?`<span class="cl-section-count">${cnt.done}/${cnt.total}</span>`
                              :`<span class="cl-section-count">${cnt.total}</span>`;
-      html+=`<div class="cl-section${isOpen?' open':''}" onclick="clToggleSec(this,'${sec.replace(/'/g,"\\'")}')">
+      var secColor=row.color?` style="border-left:3px solid ${row.color};color:${row.color}"`:'';
+      html+=`<div class="cl-section${isOpen?' open':''}"${secColor} onclick="clToggleSec(this,'${sec.replace(/'/g,"\\'")}')">
         ${_esc(row.section)}${badge}</div>`;
       html+=`<div class="cl-group${isOpen?' open':''}">`;
       groupOpen=true;
@@ -456,13 +380,6 @@ function clToggle(key,row){
 }
 
 function clReset(){clState={};clOpenSecs={};clSave();clSaveOpen();clRender();}
-function clToggleMaster(){
-  const m=document.getElementById('cl-master');
-  const b=document.getElementById('cl-master-body');
-  if(!m||!b)return;
-  const isOpen=m.classList.toggle('open');
-  b.classList.toggle('open',isOpen);
-}
 clRender(); // Init on page load
 
 // ── Tab switching ────────────────────────────────────────────────
@@ -487,8 +404,8 @@ function switchTab(name, btn) {
     return;
   }
 
-  // Fermer tous les autres
-  Object.entries(PANELS).forEach(([k, p]) => {
+  // Close all other panels
+  Object.entries(PANELS).forEach(([, p]) => {
     p.classList.remove('open');
   });
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -503,10 +420,10 @@ function switchTab(name, btn) {
     document.getElementById('charts-frame').src = (window._appInfo && window._appInfo.charts) || 'https://www.falcon-charts.com';
   }
 
-  // Refresh GPS data immédiatement
+  // Refresh GPS data immediately
   if (name === 'gps') refreshGpsPanel();
 
-  // Charger la liste briefing à chaque ouverture
+  // Load briefing list on each open
   if (name === 'briefing') briefingLoadList();
 }
 
@@ -684,7 +601,7 @@ async function briefingUpload(files) {
       const r = await fetch('/api/briefing/upload', {method:'POST', body:fd});
       const d = await r.json();
       if (d.files) lastFiles = d.files;
-    } catch(e) { console.error('Upload error:', e); }
+    } catch(e) { /* upload error */ }
   }
   briefingRenderList(lastFiles);
   btn.innerHTML = origTxt;
@@ -704,7 +621,7 @@ async function briefingDelete(name) {
       document.getElementById('briefPlaceholder').style.display = 'flex';
     }
     briefingRenderList(d.files);
-  } catch(e) { console.error('Delete error:', e); }
+  } catch(e) { /* delete error */ }
 }
 
 // ── Kneeboard subtabs ────────────────────────────────────────────
@@ -1072,7 +989,7 @@ function buildGpsSteers(route) {
   });
 }
 
-// Hook into existing updateAircraft and loadMission (map.js doit être chargé avant)
+// Hook into existing updateAircraft and loadMission (map.js must be loaded first)
 if(typeof updateAircraft !== 'undefined') {
   const _origUpdateAircraft = updateAircraft;
   window.updateAircraft = function(d) {
@@ -1110,14 +1027,14 @@ map.on('click', () => {
     try{
       await new Promise(r=>setTimeout(r, 1000 + attempt*2000));
       const s=await(await fetch('/api/ini/status')).json();
-      console.log('[INIT] ini/status attempt',attempt+1,':',JSON.stringify(s));
+      // ini/status attempt logged
       if(s.loaded&&s.mtime&&s.mtime!==_lastIniMtime){
         _lastIniFile=s.file;_lastIniMtime=s.mtime;
         loadMission(true);
-        console.log('[INIT] Mission loaded:',s.file,'mtime:',s.mtime);
+        // mission loaded
         return;
       }
-    }catch(e){console.warn('[INIT] error:',e);}
+    }catch(e){ /* init error */ }
   }
-  console.log('[INIT] No mission found after 3 attempts');
+  // no mission found after 3 attempts
 })();

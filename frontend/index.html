@@ -179,16 +179,10 @@
     <span class="sys-bms-tag">BMS</span>
     <span id="statusText">NOT DETECTED</span>
   </div>
-  <!-- Centre: signature -->
+  <!-- Centre -->
   <div class="sys-center">
-    <div class="sys-sig">
-      <div class="sys-sig-line"></div>
-      <div class="sys-sig-dot"></div>
-      <span class="sys-sig-text" id="app-name">FALCON-PAD</span>
-      <span class="sys-sig-author">by RIESU</span>
-      <div class="sys-sig-dot"></div>
-      <div class="sys-sig-line r"></div>
-    </div>
+    <span class="sys-center-text" id="app-name">FALCON-PAD</span>
+    <span class="sys-center-ver">by RIESU</span>
   </div>
   <!-- Droite: IP serveur + zulu + site + settings -->
   <div class="sys-right">
@@ -745,19 +739,15 @@
     </div>
 
 
-    <!-- ── CHECKLIST RAMP START ── -->
+    <!-- ── CHECKLIST T.O. BMS1F-16CJ-1CL-1 ── -->
     <div class="kb-page active" id="kb-chklist">
 
-      <div class="cl-master" id="cl-master" onclick="clToggleMaster()">
-        <span class="cl-master-chevron">▶</span>
-        <span class="cl-master-title">RAMP START — BMS 4.38 SQN SOP</span>
+      <div class="cl-header">
+        <span class="cl-header-title">CHECKLIST — T.O. BMS 4.38</span>
         <span class="cl-progress" id="cl-prog">0 / 0</span>
-        <button class="cl-reset-btn" onclick="event.stopPropagation();clReset()">RESET</button>
+        <button class="cl-reset-btn" onclick="clReset()">RESET</button>
       </div>
-
-      <div class="cl-master-body" id="cl-master-body">
-        <div id="cl-list"></div>
-      </div>
+      <div id="cl-list"></div>
     </div>
 
     <!-- script checklist déplacé en bas -->

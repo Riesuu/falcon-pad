@@ -53,6 +53,16 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             return []
         return airports.load(get_theater_name())
 
+    @app.get("/api/checklist")
+    async def get_checklist():
+        import json as _json
+        _cl_path = os.path.join(app_info.BUNDLE_DIR, "data", "checklists", "f16_checklist.json")
+        try:
+            with open(_cl_path, encoding="utf-8") as f:
+                return _json.load(f)
+        except Exception:
+            return []
+
     @app.get("/api/ini/status")
     async def ini_status():
         status = mission.ini_status()
@@ -172,10 +182,11 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         if s.log_level is not None and s.log_level in ("production", "debug"):
             config.APP_CONFIG["log_level"] = s.log_level
             import logging as _lg
+            from logging.handlers import RotatingFileHandler as _RFH
             lvl = _lg.DEBUG if s.log_level == "debug" else _lg.INFO
             _lg.getLogger().setLevel(lvl)
             for h in _lg.getLogger().handlers:
-                if isinstance(h, _lg.handlers.RotatingFileHandler):
+                if isinstance(h, _RFH):
                     h.setLevel(lvl)
             changed.append("log_level")
         config.save(config.APP_CONFIG)
