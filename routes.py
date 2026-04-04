@@ -21,6 +21,7 @@ import airports
 import app_info
 import config
 import mission
+import tacview_server
 import trtt
 import ui_prefs
 import ui_theme
@@ -305,7 +306,18 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 "connected": diag.get("connected", False),
                 "thread_alive": diag.get("thread_alive", False),
                 "nb_contacts": diag.get("nb_contacts_raw", 0),
-                "config_bms": app_info.BMS_CONFIG_HINT}
+                "config_bms": app_info.BMS_CONFIG_HINT,
+                "tacview_server": tacview_server.status()}
+
+    class TacviewServerModel(BaseModel):
+        enabled: bool
+
+    @app.post("/api/acmi/tacview-server")
+    async def tacview_server_toggle(body: TacviewServerModel):
+        result = tacview_server.set_enabled(body.enabled)
+        if "error" in result:
+            raise HTTPException(400, result["error"])
+        return {"ok": True, **result}
 
     # ── Briefing ─────────────────────────────────────────────────
     _BRIEFING_ALLOWED = app_info.BRIEFING_ALLOWED_EXT

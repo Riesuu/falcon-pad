@@ -44,7 +44,9 @@
       "Bash(python -m pytest tests/ --tb=short -q)",
       "Bash(curl -s -o /tmp/bms_manual.pdf -L \"https://cdn.falcon-bms.com/docs/4.38/TO%201F-16CMAM-34-1-1%20BMS.pdf\" -w \"%{size_download} bytes, %{http_code}\")",
       "Bash(grep -En \"[0-9]{3,}|5000|3000|1000|2000|1500|300|200|100|400|600|800|9888|42674|86400\" c:/Users/Lyes/Documents/00_DEV/frontend/js/panels.js)",
-      "Bash(python -c ':*)"
+      "Bash(python -c ':*)",
+      "WebSearch",
+      "WebFetch(domain:raia-software-inc.gitbook.io)"
     ]
   }
 }

@@ -18,11 +18,12 @@ import time as _time
 
 import config
 import mission
+import tacview_server
 import trtt
-from stringdata import (detect_theater, get_bms_briefings_dir, get_bms_user_dir,
-                        get_bullseye, get_campaign_dir, get_hsd_lines,
-                        get_mk_markpoints, get_ppt_threats, get_steerpoints,
-                        read_all_strings)
+from stringdata import (detect_theater, get_bms_basedir, get_bms_briefings_dir,
+                        get_bms_user_dir, get_bullseye, get_campaign_dir,
+                        get_hsd_lines, get_mk_markpoints, get_ppt_threats,
+                        get_steerpoints, read_all_strings)
 from theaters import detect_theater_from_coords_multi, get_theater, get_theater_name
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ import app_info
 _bms_last_reconnect = 0.0
 bms_campaign_dir = ""
 bms_briefings_dir = ""
+_tacview_server_detected = False
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -75,7 +77,7 @@ def _try_float(s: str) -> bool:
 # ── Main broadcast loop ──────────────────────────────────────────────────────
 
 async def broadcast_loop(bms, ws_clients, safe_read) -> None:
-    global _bms_last_reconnect, bms_campaign_dir, bms_briefings_dir
+    global _bms_last_reconnect, bms_campaign_dir, bms_briefings_dir, _tacview_server_detected
     while True:
         try:
             if not bms.connected:
@@ -105,6 +107,12 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                     if _bd:
                         bms_briefings_dir = _bd
                     _thr_changed = detect_theater(_strings)
+                    # Detect tacview-server.exe once per BMS session
+                    if not _tacview_server_detected:
+                        _basedir = get_bms_basedir(_strings)
+                        if _basedir:
+                            tacview_server.detect(_basedir)
+                            _tacview_server_detected = True
                     # Load radio presets from pilot INI if not yet loaded
                     if not mission.mission_data.get("radio"):
                         _ud = get_bms_user_dir(_strings)
