@@ -46,7 +46,8 @@
       "Bash(grep -En \"[0-9]{3,}|5000|3000|1000|2000|1500|300|200|100|400|600|800|9888|42674|86400\" c:/Users/Lyes/Documents/00_DEV/frontend/js/panels.js)",
       "Bash(python -c ':*)",
       "WebSearch",
-      "WebFetch(domain:raia-software-inc.gitbook.io)"
+      "WebFetch(domain:raia-software-inc.gitbook.io)",
+      "Bash(python -m pytest tests/ -v --tb=short)"
     ]
   }
 }
