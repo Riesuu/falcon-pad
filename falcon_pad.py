@@ -19,11 +19,11 @@ from starlette.responses import Response as _StarResp
 
 import app_info
 import config
-import trtt
-from broadcast import broadcast_loop, ini_watcher_loop, broadcast, theater_msg, _try_float
-import broadcast as _bc
-from routes import register_routes
-from sharedmem import BMSSharedMemory, safe_read
+from core import trtt
+from core.broadcast import broadcast_loop, ini_watcher_loop, broadcast, theater_msg, _try_float
+import core.broadcast as _bc
+from server.routes import register_routes
+from core.sharedmem import BMSSharedMemory, safe_read
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         logger.error("PySide6 absent — pip install PySide6")
         raise SystemExit(0)
 
-    import ui_theme as _t
+    from ui import ui_theme as _t
 
     class FalconPadWindow(QWidget):
         W, H = _t.WIN_W, _t.WIN_H
@@ -157,6 +157,7 @@ if __name__ == "__main__":
         RED_HOV    = QColor(_t.RED_HOV)
         RED_OUT    = QColor(_t.RED_OUT)
         BLUE       = QColor(_t.BLUE)
+        GREEN      = QColor(_t.GREEN)
         TXT_DIM    = QColor(_t.TXT_DIM)
         TXT_MID    = QColor(_t.TXT_MID)
         TXT_WHITE  = QColor(_t.TXT_WHITE)
@@ -179,7 +180,8 @@ if __name__ == "__main__":
                     56, Qt.TransformationMode.SmoothTransformation)
             self._drag_pos = self._btn_rect = self._min_rect = None
             self._local_rect = self._net_rect = None
-            self._btn_hover = self._min_hover = self._bms_ok = False
+            self._local_hover = self._net_hover = False
+            self._btn_hover = self._min_hover = self._bms_ok = self._acmi_ok = False
             self._timer = QTimer(self)
             self._timer.timeout.connect(self._poll_bms)
             self._timer.start(_t.BMS_POLL_MS)
@@ -190,8 +192,10 @@ if __name__ == "__main__":
         def _poll_bms(self):
             try:
                 ok = bms.connected or bms.try_reconnect()
-                if ok != self._bms_ok:
+                acmi = trtt.is_connected()
+                if ok != self._bms_ok or acmi != self._acmi_ok:
                     self._bms_ok = ok
+                    self._acmi_ok = acmi
                     self.update()
             except Exception:
                 pass
@@ -241,23 +245,24 @@ if __name__ == "__main__":
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
             p.setPen(QPen(self.TXT_DIM))
             p.drawText(_t.MARGIN_LEFT, y, _t.LBL_LOCAL); y += _t.LINE_LABEL_H
-            _url_font = QFont(_t.FONT_FAMILY, _t.FONT_VALUE)
-            _url_font.setUnderline(True)
+            _url_font = QFont(_t.FONT_MONO, _t.FONT_VALUE)
+            _url_font.setUnderline(self._local_hover)
             p.setFont(_url_font)
-            p.setPen(QPen(self.TXT_WHITE))
             _local_url = f"http://localhost:{SERVER_PORT}"
+            p.setPen(QPen(self.ACCENT if self._local_hover else self.TXT_WHITE))
             p.drawText(_t.MARGIN_LEFT, y, _local_url)
             self._local_rect = (_t.MARGIN_LEFT, y - 14, p.fontMetrics().horizontalAdvance(_local_url), 18)
             y += _t.LINE_VALUE_H
 
             # NETWORK
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
-            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
             p.setPen(QPen(self.TXT_DIM))
             p.drawText(_t.MARGIN_LEFT, y, _t.LBL_NETWORK); y += _t.LINE_LABEL_H
-            p.setFont(_url_font)
-            p.setPen(QPen(self.BLUE))
+            _url_font2 = QFont(_t.FONT_MONO, _t.FONT_VALUE)
+            _url_font2.setUnderline(self._net_hover)
+            p.setFont(_url_font2)
             _net_url = f"http://{SERVER_IP}:{SERVER_PORT}"
+            p.setPen(QPen(self.ACCENT if self._net_hover else self.BLUE))
             p.drawText(_t.MARGIN_LEFT, y, _net_url)
             self._net_rect = (_t.MARGIN_LEFT, y - 14, p.fontMetrics().horizontalAdvance(_net_url), 18)
             y += _t.LINE_VALUE_H
@@ -266,13 +271,25 @@ if __name__ == "__main__":
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
             p.setPen(QPen(self.TXT_DIM))
             p.drawText(_t.MARGIN_LEFT, y, app_info.BMS.upper()); y += _t.LINE_LABEL_H
-            dc = self.BLUE if self._bms_ok else self.RED
+            dc = self.GREEN if self._bms_ok else self.RED
             p.setBrush(QBrush(dc)); p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(_t.MARGIN_LEFT, y-9, _t.STATUS_DOT_R, _t.STATUS_DOT_R)
             p.setPen(QPen(dc))
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_STATUS, QFont.Weight.Bold))
             lbl = _t.LBL_CONNECTED if self._bms_ok else _t.LBL_NOT_DETECTED
             p.drawText(_t.MARGIN_LEFT + _t.STATUS_DOT_R + 6, y, lbl); y += _t.LINE_VALUE_H
+
+            # ACMI status
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
+            p.setPen(QPen(self.TXT_DIM))
+            p.drawText(_t.MARGIN_LEFT, y, "ACMI  (g_bTacviewRealTime 1)"); y += _t.LINE_LABEL_H
+            ac = self.GREEN if self._acmi_ok else self.RED
+            p.setBrush(QBrush(ac)); p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(_t.MARGIN_LEFT, y-9, _t.STATUS_DOT_R, _t.STATUS_DOT_R)
+            p.setPen(QPen(ac))
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_STATUS, QFont.Weight.Bold))
+            p.drawText(_t.MARGIN_LEFT + _t.STATUS_DOT_R + 6, y,
+                       _t.LBL_CONNECTED if self._acmi_ok else _t.LBL_NOT_DETECTED); y += _t.LINE_VALUE_H
 
             # Logs
             p.setPen(QPen(self.TXT_DIM))
@@ -337,8 +354,12 @@ if __name__ == "__main__":
                 h2 = rx <= mx <= rx+rw and ry <= my <= ry+rh
                 if h2 != self._min_hover:
                     self._min_hover = h2; self.update()
-            # Hand cursor over URLs
-            over_url = self._in_rect(mx, my, self._local_rect) or self._in_rect(mx, my, self._net_rect)
+            # URL hover state
+            lh = self._in_rect(mx, my, self._local_rect)
+            nh = self._in_rect(mx, my, self._net_rect)
+            if lh != self._local_hover or nh != self._net_hover:
+                self._local_hover = lh; self._net_hover = nh; self.update()
+            over_url = lh or nh
             self.setCursor(Qt.CursorShape.PointingHandCursor if over_url else Qt.CursorShape.ArrowCursor)
 
         def mouseReleaseEvent(self, _e):

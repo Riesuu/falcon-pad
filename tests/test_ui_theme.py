@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for ui_theme.py — Qt GUI theme constants validation."""
 
-import ui_theme
+from ui import ui_theme
 
 
 class TestColors:

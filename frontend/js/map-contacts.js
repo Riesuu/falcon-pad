@@ -38,20 +38,21 @@ function updateAcmiContacts(contacts){
     groups.push({leader:i,members,cLat,cLon});
   }
 
-  // Render blips
+  // Render blips (skip unknown/neutral — not realistic, not on HSD)
   valid.forEach(c=>{
     const camp=c.camp||3;
+    if(camp!==1&&camp!==2) return;
     const hdg=(c.heading||0);
     let svg;
     if(camp===1){
       svg=`<svg width="${iconSz}" height="${iconSz}" viewBox="0 0 ${iconSz} ${iconSz}">
         <rect x="${cx-sq}" y="${cx-sq}" width="${sq*2}" height="${sq*2}"
-          fill="#4ade80" stroke="#4ade80" stroke-width="1"/>
+          fill="${C_ALLY}" stroke="${C_ALLY}" stroke-width="1"/>
         ${c.heading!=null?`<line x1="${cx}" y1="${cx}" x2="${cx}" y2="${cx-lineLen}"
-          stroke="#4ade80" stroke-width="1.5"
+          stroke="${C_ALLY}" stroke-width="1.5"
           transform="rotate(${hdg},${cx},${cx})"/>`:''}</svg>`;
     } else {
-      const col=camp===2?'#ef4444':'#e2e8f0';
+      const col=camp===2?C_ENEMY:'#e2e8f0';
       svg=`<svg width="${iconSz}" height="${iconSz}" viewBox="0 0 ${iconSz} ${iconSz}">
         <g transform="rotate(${hdg},${cx},${cx})">
           <polygon points="${cx},${cx-8} ${cx-6},${cx+5} ${cx+6},${cx+5}"
@@ -68,7 +69,7 @@ function updateAcmiContacts(contacts){
 
   // Friendly labels (one per group)
   if(z < 9) return;
-  const col='#4ade80';
+  const col=C_ALLY;
   groups.forEach(g=>{
     const n=g.members.length;
     const lead=valid[g.leader];

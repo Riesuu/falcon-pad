@@ -62,6 +62,6 @@ OSAN_BMS_Y = 1_550_000.0  # East ft
 @pytest.fixture(autouse=True)
 def set_korea_theater():
     """Force le théâtre Korea pour tous les tests."""
-    from theaters import set_active_theater
+    from core.theaters import set_active_theater
     set_active_theater("Korea")
     yield

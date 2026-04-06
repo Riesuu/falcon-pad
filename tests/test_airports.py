@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-import airports
+from core import airports
 
 
 class TestLoad:
@@ -45,6 +45,6 @@ class TestLoad:
 
 class TestLoadMissingFile:
     def test_missing_data_dir_returns_empty(self, monkeypatch):
-        monkeypatch.setattr("airports._DIR", "/nonexistent_path_12345")
+        monkeypatch.setattr("core.airports._DIR", "/nonexistent_path_12345")
         airports._cache.clear()
         assert airports.load("Korea") == []

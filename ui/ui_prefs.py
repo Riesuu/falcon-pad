@@ -36,6 +36,12 @@ DEFAULTS: dict = {
     "color_fplan":      "#f59e0b", "size_fplan":     4,   "size_fplan_line": 2,
     "color_ppt":        "#ef4444", "size_ppt":       1.2, "size_ppt_dot":    5,
     "color_bull":       "#60a5fa", "size_bull":      8,  "bull_visible":   True,
+    # Aircraft / contacts / airport colors
+    "color_aircraft":   "#5eead4",
+    "color_ally":       "#4ade80",
+    "color_enemy":      "#ef4444",
+    "color_ap_blue":    "#60a5fa",
+    "color_ap_red":     "#f87171",
     # HSD line colors L1–L4
     "color_hsd_l1":     "#4ade80",
     "color_hsd_l2":     "#60a5fa",

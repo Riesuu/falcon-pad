@@ -28,7 +28,7 @@ import threading
 import time
 from typing import Dict, List, Optional, Tuple
 
-from theaters import in_theater_bbox
+from core.theaters import in_theater_bbox
 
 logger = logging.getLogger(__name__)
 

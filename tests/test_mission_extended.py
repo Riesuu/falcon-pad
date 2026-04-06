@@ -5,7 +5,7 @@ import textwrap
 
 import pytest
 
-import mission
+from core import mission
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -126,13 +126,13 @@ class TestParseIniFile:
 
 class TestFindLatestIni:
     def test_no_files_returns_empty(self, monkeypatch):
-        monkeypatch.setattr("mission._registry_ini_patterns", lambda: [])
+        monkeypatch.setattr("core.mission._registry_ini_patterns", lambda: [])
         path, mtime = mission.find_latest_ini()
         assert path == ""
         assert mtime == 0.0
 
     def test_finds_ini_with_stpt(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("mission._registry_ini_patterns", lambda: [])
+        monkeypatch.setattr("core.mission._registry_ini_patterns", lambda: [])
         ini = tmp_path / "dtc.ini"
         ini.write_text("[STPT]\nSteerpoint_1 = 390000,1040000,10000\n")
         patterns = [str(tmp_path / "*.ini")]
@@ -141,7 +141,7 @@ class TestFindLatestIni:
         assert mtime > 0
 
     def test_ignores_ini_without_stpt(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("mission._registry_ini_patterns", lambda: [])
+        monkeypatch.setattr("core.mission._registry_ini_patterns", lambda: [])
         ini = tmp_path / "nope.ini"
         ini.write_text("[OTHER]\nkey=val\n")
         patterns = [str(tmp_path / "*.ini")]
@@ -150,7 +150,7 @@ class TestFindLatestIni:
 
     def test_mission_ini_deprioritized(self, tmp_path, monkeypatch):
         """mission.ini should be deprioritized vs a same-mtime DTC file."""
-        monkeypatch.setattr("mission._registry_ini_patterns", lambda: [])
+        monkeypatch.setattr("core.mission._registry_ini_patterns", lambda: [])
         stpt = "[STPT]\nSteerpoint_1 = 390000,1040000,10000\n"
         dtc = tmp_path / "callsign.ini"
         dtc.write_text(stpt)

@@ -34,7 +34,7 @@ import struct
 from typing import Callable, Dict, List, Optional, Tuple
 
 import app_info
-from theaters import (
+from core.theaters import (
     bms_to_latlon,
     in_theater_bbox,
     set_active_theater,

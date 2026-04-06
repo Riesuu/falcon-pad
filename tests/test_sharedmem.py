@@ -49,7 +49,7 @@ class TestReadAllStrings:
     """Tests de read_all_strings avec blobs en mémoire."""
 
     def test_header_too_short(self):
-        from stringdata import read_all_strings
+        from core.stringdata import read_all_strings
         from tests.conftest import make_reader
         # Blob trop court pour le header (< 12 bytes)
         blob = b"\x00" * 8
@@ -57,7 +57,7 @@ class TestReadAllStrings:
         assert result == {}
 
     def test_zero_strings(self):
-        from stringdata import read_all_strings
+        from core.stringdata import read_all_strings
         from tests.conftest import make_reader
         # Header valide mais 0 strings
         blob = struct.pack("<III", 3, 0, 0)
@@ -65,7 +65,7 @@ class TestReadAllStrings:
         assert result == {}
 
     def test_too_many_strings_rejected(self):
-        from stringdata import read_all_strings
+        from core.stringdata import read_all_strings
         from tests.conftest import make_reader
         # no_strings = 600 > 500 → rejeté
         blob = struct.pack("<III", 3, 600, 100)
@@ -73,7 +73,7 @@ class TestReadAllStrings:
         assert result == {}
 
     def test_valid_single_string(self):
-        from stringdata import read_all_strings, STRID_THR_NAME
+        from core.stringdata import read_all_strings, STRID_THR_NAME
         from tests.conftest import _encode_strings_blob, make_reader
         blob, _ = _encode_strings_blob([(STRID_THR_NAME, "Korea")])
         strings = read_all_strings(0, make_reader(blob))

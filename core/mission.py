@@ -30,7 +30,7 @@ import time
 from typing import List, Optional, Tuple
 
 import app_info
-from theaters import bms_to_latlon, in_theater_bbox, get_theater_name
+from core.theaters import bms_to_latlon, in_theater_bbox, get_theater_name
 
 logger = logging.getLogger(__name__)
 

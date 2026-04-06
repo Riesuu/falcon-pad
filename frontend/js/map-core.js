@@ -59,8 +59,17 @@ function updateTheater(data) {
   if(_currentTheater === data.name) return;
   _currentTheater = data.name;
   console.log('[theater] switched to:', data.name);
+  _updateTheaterTag(data.name);
+
   loadAirports();
   if(!followAircraft) map.setView([data.center_lat, data.center_lon], data.zoom);
+}
+
+function _updateTheaterTag(name) {
+  var el = document.getElementById('theaterTag');
+  if(!el) return;
+  if(name) { el.textContent = name; el.style.display = 'inline-block'; }
+  else { el.style.display = 'none'; }
 }
 
 (async function _initTheater() {
@@ -68,6 +77,8 @@ function updateTheater(data) {
     const d = await (await fetch('/api/theater')).json();
     if(d && d.name) {
       _currentTheater = d.name;
+      _updateTheaterTag(d.name);
+      _drawBorders(d.name);
       if(!window._hasAircraftPos) map.setView([d.center_lat, d.center_lon], d.zoom);
     }
   } catch(e) { console.warn('[theater] init failed:', e); }
@@ -105,22 +116,6 @@ layers.dark.on('tileerror', function(){
 });
 map.attributionControl.setPrefix('');
 
-// ── DMZ ────────────────────────────────────────────────────────
-const _dmzLine = L.polyline([
-  [37.750,126.450],[37.840,126.500],[37.900,126.558],[37.941,126.600],
-  [37.956,126.677],[37.960,126.750],[37.940,126.850],[37.920,126.950],
-  [37.900,127.050],[37.890,127.150],[37.880,127.250],[37.900,127.350],
-  [37.930,127.450],[37.960,127.550],[38.000,127.650],[38.050,127.750],
-  [38.100,127.850],[38.150,127.950],[38.200,128.000],[38.280,128.050],
-  [38.350,128.100],[38.400,128.150],[38.450,128.200],[38.520,128.250],
-  [38.580,128.320],[38.620,128.370]],
-  {color:'#dc2626',weight:2,opacity:.7,dashArray:'10 5'}).addTo(map);
-let _dmzVisible = true;
-document.getElementById('dmzBtn')?.addEventListener('click',function(){
-  _dmzVisible = !_dmzVisible;
-  this.classList.toggle('active', _dmzVisible);
-  _dmzVisible ? _dmzLine.addTo(map) : map.removeLayer(_dmzLine);
-});
 
 // ── Colors & sizes ─────────────────────────────────────────────
 const COLORS=['#ef4444','#f97316','#f59e0b','#eab308','#10b981','#4ade80','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#1e293b'];
@@ -137,6 +132,11 @@ var C_FPLAN = '#f59e0b'; var S_FPLAN = 4;
 var C_PPT   = '#ef4444'; var S_PPT   = 1.2; var S_PPT_DOT = 5;
 var C_BULL  = '#60a5fa'; var S_BULL  = 8;
 var C_MK    = '#fbbf24'; var S_MK    = 2.5;
+var C_AIRCRAFT = '#5eead4';
+var C_ALLY     = '#4ade80';
+var C_ENEMY    = '#ef4444';
+var C_AP_BLUE  = '#60a5fa';
+var C_AP_RED   = '#f87171';
 
 function applyUiPrefs(p) {
   if(p.color_hsd_l1) C_HSD_L1 = p.color_hsd_l1;
@@ -153,6 +153,11 @@ function applyUiPrefs(p) {
   if(p.color_ppt)   C_PPT   = p.color_ppt;
   if(p.size_ppt)    S_PPT   = p.size_ppt;
   if(p.color_bull)  C_BULL  = p.color_bull;
+  if(p.color_aircraft) C_AIRCRAFT = p.color_aircraft;
+  if(p.color_ally)     C_ALLY     = p.color_ally;
+  if(p.color_enemy)    C_ENEMY    = p.color_enemy;
+  if(p.color_ap_blue)  C_AP_BLUE  = p.color_ap_blue;
+  if(p.color_ap_red)   C_AP_RED   = p.color_ap_red;
   if(p.size_bull)   S_BULL  = p.size_bull;
   if(p.active_color && COLORS.includes(p.active_color)) {
     activeColor = p.active_color;

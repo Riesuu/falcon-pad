@@ -22,7 +22,7 @@ import struct
 from typing import Dict, Optional
 
 import app_info
-from theaters import bms_to_latlon, in_theater_bbox
+from core.theaters import bms_to_latlon, in_theater_bbox, is_theater_detected
 
 logger = logging.getLogger(__name__)
 
@@ -193,11 +193,19 @@ class BMSSharedMemory:
         hdg_f = hdg % 360.0
         kias_f = kias
         z_f = z
-        lat_f = safe_float(self.ptr2 + FD2_LAT)
-        lon_f = safe_float(self.ptr2 + FD2_LON)
-        if None in (lat_f, lon_f):
-            logger.warning("get_position: safe_read failed (FD2 lat/lon)")
-            return None
+        # Position: use FD_X/FD_Y (North/East ft) + TMERC conversion
+        # FD2_LAT/FD2_LON are inaccurate and inconsistent with steerpoints/bullseye
+        x_f = safe_float(self.ptr1 + FD_X)    # North ft
+        y_f = safe_float(self.ptr1 + FD_Y)    # East ft
+        if None in (x_f, y_f) or (x_f == 0.0 and y_f == 0.0):
+            # Fallback to FD2 if FD_X/FD_Y unavailable
+            lat_f = safe_float(self.ptr2 + FD2_LAT)
+            lon_f = safe_float(self.ptr2 + FD2_LON)
+            if None in (lat_f, lon_f):
+                logger.warning("get_position: safe_read failed (lat/lon)")
+                return None
+        else:
+            lat_f, lon_f = bms_to_latlon(x_f, y_f)
         alt = abs(z_f)
 
         # BMS time (seconds since midnight)

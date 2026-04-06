@@ -10,16 +10,16 @@ function makeAircraftIcon(hdg,alt,kias,realHdg){
   const sz=48,cx=sz/2,sq=4,lineLen=20;
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}">
     <rect x="${cx-sq}" y="${cx-sq}" width="${sq*2}" height="${sq*2}"
-      fill="#5eead4" stroke="#5eead4" stroke-width="1"/>
+      fill="${C_AIRCRAFT}" stroke="${C_AIRCRAFT}" stroke-width="1"/>
     <line x1="${cx}" y1="${cx}" x2="${cx}" y2="${cx-lineLen}"
-      stroke="#5eead4" stroke-width="1.5" transform="rotate(${hdg},${cx},${cx})"/>
+      stroke="${C_AIRCRAFT}" stroke-width="1.5" transform="rotate(${hdg},${cx},${cx})"/>
   </svg>`;
   const label=`<div style="
     position:absolute;left:${sz-4}px;top:-4px;
     white-space:nowrap;pointer-events:none;
     font-family:'Consolas','Courier New',monospace;font-size:13px;font-weight:700;
-    letter-spacing:.8px;line-height:1.5;color:#5eead4;
-    text-shadow:0 0 6px rgba(94,234,212,.4),0 1px 3px #000;
+    letter-spacing:.8px;line-height:1.5;color:${C_AIRCRAFT};
+    text-shadow:0 0 6px ${C_AIRCRAFT}66,0 1px 3px #000;
   "><div>${hdgStr} ${spdStr}</div>${altFL?`<div>${altFL}</div>`:''}</div>`;
   return L.divIcon({html:`<div style="position:relative;width:${sz}px;height:${sz}px">${svg}${label}</div>`,className:'',iconSize:[sz,sz],iconAnchor:[cx,cx]});
 }

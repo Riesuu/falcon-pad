@@ -131,9 +131,11 @@ function _renderMissionData(d, noSetView=false){
       }
       d.route.forEach((p,i)=>{
         const _sm=L.circleMarker([p.lat,p.lon],{radius:S_STPT,color:c,fillColor:c,fillOpacity:.9,weight:2});_sm._fpType='stpt';_sm.addTo(map);missionMarkers.push(_sm);
+        const _stOff=-(S_STPT+2);
+        const _stFs=Math.max(9,Math.round(S_STPT*1.5+3));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
-          html:`<div style="font-family:'Consolas','Courier New',monospace;color:${C_STPT};font-size:9px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
-          className:'',iconSize:[16,12],iconAnchor:[-5,6]
+          html:`<div style="font-family:'Consolas','Courier New',monospace;color:${C_STPT};font-size:${_stFs}px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
+          className:'',iconSize:[20,16],iconAnchor:[_stOff,_stFs/2]
         })}).addTo(map));
       });
       if(!noSetView) map.setView([d.route[0].lat,d.route[0].lon],9);

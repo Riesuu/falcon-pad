@@ -9,8 +9,8 @@ Copyright (C) 2024  Riesu — GNU GPL v3
 """
 
 # ── Window ──────────────────────────────────────────────────────────────────
-WIN_W = 420
-WIN_H = 350
+WIN_W = 440
+WIN_H = 400
 HEADER_H = 80
 ACCENT_LINE_H = 3
 
@@ -28,18 +28,20 @@ EJECT_BLK  = "#1a1a1a"
 EJECT_STRP = "#000000"
 EJECT_HOV  = "#fcd34d"
 BLUE       = "#60a5fa"
+GREEN      = "#4ade80"
 TXT_DIM    = "#64748b"
 TXT_MID    = "#94a3b8"
 TXT_WHITE  = "#e2e8f0"
 
 # ── Fonts ───────────────────────────────────────────────────────────────────
-FONT_FAMILY    = "Consolas"
-FONT_TITLE     = 15
-FONT_SUBTITLE  = 8
-FONT_LABEL     = 7
-FONT_VALUE     = 11
-FONT_STATUS    = 10
-FONT_BUTTON    = 11
+FONT_FAMILY    = "Segoe UI"
+FONT_MONO      = "Consolas"
+FONT_TITLE     = 16
+FONT_SUBTITLE  = 9
+FONT_LABEL     = 8
+FONT_VALUE     = 12
+FONT_STATUS    = 11
+FONT_BUTTON    = 12
 FONT_LOG_PATH  = 8
 
 # ── Layout (pixel offsets) ──────────────────────────────────────────────────
@@ -50,8 +52,8 @@ TITLE_H         = 40
 SUBTITLE_Y      = 48
 SUBTITLE_H      = 20
 CONTENT_START_Y = 96
-LINE_LABEL_H    = 17
-LINE_VALUE_H    = 25
+LINE_LABEL_H    = 19
+LINE_VALUE_H    = 28
 STATUS_DOT_R    = 10
 
 # ── Minimize button ────────────────────────────────────────────────────────

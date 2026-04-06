@@ -82,85 +82,33 @@
 
 <!-- ═══ LEFT TOOLBAR (tactique) ═════════════════════════════════ -->
 <div id="toolbar">
-  <button class="tool-btn active" id="pptBtn" title="PPT threat circles">
-    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
-      <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
-    </svg>
-  </button>
+  <button class="tool-btn active" id="pptBtn" title="PPT threat circles" style="font-family:'Consolas',monospace;font-size:9px;font-weight:700;letter-spacing:.5px;color:#e2e8f0;line-height:1.1">PPT<br>CIRC</button>
 
-  <button class="tool-btn active" id="pptLabelBtn" title="PPT threat names">
-    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
-      <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
-      <line x1="15" y1="9" x2="21" y2="9"/><line x1="15" y1="12" x2="21" y2="12"/>
-    </svg>
-  </button>
+  <button class="tool-btn active" id="pptLabelBtn" title="PPT threat names" style="font-family:'Consolas',monospace;font-size:9px;font-weight:700;letter-spacing:.5px;color:#e2e8f0;line-height:1.1">PPT<br>NAME</button>
 
 
-<button class="tool-btn active" id="airportBtn" title="Airports">
-    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
-      <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19 4c-2 0-4 0-5.5 1.5L10 9 1.8 7.2c-.5-.1-.9.4-.8.9L3 11l3-1 .8 2.8L5 14l2 2 1.2-1.8L10 15l-1 3 3.1 1c.4.1 1-.3.9-.8z"/>
-    </svg>
-  </button>
-  
+<button class="tool-btn active" id="airportBtn" title="Airports" style="font-family:'Consolas',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:#e2e8f0">APRT</button>
+  <button class="tool-btn" id="apNameBtn" title="Airport names" style="font-family:'Consolas',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:#e2e8f0">ICAO</button>
+  <button class="tool-btn active" id="runwayBtn" title="Runways" style="font-family:'Consolas',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:#e2e8f0">RWY</button>
+
+  <div class="tool-divider"></div>
+
   <button class="tool-btn active" id="bullBtn" title="Bullseye">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
       <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5" fill="none"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
     </svg>
   </button>
-
-  <button class="tool-btn active" id="hsdBtn" title="HSD Lines (L1–L4)">
-    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
-      <line x1="3" y1="6"  x2="21" y2="6"/>
-      <line x1="3" y1="12" x2="21" y2="12"/>
-      <line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-  </button>
-
-  
   <button class="tool-btn active" id="followBtn" title="Center on aircraft (active)">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9" stroke-dasharray="4 2"/>
-      <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
-      <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <circle cx="12" cy="12" r="10" stroke-width="1.5"/>
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+      <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+      <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
     </svg>
   </button>
+  <button class="tool-btn" id="compassBtn" title="North Up (click for Track Up)" style="font-family:'Consolas',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:#e2e8f0">N/S</button>
 
-  <button class="tool-btn" id="compassBtn" title="North Up (click for Track Up)">
-    <svg id="compassSvg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-      <circle cx="12" cy="12" r="10"/>
-      <polygon points="12,3 14,11 12,10 10,11" fill="#ef4444" stroke="none"/>
-      <polygon points="12,21 14,13 12,14 10,13" fill="currentColor" stroke="none" opacity=".35"/>
-      <text x="12" y="5.5" text-anchor="middle" fill="#ef4444" font-size="4.5" font-weight="700" font-family="system-ui" stroke="none">N</text>
-    </svg>
-  </button>
-
-  
   <div class="tool-divider"></div>
-
-  <button class="tool-btn active" id="dmzBtn" title="DMZ line">
-    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
-      <line x1="2" y1="12" x2="22" y2="12" stroke-dasharray="4 2"/>
-      <line x1="2" y1="9"  x2="22" y2="9"  stroke-dasharray="4 2" opacity=".4"/>
-      <line x1="2" y1="15" x2="22" y2="15" stroke-dasharray="4 2" opacity=".4"/>
-    </svg>
-  </button>
-
-  <button class="tool-btn" id="apNameBtn" title="Airport names">
-    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
-      <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19 4c-2 0-4 0-5.5 1.5L10 9 1.8 7.2c-.5-.1-.9.4-.8.9L3 11l3-1 .8 2.8L5 14l2 2 1.2-1.8L10 15l-1 3 3.1 1c.4.1 1-.3.9-.8z"/>
-      <line x1="14" y1="20" x2="22" y2="20"/>
-    </svg>
-  </button>
-
-  <button class="tool-btn active" id="runwayBtn" title="Runways">
-    <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
-      <rect x="9" y="2" width="6" height="20" rx="1"/>
-      <line x1="12" y1="6"  x2="12" y2="6"/>
-      <line x1="12" y1="10" x2="12" y2="10"/>
-      <line x1="12" y1="14" x2="12" y2="14"/>
-      <line x1="12" y1="18" x2="12" y2="18"/>
-    </svg>
-  </button>
 
   <button class="tool-btn" id="layerBtn" title="Map layers">
     <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2">
@@ -178,6 +126,7 @@
     <div class="dot off" id="dot"></div>
     <span class="sys-bms-tag">BMS</span>
     <span id="statusText">NOT DETECTED</span>
+    <span id="theaterTag" style="display:none;margin-left:8px;padding:1px 7px;border-radius:2px;font-family:system-ui,sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa"></span>
   </div>
   <!-- Centre -->
   <div class="sys-center">
@@ -251,6 +200,15 @@
     <div class="sp-divider"></div>
     <div class="sp-row">
       <label class="sp-label">MAP ELEMENT COLORS & SIZES</label>
+
+      <!-- ── OWNSHIP / CONTACTS / AIRPORTS (compact) ── -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:6px 0 10px">
+        <div style="display:flex;align-items:center;gap:6px"><span class="sp-elem-lbl" style="width:auto">Ownship</span><input type="color" class="sp-cpick" id="sp-c-aircraft" value="#5eead4" oninput="onCustomColor('aircraft',this.value)"></div>
+        <div style="display:flex;align-items:center;gap:6px"><span class="sp-elem-lbl" style="width:auto">Ally</span><input type="color" class="sp-cpick" id="sp-c-ally" value="#4ade80" oninput="onCustomColor('ally',this.value)"></div>
+        <div style="display:flex;align-items:center;gap:6px"><span class="sp-elem-lbl" style="width:auto">Enemy</span><input type="color" class="sp-cpick" id="sp-c-enemy" value="#ef4444" oninput="onCustomColor('enemy',this.value)"></div>
+        <div style="display:flex;align-items:center;gap:6px"><span class="sp-elem-lbl" style="width:auto">AP <span style="color:#60a5fa">&#9670;</span></span><input type="color" class="sp-cpick" id="sp-c-ap_blue" value="#60a5fa" oninput="onCustomColor('ap_blue',this.value)"></div>
+        <div style="display:flex;align-items:center;gap:6px"><span class="sp-elem-lbl" style="width:auto">AP <span style="color:#f87171">&#9670;</span></span><input type="color" class="sp-cpick" id="sp-c-ap_red" value="#f87171" oninput="onCustomColor('ap_red',this.value)"></div>
+      </div>
 
       <!-- ── STEERPOINTS ── -->
       <div class="sp-group-label">STEERPOINTS</div>

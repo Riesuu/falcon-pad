@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests — theaters.py : projection TMERC et détection de théâtre."""
 import pytest
-from theaters import (
+from core.theaters import (
     bms_to_latlon, in_theater_bbox,
     set_active_theater, get_theater_name, THEATER_DB,
 )

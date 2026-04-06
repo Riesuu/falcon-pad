@@ -80,6 +80,17 @@ function onElemColor(key, hex) {
   if(typeof window._setMapColor === 'function') window._setMapColor(key, hex);
 }
 
+var _apColorTimer = null;
+function onCustomColor(key, hex) {
+  const varMap = {aircraft:'C_AIRCRAFT',ally:'C_ALLY',enemy:'C_ENEMY',ap_blue:'C_AP_BLUE',ap_red:'C_AP_RED'};
+  if(varMap[key]) window[varMap[key]] = hex;
+  saveUiPref({['color_'+key]: hex});
+  if(key==='ap_blue'||key==='ap_red') {
+    clearTimeout(_apColorTimer);
+    _apColorTimer = setTimeout(function(){ if(typeof loadAirports==='function') loadAirports(); }, 400);
+  }
+}
+
 function onBullColor(hex) {
   C_BULL = hex;
   saveUiPref({color_bull: hex});
@@ -127,6 +138,11 @@ function _syncElemControls(p) {
   if(bullCp && p.color_bull) bullCp.value = p.color_bull;
   const bullSz = document.getElementById('sp-s-bull');
   if(bullSz && p.size_bull) bullSz.value = p.size_bull;
+  // Aircraft / contacts / airport colors
+  ['aircraft','ally','enemy','ap_blue','ap_red'].forEach(k => {
+    const cp = document.getElementById('sp-c-'+k);
+    if(cp && p['color_'+k]) cp.value = p['color_'+k];
+  });
 }
 
 async function loadSettings() {

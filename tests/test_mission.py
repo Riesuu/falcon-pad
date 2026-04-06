@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests — mission.py : parsing fichiers .ini BMS."""
 import pytest
-from mission import parse_ini_content
+from core.mission import parse_ini_content
 
 
 # ── Fixtures INI ─────────────────────────────────────────────────────────────

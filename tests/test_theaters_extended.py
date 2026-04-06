@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from theaters import (
+from core.theaters import (
     THEATER_DB, TheaterParams,
     bms_to_latlon, bms_to_latlon_theater,
     detect_theater_from_coords, detect_theater_from_coords_multi,

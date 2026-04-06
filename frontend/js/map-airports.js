@@ -10,7 +10,7 @@ var apIconMarkers = [];
 
 function buildApPopup(ap) {
   const isEnemy = ap.side === 'red';
-  const col  = isEnemy ? '#f87171' : '#60a5fa';
+  const col  = isEnemy ? C_AP_RED : C_AP_BLUE;
   const parts = [`<span class="ap-l1-icao" style="color:${col}">${_esc(ap.icao)}</span>`];
   if (ap.tacan) { parts.push(`<span class="ap-l1-dot">·</span>`); parts.push(`<span class="ap-l1-tacan">${_esc(ap.tacan)}</span>`); }
   if (ap.freq)  { parts.push(`<span class="ap-l1-dot">·</span>`); parts.push(`<span class="ap-l1-freq">${_esc(ap.freq)}</span>`); }
@@ -39,7 +39,7 @@ async function loadAirports() {
     const apNameOn = _apNameVisible;
     aps.forEach(ap => {
       const isEnemy = ap.side === 'red';
-      const col = isEnemy ? 'rgba(248,113,113,.85)' : 'rgba(96,165,250,.85)';
+      const col = isEnemy ? C_AP_RED : C_AP_BLUE;
       const sz = 13;
       const sym = `<svg width="${sz}" height="${sz}" viewBox="0 0 13 13" style="cursor:pointer">
         <polygon points="6.5,1 12,6.5 6.5,12 1,6.5" fill="${col}" stroke="rgba(0,0,0,.7)" stroke-width="1.5"/>

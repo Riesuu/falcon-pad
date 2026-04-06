@@ -17,13 +17,12 @@ import os
 import time as _time
 
 import config
-import mission
-import trtt
-from stringdata import (detect_theater, get_bms_briefings_dir, get_bms_user_dir,
-                        get_bullseye, get_campaign_dir, get_hsd_lines,
-                        get_mk_markpoints, get_ppt_threats, get_steerpoints,
-                        read_all_strings)
-from theaters import detect_theater_from_coords_multi, get_theater, get_theater_name
+from core import mission, trtt
+from core.stringdata import (detect_theater, get_bms_briefings_dir, get_bms_user_dir,
+                             get_bullseye, get_campaign_dir, get_hsd_lines,
+                             get_mk_markpoints, get_ppt_threats, get_steerpoints,
+                             read_all_strings)
+from core.theaters import detect_theater_from_coords_multi, get_theater, get_theater_name
 
 logger = logging.getLogger(__name__)
 

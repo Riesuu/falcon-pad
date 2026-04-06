@@ -4,14 +4,14 @@
 
 class TestParsers:
     def test_parse_color(self):
-        from trtt import _parse_color
+        from core.trtt import _parse_color
         assert _parse_color("Blue") == 1
         assert _parse_color("Red") == 2
         assert _parse_color("Grey") == 3
         assert _parse_color("") == 3
 
     def test_parse_type(self):
-        from trtt import _parse_type
+        from core.trtt import _parse_type
         assert _parse_type("Air+FixedWing") == "air"
         assert _parse_type("Air+Rotorcraft") == "air"
         assert _parse_type("Ground+Static") == "ground"
@@ -21,27 +21,27 @@ class TestParsers:
         assert _parse_type("Unknown") == "other"
 
     def test_parse_props(self):
-        from trtt import _parse_props
+        from core.trtt import _parse_props
         result = _parse_props("Name=Viper1,Color=Blue,Type=Air+FixedWing")
         assert result == {"Name": "Viper1", "Color": "Blue", "Type": "Air+FixedWing"}
 
     def test_parse_props_with_position(self):
-        from trtt import _parse_props
+        from core.trtt import _parse_props
         result = _parse_props("T=0.123|0.456|5000|||180.0")
         assert result == {"T": "0.123|0.456|5000|||180.0"}
 
     def test_parse_props_empty(self):
-        from trtt import _parse_props
+        from core.trtt import _parse_props
         assert _parse_props("") == {}
 
 
 class TestPublicAPI:
     def test_get_contacts_empty(self):
-        from trtt import get_contacts
+        from core.trtt import get_contacts
         assert get_contacts() == []
 
     def test_get_diagnostics(self):
-        from trtt import get_diagnostics
+        from core.trtt import get_diagnostics
         d = get_diagnostics()
         assert d["connected"] is False
         assert d["nb_contacts_raw"] == 0

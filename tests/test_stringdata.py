@@ -3,7 +3,7 @@
 import struct
 import pytest
 
-from stringdata import (
+from core.stringdata import (
     read_all_strings,
     get_steerpoints, get_ppt_threats,
     get_dl_markpoints, get_mk_markpoints, get_hsd_lines,
@@ -202,7 +202,7 @@ class TestGetDlMarkpoints:
         strings = _read(blob, reader)
         lat, lon = 37.09, 127.03  # proche de KOR_X/KOR_Y
         # Calcul approx de la lat/lon pour KOR_X/KOR_Y
-        from theaters import bms_to_latlon
+        from core.theaters import bms_to_latlon
         own_lat, own_lon = bms_to_latlon(KOR_X, KOR_Y)
         marks = get_dl_markpoints(strings, own_lat=own_lat, own_lon=own_lon)
         assert len(marks) == 0  # exclu car c'est ownship
@@ -276,21 +276,21 @@ class TestDetectTheater:
     def test_detects_from_thr_name(self):
         blob, reader = _encode_strings_blob([(STRID_THR_NAME, "Balkans")])
         strings = read_all_strings(0, make_reader(blob))
-        import stringdata as sd
+        from core import stringdata as sd
         sd._last_thr_name = ""  # reset cache
         changed = detect_theater(strings)
         assert changed is True
-        from theaters import get_theater_name
+        from core.theaters import get_theater_name
         assert get_theater_name() == "Balkans"
         # Cleanup
-        from theaters import set_active_theater
+        from core.theaters import set_active_theater
         set_active_theater("Korea")
         sd._last_thr_name = ""
 
     def test_no_change_if_same_theater(self):
         blob, reader = _encode_strings_blob([(STRID_THR_NAME, "Korea")])
         strings = read_all_strings(0, make_reader(blob))
-        import stringdata as sd
+        from core import stringdata as sd
         sd._last_thr_name = "Korea"
         changed = detect_theater(strings)
         assert changed is False

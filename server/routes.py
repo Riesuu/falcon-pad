@@ -18,15 +18,13 @@ from fastapi import File, HTTPException, UploadFile, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-import airports
 import app_info
 import config
-import mission
-import trtt
-import ui_prefs
-import ui_theme
-from theaters import (detect_theater_from_coords_multi,
-                      get_theater, get_theater_name, is_theater_detected)
+from core import airports, mission, trtt
+from ui import ui_prefs, ui_theme
+from core.theaters import (detect_theater_from_coords_multi,
+                           get_theater, get_theater_name, is_theater_detected,
+                           THEATER_DB)
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +202,24 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 "charts": app_info.CHARTS,
                 "github": app_info.GITHUB, "bms": app_info.BMS}
 
+    @app.get("/api/theaters")
+    async def theaters_list():
+        active = get_theater_name().lower() if is_theater_detected() else None
+        seen = set()
+        theaters = []
+        for key, tp in THEATER_DB.items():
+            canonical = tp.name.lower()
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            theaters.append({
+                "name": tp.name,
+                "active": canonical == (active or "").lower(),
+                "bbox": {"lat_min": tp.bbox[0], "lat_max": tp.bbox[1],
+                         "lon_min": tp.bbox[2], "lon_max": tp.bbox[3]},
+            })
+        return {"theaters": theaters, "active": get_theater_name() if is_theater_detected() else None}
+
     @app.get("/api/theater")
     async def theater_info():
         if not is_theater_detected():
@@ -241,6 +257,11 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         size_stpt_line:   Optional[float] = None
         size_fplan_line:  Optional[float] = None
         size_ppt_dot:     Optional[float] = None
+        color_aircraft:   Optional[str]   = None
+        color_ally:       Optional[str]   = None
+        color_enemy:      Optional[str]   = None
+        color_ap_blue:    Optional[str]   = None
+        color_ap_red:     Optional[str]   = None
         color_hsd_l1:     Optional[str]   = None
         color_hsd_l2:     Optional[str]   = None
         color_hsd_l3:     Optional[str]   = None
@@ -256,7 +277,9 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     async def ui_prefs_save(p: UiPrefsModel):
         hex_re = r"#[0-9a-fA-F]{6}$"
         for key in ("active_color", "color_draw", "color_stpt", "color_fplan", "color_ppt",
-                    "color_bull", "color_hsd_l1", "color_hsd_l2", "color_hsd_l3", "color_hsd_l4"):
+                    "color_bull", "color_aircraft", "color_ally", "color_enemy",
+                    "color_ap_blue", "color_ap_red",
+                    "color_hsd_l1", "color_hsd_l2", "color_hsd_l3", "color_hsd_l4"):
             val = getattr(p, key)
             if val is not None and re.match(hex_re, val):
                 ui_prefs.prefs[key] = val
