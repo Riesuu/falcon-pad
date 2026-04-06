@@ -129,10 +129,10 @@ function _renderMissionData(d, noSetView=false){
       for(let i=0;i<d.route.length-1;i++){
         const _sl=L.polyline([[d.route[i].lat,d.route[i].lon],[d.route[i+1].lat,d.route[i+1].lon]],{color:c,weight:S_STPT_LINE});_sl._fpType='stpt_line';_sl.addTo(map);missionMarkers.push(_sl);
       }
+      const _stOff=-(S_STPT+2);
+      const _stFs=Math.max(9,Math.round(S_STPT*1.5+3));
       d.route.forEach((p,i)=>{
         const _sm=L.circleMarker([p.lat,p.lon],{radius:S_STPT,color:c,fillColor:c,fillOpacity:.9,weight:2});_sm._fpType='stpt';_sm.addTo(map);missionMarkers.push(_sm);
-        const _stOff=-(S_STPT+2);
-        const _stFs=Math.max(9,Math.round(S_STPT*1.5+3));
         missionMarkers.push(L.marker([p.lat,p.lon],{icon:L.divIcon({
           html:`<div style="font-family:'Consolas','Courier New',monospace;color:${C_STPT};font-size:${_stFs}px;font-weight:700;text-shadow:0 1px 4px #000">${i+1}</div>`,
           className:'',iconSize:[20,16],iconAnchor:[_stOff,_stFs/2]

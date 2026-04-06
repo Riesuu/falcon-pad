@@ -52,7 +52,7 @@ function updateAcmiContacts(contacts){
           stroke="${C_ALLY}" stroke-width="1.5"
           transform="rotate(${hdg},${cx},${cx})"/>`:''}</svg>`;
     } else {
-      const col=camp===2?C_ENEMY:'#e2e8f0';
+      const col=C_ENEMY;
       svg=`<svg width="${iconSz}" height="${iconSz}" viewBox="0 0 ${iconSz} ${iconSz}">
         <g transform="rotate(${hdg},${cx},${cx})">
           <polygon points="${cx},${cx-8} ${cx-6},${cx+5} ${cx+6},${cx+5}"

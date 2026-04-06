@@ -87,7 +87,7 @@ function onCustomColor(key, hex) {
   saveUiPref({['color_'+key]: hex});
   if(key==='ap_blue'||key==='ap_red') {
     clearTimeout(_apColorTimer);
-    _apColorTimer = setTimeout(function(){ if(typeof loadAirports==='function') loadAirports(); }, 400);
+    _apColorTimer = setTimeout(function(){ _apColorTimer=null; if(typeof loadAirports==='function') loadAirports(); }, 400);
   }
 }
 

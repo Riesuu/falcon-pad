@@ -79,7 +79,8 @@
       "Bash(grep -rn \"c-swatch\\\\|cGrid\\\\|COLORS.forEach\" \"c:\\\\Users\\\\Lyes\\\\Documents\\\\00_DEV\\\\frontend\\\\js\\\\\" --include=\"*.js\")",
       "Bash(python -m pytest tests/test_theaters.py tests/test_theaters_extended.py -x -q)",
       "Bash(git stash:*)",
-      "Bash(python -m pytest tests/test_theaters_extended.py::TestBmsToLatlonTheater::test_balkans_explicit -x -q)"
+      "Bash(python -m pytest tests/test_theaters_extended.py::TestBmsToLatlonTheater::test_balkans_explicit -x -q)",
+      "Bash(grep -v \"^\\\\s*//\")"
     ]
   }
 }

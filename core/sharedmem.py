@@ -191,8 +191,6 @@ class BMSSharedMemory:
             return None
 
         hdg_f = hdg % 360.0
-        kias_f = kias
-        z_f = z
         # Position: use FD_X/FD_Y (North/East ft) + TMERC conversion
         # FD2_LAT/FD2_LON are inaccurate and inconsistent with steerpoints/bullseye
         x_f = safe_float(self.ptr1 + FD_X)    # North ft
@@ -206,36 +204,23 @@ class BMSSharedMemory:
                 return None
         else:
             lat_f, lon_f = bms_to_latlon(x_f, y_f)
-        alt = abs(z_f)
+        alt = abs(z)
 
         # BMS time (seconds since midnight)
-        bms_time: Optional[int] = None
-        raw_t = safe_read(self.ptr1 + FD_CURRENT_TIME, 4)
-        if raw_t:
-            try:
-                bms_time = int(struct.unpack('<i', raw_t)[0])
-                if bms_time < 0 or bms_time > 86400:
-                    bms_time = None
-            except (struct.error, ValueError):
-                bms_time = None
+        bms_time: Optional[int] = safe_int32(self.ptr1 + FD_CURRENT_TIME)
+        if bms_time is not None and (bms_time < 0 or bms_time > 86400):
+            bms_time = None
 
         # Bullseye (BMS North/East ft → WGS-84)
         bull_lat: Optional[float] = None
         bull_lon: Optional[float] = None
-        raw_bx = safe_read(self.ptr2 + FD2_BULLSEYE_X, 4)
-        raw_by = safe_read(self.ptr2 + FD2_BULLSEYE_Y, 4)
-        if raw_bx and raw_by:
-            try:
-                bx = struct.unpack('<f', raw_bx)[0]
-                by = struct.unpack('<f', raw_by)[0]
-                if abs(bx) > 10 and abs(by) > 10:
-                    _bl, _bn = bms_to_latlon(bx, by)
-                    bull_lat = float(_bl)
-                    bull_lon = float(_bn)
-                    if not in_theater_bbox(bull_lat, bull_lon):
-                        bull_lat = bull_lon = None
-            except (struct.error, ValueError, TypeError):
-                pass  # bullseye data not yet available
+        bx = safe_float(self.ptr2 + FD2_BULLSEYE_X)
+        by = safe_float(self.ptr2 + FD2_BULLSEYE_Y)
+        if bx is not None and by is not None and abs(bx) > 10 and abs(by) > 10:
+            _bl, _bn = bms_to_latlon(bx, by)
+            bull_lat, bull_lon = float(_bl), float(_bn)
+            if not in_theater_bbox(bull_lat, bull_lon):
+                bull_lat = bull_lon = None
 
         # Pilot count (solo vs MP)
         pilots_online: int = 1
@@ -247,7 +232,7 @@ class BMSSharedMemory:
                 pilots_online = 1
 
         logger.debug(f"lat={lat_f:.4f} lon={lon_f:.4f} hdg={hdg_f:.1f} "
-                     f"alt={alt:.0f}ft kias={kias_f:.0f}kt bms_t={bms_time} "
+                     f"alt={alt:.0f}ft kias={kias:.0f}kt bms_t={bms_time} "
                      f"pilots={pilots_online}")
 
         if (-90 <= lat_f <= 90 and -180 <= lon_f <= 180
