@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 import app_info
 
 _bms_last_reconnect = 0.0
+_ini_fallback_done = False
 bms_campaign_dir = ""
 bms_briefings_dir = ""
 
@@ -75,7 +76,7 @@ def _try_float(s: str) -> bool:
 # ── Main broadcast loop ──────────────────────────────────────────────────────
 
 async def broadcast_loop(bms, ws_clients, safe_read) -> None:
-    global _bms_last_reconnect, bms_campaign_dir, bms_briefings_dir
+    global _bms_last_reconnect, _ini_fallback_done, bms_campaign_dir, bms_briefings_dir
     while True:
         try:
             if not bms.connected:
@@ -96,6 +97,11 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
             if bms.connected:
                 ptr_str = (bms.shm_ptrs.get("FalconSharedMemoryAreaString")
                            or bms.shm_ptrs.get("FalconSharedMemoryArea3"))
+                # Retry SHM mapping if StringData is missing (e.g. started before 3D)
+                if not ptr_str and len(bms.shm_ptrs) < 5:
+                    bms.try_reconnect()
+                    ptr_str = (bms.shm_ptrs.get("FalconSharedMemoryAreaString")
+                               or bms.shm_ptrs.get("FalconSharedMemoryArea3"))
                 if ptr_str:
                     _strings = read_all_strings(ptr_str, safe_read)
                     _cd = get_campaign_dir(_strings)
@@ -115,7 +121,22 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                     _shm_threats = get_ppt_threats(_strings)
                     if (_shm_route or _shm_threats) and ws_clients:
                         mission.update_from_shm(_shm_route, _shm_threats)
+                        _ini_fallback_done = False  # SHM has data, reset fallback
                         await broadcast(ws_clients, json.dumps({"type": "mission", "data": mission.mission_data}))
+                    # Fallback: if SHM has no route, try loading from INI files (once)
+                    elif not mission.mission_data.get("route") and not _ini_fallback_done:
+                        _ud = get_bms_user_dir(_strings)
+                        if _ud:
+                            _cfg_dir = os.path.join(_ud, "Config")
+                            _ini_extra = [os.path.join(_cfg_dir, "*.ini")]
+                            if bms_campaign_dir and os.path.isdir(bms_campaign_dir):
+                                _ini_extra.append(os.path.join(bms_campaign_dir, "*.ini"))
+                            _ini_path, _ = mission.find_latest_ini(_ini_extra)
+                            if _ini_path:
+                                mission.parse_ini_file(_ini_path)
+                                if mission.mission_data.get("route") and ws_clients:
+                                    await broadcast(ws_clients, json.dumps({"type": "mission", "data": mission.mission_data}))
+                            _ini_fallback_done = True
                     _mk_marks = get_mk_markpoints(_strings)
                     _hsd      = get_hsd_lines(_strings)
                     # Bullseye from StringData CB navpoint (fallback if FlightData2 is null)

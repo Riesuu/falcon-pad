@@ -54,7 +54,9 @@
       "Bash(grep -n \"127.0.0.1\\\\|\\\\\"::1\\\\\"\\\\|localhost\" c:/Users/Lyes/Documents/00_DEV/*.py)",
       "Bash(grep -n \"^[[:space:]]*#.*=\\\\|^[[:space:]]*#.*def\\\\|^[[:space:]]*#.*class\" c:/Users/Lyes/Documents/00_DEV/*.py)",
       "Bash(grep -n \"pass\\\\s*#\\\\|continue\\\\s*#\\\\|break\\\\s*#\" c:/Users/Lyes/Documents/00_DEV/*.py)",
-      "Bash(grep -n \"from routes import\\\\|import routes\\\\|register_routes\" c:/Users/Lyes/Documents/00_DEV/*.py)"
+      "Bash(grep -n \"from routes import\\\\|import routes\\\\|register_routes\" c:/Users/Lyes/Documents/00_DEV/*.py)",
+      "Bash(python -c \"import sharedmem; print\\('OK'\\)\")",
+      "Bash(python3 -c ':*)"
     ]
   }
 }

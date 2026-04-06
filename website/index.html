@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Falcon-Pad — Real-time tactical companion for Falcon BMS 4.38. Map, steerpoints, radio presets, checklists and more on your tablet.">
+  <title>Falcon-Pad — Tactical Companion for Falcon BMS</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="../frontend/images/favicon.ico">
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <img src="../frontend/images/logo.png" alt="Falcon-Pad">
+  </div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#setup">Setup</a>
+    <a href="#faq">FAQ</a>
+    <a href="https://github.com/riesu/falcon-pad" target="_blank">GitHub</a>
+    <a href="fr.html" class="nav-lang">FR</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <img src="../frontend/images/logo.png" alt="Falcon-Pad" class="hero-logo">
+  <h1>Tactical Companion<br>for <span>Falcon BMS 4.38</span></h1>
+  <p>Real-time map, steerpoints, radio presets, checklists, briefings and ACMI contacts — all on your tablet while you fly.</p>
+  <div class="hero-btns">
+    <a href="https://github.com/riesu/falcon-pad/releases" class="btn btn-primary">Download</a>
+    <a href="https://github.com/riesu/falcon-pad" class="btn btn-secondary">View on GitHub</a>
+  </div>
+  <div class="hero-tag">
+    <span>Free &amp; Open Source</span>
+    <span>Falcon BMS 4.38</span>
+    <span>Windows &amp; Tablet</span>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-title">Features</div>
+    <p class="section-sub">Everything you need as a wingman, on a second screen or tablet.</p>
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">&#x1f5fa;</div>
+        <h3>Real-Time Map</h3>
+        <p>Your aircraft position, heading, altitude and speed updated in real-time via BMS SharedMemory. Dark, satellite and terrain map layers.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f4cd;</div>
+        <h3>Steerpoints &amp; Flight Plan</h3>
+        <p>Auto-loaded from SharedMemory or DTC .ini files. Displayed on the map with altitude, index and flight plan lines.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f534;</div>
+        <h3>Threat Rings (PPT)</h3>
+        <p>Preplanned threats with range circles, names and threat type. Ground units vs airborne distinguished by AGL altitude.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f4e1;</div>
+        <h3>Radio Presets &amp; COMMS</h3>
+        <p>UHF/VHF presets and TACAN auto-loaded from pilot profile. Departure airport detected via COMMS TACAN channel.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f3af;</div>
+        <h3>Bullseye</h3>
+        <p>Bullseye position with range rings (20/40/60/80/100 NM), 8 radials and bearing labels. Dual-source: FlightData2 + StringData fallback.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x2708;</div>
+        <h3>ACMI Contacts</h3>
+        <p>Live friendly aircraft contacts via Tacview Real-Time Telemetry (TRTT). Callsign, altitude, heading and speed labels.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x2705;</div>
+        <h3>F-16 Checklists</h3>
+        <p>246-item checklist from T.O. BMS1F-16CJ-1CL-1. Color-coded by flight phase: ground, taxi, takeoff, combat, landing, shutdown.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f4c4;</div>
+        <h3>Briefing Viewer</h3>
+        <p>PDF, images, DOCX and HTML briefing files. PDF.js rendering with pinch-to-zoom on tablets. Upload from the app.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f310;</div>
+        <h3>Multi-Theater</h3>
+        <p>Korea, Korea KTO, Balkans, Israel, Aegean, Iberia, Nordic and more. Auto-detection from BMS StringData.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SETUP -->
+<section id="setup" style="background:var(--bg2)">
+  <div class="container">
+    <div class="section-title">Quick Setup</div>
+    <p class="section-sub">Up and running in 2 minutes.</p>
+    <div class="setup-steps">
+      <div class="step">
+        <h4>Download &amp; Extract</h4>
+        <p>Download <code>FalconPad.exe</code> from <a href="https://github.com/riesu/falcon-pad/releases">GitHub Releases</a> and place it anywhere.</p>
+      </div>
+      <div class="step">
+        <h4>Launch</h4>
+        <p>Run <code>FalconPad.exe</code>. The tray window shows your local and network URLs.</p>
+      </div>
+      <div class="step">
+        <h4>Open on Tablet</h4>
+        <p>On your tablet/phone browser, go to the <strong>Network URL</strong> shown (e.g. <code>http://192.168.1.32:8000</code>). Both devices must be on the same WiFi.</p>
+      </div>
+      <div class="step">
+        <h4>Fly!</h4>
+        <p>Launch Falcon BMS. Falcon-Pad auto-detects BMS, loads your theater, steerpoints, radio presets and starts streaming your position.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container">
+    <div class="section-title">FAQ</div>
+    <p class="section-sub">Frequently asked questions.</p>
+    <div class="faq-list">
+      <div class="faq-item">
+        <div class="faq-q">Does Falcon-Pad modify any BMS files?</div>
+        <div class="faq-a">No. Falcon-Pad is read-only. It reads BMS SharedMemory and DTC .ini files but never writes to them. Your BMS installation is untouched.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Does it work in multiplayer?</div>
+        <div class="faq-a">Yes. Falcon-Pad works in both single-player and multiplayer. In MP, ACMI contacts (via TRTT) show friendly aircraft only to avoid giving unfair advantage.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Which tablets/browsers are supported?</div>
+        <div class="faq-a">Any device with a modern browser: iPad, Android tablets, phones, or a second PC monitor. Chrome, Safari, Firefox and Edge are all supported. PDF viewing uses PDF.js for full tablet compatibility.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">My tablet can't connect — what should I check?</div>
+        <div class="faq-a">Make sure both your PC and tablet are on the same WiFi network. Check that Windows Firewall allows connections on port 8000 (or your configured port). Try disabling VPN if active.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Steerpoints don't show up automatically</div>
+        <div class="faq-a">Falcon-Pad reads steerpoints from BMS SharedMemory when you're in 3D. If BMS is not running, it falls back to scanning your DTC .ini files from the BMS User/Config directory. You can also manually upload a .ini file via the upload button.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">How do I enable ACMI contacts (TRTT)?</div>
+        <div class="faq-a">In your BMS User.cfg, set <code>set g_bTacviewRealTime 1</code>. The TRTT server runs on port 42674 by default. Falcon-Pad connects automatically.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Does it work on Linux?</div>
+        <div class="faq-a">BMS runs under WINE/Proton on Linux. FalconPad.exe can also run under WINE alongside BMS since it uses the same Windows SharedMemory APIs.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Can I change the port?</div>
+        <div class="faq-a">Yes. Click the Settings gear icon in the web interface and change the Listen Port. A restart of Falcon-Pad is required for the new port to take effect.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Is it free?</div>
+        <div class="faq-a">Yes, Falcon-Pad is free and open source under the GNU GPL v3 license. Contributions are welcome on GitHub.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>Falcon-Pad &copy; 2024 <a href="https://www.falcon-charts.com">Riesu</a> &mdash; GNU GPL v3 &mdash; Not affiliated with Benchmark Sims</p>
+</footer>
+
+<script>
+document.querySelectorAll('.faq-q').forEach(q=>{
+  q.addEventListener('click',()=>q.parentElement.classList.toggle('open'));
+});
+</script>
+</body>
+</html>

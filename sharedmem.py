@@ -161,7 +161,7 @@ class BMSSharedMemory:
 
             if self.ptr1 and self.ptr2:
                 self.connected = True
-                logger.info(f"SHM connected: {len(self.shm_ptrs)} areas mapped")
+                logger.info(f"SHM connected: {len(self.shm_ptrs)} areas mapped — {list(self.shm_ptrs.keys())}")
                 _init_safe_mem()
             else:
                 self.shm_ptrs = {}
@@ -186,17 +186,18 @@ class BMSSharedMemory:
         hdg = safe_float(self.ptr1 + FD_CURRENT_HDG)
         kias = safe_float(self.ptr1 + FD_KIAS)
         z = safe_float(self.ptr1 + FD_Z)
-        lat = safe_float(self.ptr2 + FD2_LAT)
-        lon = safe_float(self.ptr2 + FD2_LON)
-        if None in (hdg, kias, z, lat, lon):
-            logger.warning("get_position: safe_read failed")
+        if None in (hdg, kias, z):
+            logger.warning("get_position: safe_read failed (FD1)")
             return None
 
         hdg_f = hdg % 360.0
         kias_f = kias
         z_f = z
-        lat_f = lat
-        lon_f = lon
+        lat_f = safe_float(self.ptr2 + FD2_LAT)
+        lon_f = safe_float(self.ptr2 + FD2_LON)
+        if None in (lat_f, lon_f):
+            logger.warning("get_position: safe_read failed (FD2 lat/lon)")
+            return None
         alt = abs(z_f)
 
         # BMS time (seconds since midnight)
