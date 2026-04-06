@@ -210,6 +210,18 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   overflow:hidden;
 }
 #settingsPanel.open{display:block}
+#trttPanel{
+  position:fixed;bottom:80px;right:14px;z-index:3001;
+  width:320px;
+  background:rgba(3,7,18,.98);
+  border:1px solid rgba(96,165,250,.15);
+  border-top:2px solid rgba(96,165,250,.4);
+  border-radius:3px;
+  backdrop-filter:blur(24px);
+  box-shadow:0 -12px 48px rgba(0,0,0,.7);
+  overflow:hidden;
+}
+#trttConfigBtn:hover{color:rgba(96,165,250,1)!important}
 .sp-header{
   display:flex;align-items:center;gap:8px;padding:10px 14px;
   border-bottom:1px solid rgba(74,222,128,.08);
@@ -854,7 +866,7 @@ body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden;b
   #panel-gps .gps-row{flex-wrap:wrap}
   .gps-field{flex:0 0 50%;border-right:none;border-bottom:1px solid rgba(255,255,255,.04)}
   /* Settings full width */
-  #settingsPanel{left:8px;right:8px;width:auto}
+  #settingsPanel,#trttPanel{left:8px;right:8px;width:auto}
   /* Tab labels */
   .tab-label{font-size:11px;letter-spacing:.5px}
   /* SysBar compressé */

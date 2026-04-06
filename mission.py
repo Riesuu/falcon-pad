@@ -24,11 +24,10 @@ from __future__ import annotations
 import configparser
 import glob
 import logging
+import math
 import os
 import time
 from typing import List, Optional, Tuple
-
-import math
 
 import app_info
 from theaters import bms_to_latlon, in_theater_bbox, get_theater_name

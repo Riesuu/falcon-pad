@@ -30,22 +30,22 @@ function toggleTRTTPanel(){
       const parts=(d.trtt_host||'127.0.0.1:42674').split(':');
       document.getElementById('trttHostInput').value=parts[0];
       document.getElementById('trttPortInput').value=parts[1]||'42674';
-      const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent=
-        d.connected?'● Connected — '+d.nb_contacts+' contacts':'○ Not connected';
+      const _tps=document.getElementById('trttPanelStatus');
+      if(_tps)_tps.textContent=d.connected?'● Connected — '+d.nb_contacts+' contacts':'○ Not connected';
     }).catch(()=>{});
   }
 }
 async function applyTRTTConfig(){
   const host=document.getElementById('trttHostInput').value.trim();
   const port=parseInt(document.getElementById('trttPortInput').value)||42674;
-  if(!host){const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Enter an IP';return;}
-  const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Connecting…';
+  const _tps=document.getElementById('trttPanelStatus');
+  if(!host){if(_tps)_tps.textContent='Enter an IP';return;}
+  if(_tps)_tps.textContent='Connecting…';
   try{
     const r=await fetch('/api/trtt/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host,port})});
     const d=await r.json();
-    const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent=d.status==='ok'?'✓ '+d.trtt_host:'Error';
-    setTimeout(()=>document.getElementById('trttPanel').style.display='none',1500);
-  }catch(e){const _tps=document.getElementById('trttPanelStatus');if(_tps)_tps.textContent='Error: '+e.message;}
+    if(_tps)_tps.textContent=d.status==='ok'?'✓ '+d.trtt_host:'Error';
+  }catch(e){if(_tps)_tps.textContent='Error: '+e.message;}
 }
 document.addEventListener('click',e=>{
   if(!e.target.closest('#trttPanel')&&!e.target.closest('#trttConfigBtn'))

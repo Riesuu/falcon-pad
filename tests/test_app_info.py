@@ -131,16 +131,3 @@ class TestValidation:
     def test_size_range(self):
         assert app_info.SIZE_MIN < app_info.SIZE_MAX
 
-
-class TestTacviewServer:
-    def test_exe_name(self):
-        assert app_info.TACVIEW_SERVER_EXE == "tacview-server.exe"
-
-    def test_bin_sub_is_tuple(self):
-        assert isinstance(app_info.TACVIEW_SERVER_BIN_SUB, tuple)
-
-    def test_cfg_key(self):
-        assert app_info.TACVIEW_SERVER_CFG_KEY == "g_bExternalTacview"
-
-    def test_github_url(self):
-        assert app_info.TACVIEW_SERVER_GITHUB.startswith("https://")

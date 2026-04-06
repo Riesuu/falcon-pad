@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+from logging.handlers import RotatingFileHandler
 from typing import Optional
 
 from fastapi import File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
@@ -21,7 +22,6 @@ import airports
 import app_info
 import config
 import mission
-import tacview_server
 import trtt
 import ui_prefs
 import ui_theme
@@ -57,11 +57,10 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
 
     @app.get("/api/checklist")
     async def get_checklist():
-        import json as _json
         _cl_path = os.path.join(app_info.BUNDLE_DIR, *app_info.CHECKLIST_REL_PATH)
         try:
             with open(_cl_path, encoding="utf-8") as f:
-                return _json.load(f)
+                return json.load(f)
         except Exception:
             return []
 
@@ -183,12 +182,10 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             changed.append("theme")
         if s.log_level is not None and s.log_level in app_info.VALID_LOG_LEVELS:
             config.APP_CONFIG["log_level"] = s.log_level
-            import logging as _lg
-            from logging.handlers import RotatingFileHandler as _RFH
-            lvl = _lg.DEBUG if s.log_level == "debug" else _lg.INFO
-            _lg.getLogger().setLevel(lvl)
-            for h in _lg.getLogger().handlers:
-                if isinstance(h, _RFH):
+            lvl = logging.DEBUG if s.log_level == "debug" else logging.INFO
+            logging.getLogger().setLevel(lvl)
+            for h in logging.getLogger().handlers:
+                if isinstance(h, RotatingFileHandler):
                     h.setLevel(lvl)
             changed.append("log_level")
         config.save(config.APP_CONFIG)
@@ -306,18 +303,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 "connected": diag.get("connected", False),
                 "thread_alive": diag.get("thread_alive", False),
                 "nb_contacts": diag.get("nb_contacts_raw", 0),
-                "config_bms": app_info.BMS_CONFIG_HINT,
-                "tacview_server": tacview_server.status()}
-
-    class TacviewServerModel(BaseModel):
-        enabled: bool
-
-    @app.post("/api/acmi/tacview-server")
-    async def tacview_server_toggle(body: TacviewServerModel):
-        result = tacview_server.set_enabled(body.enabled)
-        if "error" in result:
-            raise HTTPException(400, result["error"])
-        return {"ok": True, **result}
+                "config_bms": app_info.BMS_CONFIG_HINT}
 
     # ── Briefing ─────────────────────────────────────────────────
     _BRIEFING_ALLOWED = app_info.BRIEFING_ALLOWED_EXT

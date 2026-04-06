@@ -40,14 +40,6 @@ BMS_REGISTRY_KEY    = "InstallDir"
 BMS_USER_CONFIG_SUB = ("User", "Config")
 BMS_RECONNECT_S     = 5.0
 
-# ── Tacview Server (external ACMI compressor) ───────────────────────────────
-TACVIEW_SERVER_EXE       = "tacview-server.exe"
-TACVIEW_SERVER_BIN_SUB   = ("Bin", "x64")
-TACVIEW_SERVER_CFG_KEY   = "g_bExternalTacview"
-TACVIEW_SERVER_GITHUB    = "https://github.com/UOAF/tacview-tools"
-BMS_USER_CFG_FILENAME    = "Falcon BMS User.cfg"
-BMS_USER_CFG_SUB         = ("User", "Config")
-
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_FILENAME     = "falcon_pad.log"
 LOG_MAX_BYTES    = 2 * 1024 * 1024
@@ -71,7 +63,7 @@ KT_PER_MS         = 1.944
 # ── Paths / filenames ───────────────────────────────────────────────────────
 FRONTEND_SUBDIR      = "frontend"
 IMAGES_SUBDIR        = "images"
-ICON_FILENAME        = "falcon_pad.ico"
+ICON_FILENAME        = "FPLogo.ico"
 INDEX_HTML           = "index.html"
 CHECKLIST_REL_PATH   = ("data", "checklists", "f16_checklist.json")
 

@@ -47,7 +47,14 @@
       "Bash(python -c ':*)",
       "WebSearch",
       "WebFetch(domain:raia-software-inc.gitbook.io)",
-      "Bash(python -m pytest tests/ -v --tb=short)"
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -c \"import tacview_server; print\\(tacview_server.status\\(\\)\\)\")",
+      "Bash(grep -n \"Reseau\" c:/Users/Lyes/Documents/00_DEV/*.py c:/Users/Lyes/Documents/00_DEV/**/*.py)",
+      "Bash(grep -n \"8.8.8.8\\\\|42674\\\\|127.0.0.1\\\\|200\\\\|5.0\\\\|50\\\\|240\" c:/Users/Lyes/Documents/00_DEV/*.py)",
+      "Bash(grep -n \"127.0.0.1\\\\|\\\\\"::1\\\\\"\\\\|localhost\" c:/Users/Lyes/Documents/00_DEV/*.py)",
+      "Bash(grep -n \"^[[:space:]]*#.*=\\\\|^[[:space:]]*#.*def\\\\|^[[:space:]]*#.*class\" c:/Users/Lyes/Documents/00_DEV/*.py)",
+      "Bash(grep -n \"pass\\\\s*#\\\\|continue\\\\s*#\\\\|break\\\\s*#\" c:/Users/Lyes/Documents/00_DEV/*.py)",
+      "Bash(grep -n \"from routes import\\\\|import routes\\\\|register_routes\" c:/Users/Lyes/Documents/00_DEV/*.py)"
     ]
   }
 }

@@ -14,12 +14,12 @@ WIN_H = 350
 HEADER_H = 80
 ACCENT_LINE_H = 3
 
-# ── Colors ──────────────────────────────────────────────────────────────────
+# ── Colors (matched to logo: navy, red, white) ─────────────────────────────
 BG         = "#060a12"
 BG2        = "#0b1220"
-ACCENT     = "#4ade80"
-ACCENT_DIM = "#1f4d35"
-RED        = "#ef4444"
+ACCENT     = "#c0392b"
+ACCENT_DIM = "#3d1410"
+RED        = "#c0392b"
 RED_DIM    = "#1a0808"
 RED_HOV    = "#3d1010"
 RED_OUT    = "#7f2222"
@@ -30,6 +30,7 @@ EJECT_HOV  = "#fcd34d"
 BLUE       = "#60a5fa"
 TXT_DIM    = "#64748b"
 TXT_MID    = "#94a3b8"
+TXT_WHITE  = "#e2e8f0"
 
 # ── Fonts ───────────────────────────────────────────────────────────────────
 FONT_FAMILY    = "Consolas"
@@ -54,7 +55,7 @@ LINE_VALUE_H    = 25
 STATUS_DOT_R    = 10
 
 # ── Minimize button ────────────────────────────────────────────────────────
-MIN_BTN_MARGIN_R = 36
+MIN_BTN_MARGIN_R = 80
 MIN_BTN_Y        = 10
 MIN_BTN_W        = 24
 MIN_BTN_H        = 18

@@ -80,7 +80,7 @@ async def lifespan(_a):
     logger.info(f"  Config   : {app_info.CONFIG_FILE}")
     logger.info(f"  BMS      : {'CONNECTED' if bms.connected else 'NOT DETECTED'}")
     logger.info(f"  Local    : http://localhost:{SERVER_PORT}       <- PC")
-    logger.info(f"  Reseau   : http://{SERVER_IP}:{SERVER_PORT}  <- Tablette/Mobile")
+    logger.info(f"  Network  : http://{SERVER_IP}:{SERVER_PORT}  <- Tablet/Mobile")
     config.log_sep()
     yield
     config.log_sep("SHUTDOWN")
@@ -108,7 +108,15 @@ register_routes(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    import ctypes
     import threading as _th
+
+    # Set Windows AppUserModelID so taskbar shows our icon instead of Python's
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            f"riesu.falconpad.{app_info.VERSION}")
+    except Exception:
+        pass
 
     def _run_server():
         try:
@@ -129,7 +137,7 @@ if __name__ == "__main__":
         from PySide6.QtWidgets import QApplication, QWidget
         from PySide6.QtCore    import Qt, QTimer
         from PySide6.QtGui     import (QPainter, QColor, QPen, QFont,
-                                       QIcon, QBrush)
+                                       QIcon, QBrush, QPixmap)
     except ImportError:
         logger.error("PySide6 absent — pip install PySide6")
         raise SystemExit(0)
@@ -151,6 +159,7 @@ if __name__ == "__main__":
         BLUE       = QColor(_t.BLUE)
         TXT_DIM    = QColor(_t.TXT_DIM)
         TXT_MID    = QColor(_t.TXT_MID)
+        TXT_WHITE  = QColor(_t.TXT_WHITE)
 
         def __init__(self):
             super().__init__()
@@ -163,7 +172,13 @@ if __name__ == "__main__":
                 self.setWindowIcon(QIcon(_ico))
             screen = QApplication.primaryScreen().availableGeometry()
             self.move((screen.width()-self.W)//2, (screen.height()-self.H)//2)
+            self._logo = None
+            _logo_path = os.path.join(app_info.ASSETS_DIR, "logo.png")
+            if os.path.exists(_logo_path):
+                self._logo = QPixmap(_logo_path).scaledToHeight(
+                    56, Qt.TransformationMode.SmoothTransformation)
             self._drag_pos = self._btn_rect = self._min_rect = None
+            self._local_rect = self._net_rect = None
             self._btn_hover = self._min_hover = self._bms_ok = False
             self._timer = QTimer(self)
             self._timer.timeout.connect(self._poll_bms)
@@ -191,12 +206,18 @@ if __name__ == "__main__":
             p.fillRect(0, 0, W, _t.HEADER_H, self.BG2)
             p.fillRect(0, 0, W, _t.ACCENT_LINE_H, self.ACCENT)
 
+            # Logo (top-right of header)
+            if self._logo:
+                lx = W - self._logo.width() - 16
+                ly = (_t.HEADER_H - self._logo.height()) // 2
+                p.drawPixmap(lx, ly, self._logo)
+
             # Header separator
             p.setPen(QPen(self.ACCENT_DIM, 1))
             p.drawLine(_t.TITLE_X, _t.HEADER_H, W - _t.TITLE_X, _t.HEADER_H)
 
-            # Minimize button
-            rx = W - _t.MIN_BTN_MARGIN_R
+            # Minimize button (top-left area, no conflict with logo)
+            rx = _t.TITLE_X
             ry = _t.MIN_BTN_Y
             rw, rh = _t.MIN_BTN_W, _t.MIN_BTN_H
             self._min_rect = (rx, ry, rw, rh)
@@ -206,14 +227,7 @@ if __name__ == "__main__":
             p.setPen(QPen(mc, 2))
             p.drawLine(rx+5, ry+rh//2, rx+rw-5, ry+rh//2)
 
-            # Title
-            p.setPen(QPen(self.ACCENT))
-            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_TITLE, QFont.Weight.Bold))
-            p.drawText(_t.TITLE_X, _t.TITLE_Y, W-64, _t.TITLE_H,
-                       Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                       _t.LBL_TITLE)
-
-            # Subtitle
+            # Version + author (below minimize button)
             p.setPen(QPen(self.TXT_DIM))
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_SUBTITLE))
             p.drawText(_t.TITLE_X, _t.SUBTITLE_Y, W-64, _t.SUBTITLE_H,
@@ -227,23 +241,32 @@ if __name__ == "__main__":
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
             p.setPen(QPen(self.TXT_DIM))
             p.drawText(_t.MARGIN_LEFT, y, _t.LBL_LOCAL); y += _t.LINE_LABEL_H
-            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_VALUE))
-            p.setPen(QPen(self.ACCENT))
-            p.drawText(_t.MARGIN_LEFT, y, f"http://localhost:{SERVER_PORT}"); y += _t.LINE_VALUE_H
+            _url_font = QFont(_t.FONT_FAMILY, _t.FONT_VALUE)
+            _url_font.setUnderline(True)
+            p.setFont(_url_font)
+            p.setPen(QPen(self.TXT_WHITE))
+            _local_url = f"http://localhost:{SERVER_PORT}"
+            p.drawText(_t.MARGIN_LEFT, y, _local_url)
+            self._local_rect = (_t.MARGIN_LEFT, y - 14, p.fontMetrics().horizontalAdvance(_local_url), 18)
+            y += _t.LINE_VALUE_H
 
             # NETWORK
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
+            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
             p.setPen(QPen(self.TXT_DIM))
             p.drawText(_t.MARGIN_LEFT, y, _t.LBL_NETWORK); y += _t.LINE_LABEL_H
-            p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_VALUE))
+            p.setFont(_url_font)
             p.setPen(QPen(self.BLUE))
-            p.drawText(_t.MARGIN_LEFT, y, f"http://{SERVER_IP}:{SERVER_PORT}"); y += _t.LINE_VALUE_H
+            _net_url = f"http://{SERVER_IP}:{SERVER_PORT}"
+            p.drawText(_t.MARGIN_LEFT, y, _net_url)
+            self._net_rect = (_t.MARGIN_LEFT, y - 14, p.fontMetrics().horizontalAdvance(_net_url), 18)
+            y += _t.LINE_VALUE_H
 
             # BMS status
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL, QFont.Weight.Bold))
             p.setPen(QPen(self.TXT_DIM))
             p.drawText(_t.MARGIN_LEFT, y, app_info.BMS.upper()); y += _t.LINE_LABEL_H
-            dc = self.ACCENT if self._bms_ok else self.RED
+            dc = self.BLUE if self._bms_ok else self.RED
             p.setBrush(QBrush(dc)); p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(_t.MARGIN_LEFT, y-9, _t.STATUS_DOT_R, _t.STATUS_DOT_R)
             p.setPen(QPen(dc))
@@ -276,18 +299,25 @@ if __name__ == "__main__":
             p.setFont(QFont(_t.FONT_FAMILY, _t.FONT_LABEL))
             p.end()
 
+        @staticmethod
+        def _in_rect(mx, my, rect):
+            if not rect:
+                return False
+            rx, ry, rw, rh = rect
+            return rx <= mx <= rx + rw and ry <= my <= ry + rh
+
         def mousePressEvent(self, e):
             if e.button() != Qt.MouseButton.LeftButton:
                 return
             mx, my = e.position().x(), e.position().y()
-            if self._btn_rect:
-                bx, by_, bw_, bh_ = self._btn_rect
-                if bx <= mx <= bx+bw_ and by_ <= my <= by_+bh_:
-                    self._do_quit(); return
-            if self._min_rect:
-                rx, ry, rw, rh = self._min_rect
-                if rx <= mx <= rx+rw and ry <= my <= ry+rh:
-                    self.showMinimized(); return
+            if self._in_rect(mx, my, self._btn_rect):
+                self._do_quit(); return
+            if self._in_rect(mx, my, self._local_rect):
+                import webbrowser; webbrowser.open(f"http://localhost:{SERVER_PORT}"); return
+            if self._in_rect(mx, my, self._net_rect):
+                import webbrowser; webbrowser.open(f"http://{SERVER_IP}:{SERVER_PORT}"); return
+            if self._in_rect(mx, my, self._min_rect):
+                self._smooth_minimize(); return
             if my < _t.HEADER_H:
                 self._drag_pos = e.globalPosition().toPoint()
 
@@ -307,6 +337,9 @@ if __name__ == "__main__":
                 h2 = rx <= mx <= rx+rw and ry <= my <= ry+rh
                 if h2 != self._min_hover:
                     self._min_hover = h2; self.update()
+            # Hand cursor over URLs
+            over_url = self._in_rect(mx, my, self._local_rect) or self._in_rect(mx, my, self._net_rect)
+            self.setCursor(Qt.CursorShape.PointingHandCursor if over_url else Qt.CursorShape.ArrowCursor)
 
         def mouseReleaseEvent(self, _e):
             self._drag_pos = None
@@ -319,6 +352,22 @@ if __name__ == "__main__":
             if e.key() == Qt.Key.Key_F4 and e.modifiers() == Qt.KeyboardModifier.AltModifier:
                 self._do_quit()
 
+        def _smooth_minimize(self):
+            self._fade_step = 0
+            self._fade_timer = QTimer(self)
+            self._fade_timer.setInterval(15)
+            self._fade_timer.timeout.connect(self._fade_tick)
+            self._fade_timer.start()
+
+        def _fade_tick(self):
+            self._fade_step += 1
+            opacity = max(0.0, 1.0 - self._fade_step / 12.0)
+            self.setWindowOpacity(opacity)
+            if self._fade_step >= 12:
+                self._fade_timer.stop()
+                self.showMinimized()
+                self.setWindowOpacity(1.0)
+
         def _do_quit(self):
             self._timer.stop(); self.close()
             os.kill(os.getpid(), 9)
@@ -326,5 +375,8 @@ if __name__ == "__main__":
     _app = QApplication(sys.argv)
     _app.setApplicationName(app_info.SHORT)
     _app.setApplicationVersion(app_info.VERSION)
+    _ico_path = os.path.join(app_info.ASSETS_DIR, app_info.ICON_FILENAME)
+    if os.path.exists(_ico_path):
+        _app.setWindowIcon(QIcon(_ico_path))
     _win = FalconPadWindow()
     _app.exec()

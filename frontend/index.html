@@ -199,6 +199,8 @@
       </svg>
     </button>
     <div class="sys-sep"></div>
+    <button id="trttConfigBtn" onclick="toggleTRTTPanel()" title="ACMI / TRTT" style="cursor:pointer;background:transparent;border:none;padding:0 8px;height:100%;display:flex;align-items:center;color:rgba(96,165,250,.7);transition:color .2s;flex-shrink:0;font-size:10px;font-family:Consolas,monospace;letter-spacing:.5px;">ACMI</button>
+    <div class="sys-sep"></div>
     <button id="settingsBtn" onclick="toggleSettings()" title="Settings">
       <svg viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="3"/>
@@ -314,6 +316,31 @@
   <div class="sp-footer">
     <button class="sp-cancel" onclick="toggleSettings()">CANCEL</button>
     <button class="sp-save"   onclick="saveSettings()">✓ SAVE</button>
+  </div>
+</div>
+
+<!-- ═══ TRTT / ACMI PANEL ════════════════════════════════════ -->
+<div id="trttPanel" style="display:none;">
+  <div class="sp-header">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+    <span class="sp-title">ACMI / TRTT</span>
+    <button class="sp-close" onclick="toggleTRTTPanel()">✕</button>
+  </div>
+  <div class="sp-body">
+    <div class="sp-row">
+      <label class="sp-label">TRTT HOST</label>
+      <div style="display:flex;gap:6px;">
+        <input class="sp-input" id="trttHostInput" type="text" value="127.0.0.1" style="flex:2;" placeholder="127.0.0.1"/>
+        <input class="sp-input" id="trttPortInput" type="number" value="42674" style="flex:1;" placeholder="42674"/>
+      </div>
+      <span class="sp-hint">BMS TRTT server address. Default: 127.0.0.1:42674</span>
+    </div>
+    <div style="display:flex;gap:8px;margin:8px 0;">
+      <button class="sp-save" onclick="applyTRTTConfig()" style="flex:1;">CONNECT</button>
+    </div>
+    <div id="trttPanelStatus" style="font-size:11px;color:#94a3b8;margin:4px 0 8px;"></div>
   </div>
 </div>
 
