@@ -241,7 +241,7 @@ class BMSSharedMemory:
                 "lat": lat_f, "lon": lon_f,
                 "heading": round(hdg_f, 1),
                 "altitude": round(alt),
-                "kias": round(kias_f),
+                "kias": round(kias),
                 "bms_time": bms_time,
                 "pilots_online": pilots_online,
                 "bull_lat": round(bull_lat, 5) if bull_lat is not None else None,

@@ -165,15 +165,16 @@ document.getElementById('pptBtn')?.addEventListener('click',function(){
 
 document.getElementById('airportBtn')?.addEventListener('click',function(){
   const v=this.classList.toggle('active');
-  const apNameOn=typeof _apNameVisible!=='undefined'?_apNameVisible:false;
-  airportMarkers.forEach(m=>{
-    if(!v){try{map.removeLayer(m)}catch(e){}}
-    else if(apNameMarkers.includes(m)){if(apNameOn)try{m.addTo(map)}catch(e){}}
-    else{try{m.addTo(map)}catch(e){}}
-  });
-  runwaysVisible=v;
-  runwayLayers.forEach(l=>{try{v?l.addTo(map):map.removeLayer(l);}catch(e){}});
-  document.getElementById('runwayBtn')?.classList.toggle('active',v);
+  if(v){
+    // Re-add everything respecting each sub-toggle state
+    apIconMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});
+    if(_apNameVisible) apLabelMarkers.forEach(m=>{try{m.addTo(map)}catch(e){}});
+    if(runwaysVisible) runwayLayers.forEach(l=>{try{l.addTo(map)}catch(e){}});
+  } else {
+    // Remove all airport-related layers
+    [...apIconMarkers,...apLabelMarkers].forEach(m=>{try{map.removeLayer(m)}catch(e){}});
+    runwayLayers.forEach(l=>{try{map.removeLayer(l)}catch(e){}});
+  }
   saveUiPref({airports_visible:v});
 });
 

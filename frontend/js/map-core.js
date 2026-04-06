@@ -78,7 +78,6 @@ function _updateTheaterTag(name) {
     if(d && d.name) {
       _currentTheater = d.name;
       _updateTheaterTag(d.name);
-      _drawBorders(d.name);
       if(!window._hasAircraftPos) map.setView([d.center_lat, d.center_lon], d.zoom);
     }
   } catch(e) { console.warn('[theater] init failed:', e); }
