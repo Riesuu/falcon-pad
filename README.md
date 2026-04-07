@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="Falcon-Pad Logo" width="480"/>
+  <img src="website/logo.png" alt="Falcon-Pad Logo" width="480"/>
 </p>
 
 <h1 align="center">Falcon-Pad</h1>
