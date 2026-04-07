@@ -59,8 +59,8 @@ _connected: bool = False
 def _parse_color(color_str: str) -> int:
     """Color field → camp integer: 1=blue/friendly, 2=red/enemy, 3=unknown."""
     c = color_str.lower()
-    if 'blue' in c:  return 1
-    if 'red' in c:   return 2
+    if c in ('blue', 'green', 'cyan'):  return 1
+    if c in ('red', 'orange'):          return 2
     return 3
 
 
