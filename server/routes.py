@@ -151,6 +151,11 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     async def settings_save(s: SettingsModel):
         changed: list = []
         if s.port is not None and app_info.PORT_MIN <= s.port <= app_info.PORT_MAX and s.port != config.APP_CONFIG.get("port"):
+            import socket as _sock
+            with _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM) as _sk:
+                _sk.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+                if _sk.connect_ex(("127.0.0.1", s.port)) == 0:
+                    raise HTTPException(400, f"Port {s.port} is already in use")
             config.APP_CONFIG["port"] = s.port
             changed.append("port")
         if s.broadcast_ms is not None and app_info.BROADCAST_MS_MIN <= s.broadcast_ms <= app_info.BROADCAST_MS_MAX:
@@ -255,8 +260,8 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 try:
                     json.loads(val)
                     ui_prefs.prefs[key] = val
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"ui_prefs_save: invalid JSON for '{key}': {e}")
         ui_prefs.save(ui_prefs.prefs)
         return {"ok": True, "prefs": ui_prefs.prefs}
 
@@ -295,6 +300,14 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     async def briefing_list():
         return {"files": _briefing_meta()}
 
+    def _safe_briefing_path(filename: str, base_dir: str) -> str:
+        """Sanitize filename and verify the resolved path stays inside base_dir."""
+        safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
+        dest = os.path.realpath(os.path.join(base_dir, safe_name))
+        if not dest.startswith(os.path.realpath(base_dir) + os.sep):
+            raise HTTPException(400, "Invalid filename")
+        return dest
+
     @app.post("/api/briefing/upload")
     async def briefing_upload(file: UploadFile = File(...)):
         filename = file.filename or "unnamed"
@@ -304,8 +317,8 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         data = await file.read()
         if len(data) > _BRIEFING_MAX_MB * 1024 * 1024:
             raise HTTPException(400, f"File too large (max {_BRIEFING_MAX_MB} MB)")
-        safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
-        dest = os.path.join(config.BRIEFING_DIR, safe_name)
+        safe_name = os.path.basename("".join(c for c in filename if c.isalnum() or c in "._- ").strip())
+        dest = _safe_briefing_path(safe_name, config.BRIEFING_DIR)
         with open(dest, "wb") as f:
             f.write(data)
         logger.info(f"Briefing uploaded: {safe_name} ({len(data)//1024} KB)")
@@ -313,8 +326,8 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
 
     @app.delete("/api/briefing/delete/{filename}")
     async def briefing_delete(filename: str):
-        safe = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
-        fp   = os.path.join(config.BRIEFING_DIR, safe)
+        safe = os.path.basename("".join(c for c in filename if c.isalnum() or c in "._- ").strip())
+        fp   = _safe_briefing_path(safe, config.BRIEFING_DIR)
         if not os.path.exists(fp):
             raise HTTPException(404, "File not found")
         os.remove(fp)
@@ -322,15 +335,18 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         return {"ok": True, "files": _briefing_meta()}
 
     def _resolve_briefing_file(filename):
-        safe = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
-        fp = os.path.join(config.BRIEFING_DIR, safe)
+        safe = os.path.basename("".join(c for c in filename if c.isalnum() or c in "._- ").strip())
+        fp = _safe_briefing_path(safe, config.BRIEFING_DIR)
         if os.path.exists(fp):
             return fp
         bd = get_briefings_dir()
         if bd:
-            fp2 = os.path.join(bd, safe)
-            if os.path.exists(fp2):
-                return fp2
+            try:
+                fp2 = _safe_briefing_path(safe, bd)
+                if os.path.exists(fp2):
+                    return fp2
+            except HTTPException:
+                pass
         raise HTTPException(404, "File not found")
 
     @app.get("/api/briefing/file/{filename}")

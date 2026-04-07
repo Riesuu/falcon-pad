@@ -273,7 +273,7 @@ def _client_loop() -> None:
             _connected = False
             with _lock:
                 _contacts.clear()
-            logger.debug(f"TRTT disconnected: {ex} — retry in {app_info.TRTT_RECONNECT_SLEEP}s")
+            logger.warning(f"TRTT disconnected: {ex} — retry in {app_info.TRTT_RECONNECT_SLEEP}s")
             try:
                 if sock is not None:
                     sock.close()

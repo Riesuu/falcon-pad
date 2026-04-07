@@ -390,8 +390,9 @@ if __name__ == "__main__":
                 self.setWindowOpacity(1.0)
 
         def _do_quit(self):
-            self._timer.stop(); self.close()
-            os.kill(os.getpid(), 9)
+            self._timer.stop()
+            self.close()
+            sys.exit(0)
 
     _app = QApplication(sys.argv)
     _app.setApplicationName(app_info.SHORT)

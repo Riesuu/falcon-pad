@@ -70,6 +70,7 @@ def _init_safe_mem() -> None:
         _hproc = _k32.GetCurrentProcess()
         logger.info(f"SafeMemReader OK — hproc={_hproc}")
     except Exception as e:
+        _k32 = _rpm = _hproc = None
         logger.error(f"SafeMemReader init FAILED: {e}")
 
 

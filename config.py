@@ -34,6 +34,25 @@ _DEFAULTS: dict = {
 
 # ── Persistence ───────────────────────────────────────────────────────────────
 
+def _validate(cfg: dict) -> dict:
+    """Coerce and clamp config values to their expected types and ranges."""
+    try:
+        cfg["port"] = int(cfg["port"])
+        if not (app_info.PORT_MIN <= cfg["port"] <= app_info.PORT_MAX):
+            cfg["port"] = app_info.DEFAULT_PORT
+    except (ValueError, TypeError):
+        cfg["port"] = app_info.DEFAULT_PORT
+    try:
+        cfg["broadcast_ms"] = int(cfg["broadcast_ms"])
+        if not (app_info.BROADCAST_MS_MIN <= cfg["broadcast_ms"] <= app_info.BROADCAST_MS_MAX):
+            cfg["broadcast_ms"] = app_info.DEFAULT_BROADCAST_MS
+    except (ValueError, TypeError):
+        cfg["broadcast_ms"] = app_info.DEFAULT_BROADCAST_MS
+    if cfg.get("theme") not in app_info.VALID_THEMES:
+        cfg["theme"] = _DEFAULTS["theme"]
+    return cfg
+
+
 def load() -> dict:
     try:
         if os.path.exists(app_info.CONFIG_FILE):
@@ -41,7 +60,7 @@ def load() -> dict:
                 saved = json.load(f)
             cfg = dict(_DEFAULTS)
             cfg.update({k: v for k, v in saved.items() if k in _DEFAULTS})
-            return cfg
+            return _validate(cfg)
     except Exception as e:
         logging.getLogger(__name__).warning(f"config load: {e}")
     return dict(_DEFAULTS)

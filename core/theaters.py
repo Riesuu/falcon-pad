@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -77,21 +78,25 @@ _reg("Nordic",    lon0=18.0,   k0=0.9996, FE=500000.0, FN=0.0,
 _active_theater: TheaterParams = THEATER_DB["korea"]  # default before BMS loads
 _active_theater_name: str = "Korea"
 _theater_detected: bool = False   # True once BMS has explicitly set a theater
+_theater_lock = threading.Lock()
 
 
 def get_theater() -> TheaterParams:
     """Return the currently active theater (never None; defaults to Korea)."""
-    return _active_theater
+    with _theater_lock:
+        return _active_theater
 
 
 def get_theater_name() -> str:
     """Return display name of the active theater."""
-    return _active_theater_name
+    with _theater_lock:
+        return _active_theater_name
 
 
 def is_theater_detected() -> bool:
     """Return True if BMS has explicitly detected/set a theater via SHM."""
-    return _theater_detected
+    with _theater_lock:
+        return _theater_detected
 
 
 def set_active_theater(name: str) -> bool:
@@ -100,30 +105,32 @@ def set_active_theater(name: str) -> bool:
     Returns True if the theater actually *changed* (triggers re-init).
     """
     global _active_theater, _active_theater_name, _theater_detected
-    _theater_detected = True
     raw = name.strip()
     key = raw.lower()
 
-    # 1) Direct match
-    if key in THEATER_DB:
-        if _active_theater_name.lower() != key:
-            _active_theater = THEATER_DB[key]
-            _active_theater_name = raw
-            logger.info(f"THEATER set: {_active_theater_name}  "
-                        f"(lon0={_active_theater.lon0}° bbox={_active_theater.bbox})")
-            return True
-        return False
+    with _theater_lock:
+        _theater_detected = True
 
-    # 2) Fuzzy substring match (e.g. "Korea 1.1" → "korea")
-    for db_key, params in THEATER_DB.items():
-        if db_key in key or key in db_key:
-            if _active_theater_name.lower() != db_key:
-                _active_theater = params
+        # 1) Direct match
+        if key in THEATER_DB:
+            if _active_theater_name.lower() != key:
+                _active_theater = THEATER_DB[key]
                 _active_theater_name = raw
-                logger.info(f"THEATER set (fuzzy): '{raw}' → {db_key}  "
-                            f"(lon0={params.lon0}° bbox={params.bbox})")
+                logger.info(f"THEATER set: {_active_theater_name}  "
+                            f"(lon0={_active_theater.lon0}° bbox={_active_theater.bbox})")
                 return True
             return False
+
+        # 2) Fuzzy substring match (e.g. "Korea 1.1" → "korea")
+        for db_key, params in THEATER_DB.items():
+            if db_key in key or key in db_key:
+                if _active_theater_name.lower() != db_key:
+                    _active_theater = params
+                    _active_theater_name = raw
+                    logger.info(f"THEATER set (fuzzy): '{raw}' → {db_key}  "
+                                f"(lon0={params.lon0}° bbox={params.bbox})")
+                    return True
+                return False
 
     logger.warning(f"THEATER unknown: '{raw}' — keeping {_active_theater_name}")
     return False

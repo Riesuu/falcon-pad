@@ -122,7 +122,11 @@ async function loadSettings() {
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
     // Sync element colors & sizes
     _syncElemControls(d);
-  } catch(e) {}
+  } catch(e) {
+    console.error('[settings] load failed:', e);
+    const st = document.getElementById('sp-status');
+    if(st){ st.textContent='✗ Failed to load settings'; st.style.color='#ef4444'; st.classList.add('show'); }
+  }
 }
 
 function toggleSettings() {

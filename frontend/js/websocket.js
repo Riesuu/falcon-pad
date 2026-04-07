@@ -7,8 +7,10 @@
 function connectWS(){
   const proto=location.protocol==='https:'?'wss:':'ws:';
   const ws=new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onerror=err=>console.error('[ws] error:',err);
   ws.onmessage=e=>{
-    const msg=JSON.parse(e.data);
+    let msg;
+    try{ msg=JSON.parse(e.data); }catch(err){ console.error('[ws] invalid JSON:',err); return; }
     if(msg.type==='aircraft'){
       updateAircraft(msg.data);
       if(msg.data.bms_time != null){

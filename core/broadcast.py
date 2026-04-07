@@ -162,7 +162,7 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                 await broadcast(ws_clients, json.dumps({"type": "status", "data": {"connected": bms.connected}}))
 
         except Exception as e:
-            logger.debug(f"broadcast_loop: {e}")
+            logger.warning(f"broadcast_loop: {e}", exc_info=True)
         await asyncio.sleep(config.APP_CONFIG.get("broadcast_ms", app_info.DEFAULT_BROADCAST_MS) / 1000.0)
 
 
@@ -201,5 +201,5 @@ async def ini_watcher_loop(bms, ws_clients) -> None:
                     if result and ws_clients:
                         await broadcast(ws_clients, json.dumps({"type": "mission", "data": mission.mission_data}))
         except Exception as e:
-            logger.debug(f"INI watcher: {e}")
+            logger.warning(f"INI watcher: {e}", exc_info=True)
         await asyncio.sleep(app_info.BMS_RECONNECT_S)

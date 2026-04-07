@@ -98,7 +98,11 @@
       "Bash(curl -L \"https://www.falcon-charts.com/inc/img/logo.png\" -o \"c:/_dev/git/projects/falcon-pad/website/falcon-charts-logo.png\")",
       "Bash(curl -L \"https://www.falcon-bms.com/wp-content/uploads/2020/01/BMS-Logo-300x102.png\" -o \"c:/_dev/git/projects/falcon-pad/website/falcon-bms-logo.png\")",
       "Bash(ls -la \"c:/_dev/git/projects/falcon-pad/website/\"*.png \"c:/_dev/git/projects/falcon-pad/website/\"*.ico)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(python3 -m py_compile config.py app_info.py)",
+      "Bash(grep -E \"\\\\.js$\")",
+      "Bash(grep -n \"except.*pass\" /c/_dev/git/projects/falcon-pad/*.py /c/_dev/git/projects/falcon-pad/**/*.py)",
+      "Bash(python -m pytest tests/test_security_and_fixes.py -v --tb=short)"
     ]
   }
 }
