@@ -102,7 +102,9 @@
       "Bash(python3 -m py_compile config.py app_info.py)",
       "Bash(grep -E \"\\\\.js$\")",
       "Bash(grep -n \"except.*pass\" /c/_dev/git/projects/falcon-pad/*.py /c/_dev/git/projects/falcon-pad/**/*.py)",
-      "Bash(python -m pytest tests/test_security_and_fixes.py -v --tb=short)"
+      "Bash(python -m pytest tests/test_security_and_fixes.py -v --tb=short)",
+      "Bash(ls /c/Users/Lyes/Documents/00_DEV/frontend/images/FPLogo.*)",
+      "Bash(python -c \"import uvicorn; import pkgutil, os; path=os.path.dirname\\(uvicorn.__file__\\); mods=[m.name for m in pkgutil.walk_packages\\([path], 'uvicorn.'\\)]; print\\('\\\\n'.join\\(sorted\\(mods\\)\\)\\)\")"
     ]
   }
 }

@@ -209,19 +209,23 @@ def _client_loop() -> None:
                         if 'Type'   in props: p['acmi_type'] = _parse_type(props['Type'])
                         if 'Pilot'  in props: p['pilot']     = props['Pilot']
                         if 'Group'  in props and not p['name']: p['name'] = props['Group']
-                        # Coalition is authoritative for friend/foe (per ACMI spec)
-                        # Color used only as fallback when Coalition absent
+                        # Coalition is authoritative (per ACMI spec)
+                        # BMS sends country names (ROK, DPRK) instead of Allies/Enemies,
+                        # so fall back to Color when Coalition is not standard
                         if 'Coalition' in props:
                             co = props['Coalition'].lower()
                             if 'allies' in co:    p['color'] = 1
                             elif 'enemies' in co: p['color'] = 2
-                            else:                 p['color'] = 3
+                            elif 'Color' in props:
+                                p['color'] = _parse_color(props['Color'])
                         elif 'Color' in props:
                             p['color'] = _parse_color(props['Color'])
 
-                        # Filter: air only
+                        # Filter: air contacts only, skip unnamed 'other'
                         at = p.get('acmi_type', 'other')
                         if at in ('weapon', 'navaid', 'ground', 'sea'):
+                            continue
+                        if at == 'other' and not p['name']:
                             continue
                         if at not in ('air', 'other'):
                             continue
