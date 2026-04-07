@@ -6,29 +6,28 @@
   <meta name="description" content="Falcon-Pad — Compagnon tactique temps-reel pour Falcon BMS 4.38. Carte, steerpoints, presets radio, checklists et plus sur votre tablette.">
   <title>Falcon-Pad — Compagnon Tactique pour Falcon BMS</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" href="../frontend/images/favicon.ico">
+  <link rel="icon" href="favicon.ico">
 </head>
 <body>
 
 <!-- NAV -->
 <nav>
-  <div class="nav-logo">
-    <img src="../frontend/images/logo.png" alt="Falcon-Pad">
-  </div>
   <div class="nav-links">
     <a href="#features">Fonctions</a>
     <a href="#setup">Installation</a>
     <a href="#faq">FAQ</a>
     <a href="https://github.com/riesu/falcon-pad" target="_blank">GitHub</a>
-    <a href="index.html" class="nav-lang">EN</a>
+    <a href="https://www.falcon-charts.com" target="_blank">Falcon Charts</a>
+    <a href="index.html" class="nav-lang"><img src="https://flagcdn.com/20x15/gb.png" alt="EN" width="20" height="15"></a>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
-  <img src="../frontend/images/logo.png" alt="Falcon-Pad" class="hero-logo">
+  <img src="logo.png" alt="Falcon-Pad" class="hero-logo">
+  <div class="hero-version">v0.3 — Dernière version</div>
   <h1>Compagnon Tactique<br>pour <span>Falcon BMS 4.38</span></h1>
-  <p>Carte temps-reel, steerpoints, presets radio, checklists, briefings et contacts ACMI — le tout sur votre tablette pendant le vol.</p>
+  <p>Carte en temps-reel, steerpoints, checklists, briefings et contacts aeriens; le tout sur votre tablette pendant le vol.</p>
   <div class="hero-btns">
     <a href="https://github.com/riesu/falcon-pad/releases" class="btn btn-primary">Telecharger</a>
     <a href="https://github.com/riesu/falcon-pad" class="btn btn-secondary">Voir sur GitHub</a>
@@ -120,8 +119,13 @@
         <p>Sur le navigateur de votre tablette ou telephone, allez a l'<strong>URL Reseau</strong> affichee (ex: <code>http://192.168.1.32:8000</code>). Les deux appareils doivent etre sur le meme reseau WiFi.</p>
       </div>
       <div class="step">
+        <h4>Activer les contacts aeriens (optionnel)</h4>
+        <p>Pour voir les aéronefs sur la carte, ajoutez cette ligne dans <code>User/Config/Falcon BMS User.cfg</code> :<br><br>
+        <code>set g_bTacviewRealTime 1</code></p>
+      </div>
+      <div class="step">
         <h4>Volez !</h4>
-        <p>Lancez Falcon BMS. Falcon-Pad detecte BMS automatiquement, charge votre theatre, steerpoints, presets radio et commence le streaming de votre position.</p>
+        <p>Lancez Falcon BMS. Falcon-Pad detecte BMS automatiquement, charge votre theatre, steerpoints et commence le streaming de votre position.</p>
       </div>
     </div>
   </div>
@@ -139,7 +143,7 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Ca marche en multijoueur ?</div>
-        <div class="faq-a">Oui. Falcon-Pad fonctionne en solo et en multijoueur. Les contacts ACMI affichent tous les aéronefs visibles dans le flux TRTT — allies, ennemis et inconnus. Le contenu du flux est entierement controle par l'etat de desagregation BMS, pas par un filtre de distance.</div>
+        <div class="faq-a">Oui. Falcon-Pad fonctionne en solo et en multijoueur. Les contacts aeriens affichent tous les aéronefs visibles dans le flux TRTT — allies, ennemis et inconnus.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Quelles tablettes/navigateurs sont supportes ?</div>
@@ -147,7 +151,7 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Ma tablette ne se connecte pas — que verifier ?</div>
-        <div class="faq-a">Verifiez que votre ordinateur et votre tablette sont sur le meme reseau WiFi. Ouvrez une invite de commandes en tant qu'Administrateur et executez :<br><br>
+        <div class="faq-a">Verifiez que votre ordinateur et votre tablette sont sur le meme reseau. Ouvrez une invite de commandes en tant qu'Administrateur et executez :<br><br>
         <code>netsh advfirewall firewall add rule name="Falcon-Pad" dir=in action=allow protocol=TCP localport=8000</code><br><br>
         Si vous avez change le port dans les parametres, remplacez <code>8000</code> par votre port. Desactivez egalement le VPN si actif.</div>
       </div>
@@ -157,7 +161,7 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Comment activer les contacts aeriens (TRTT) ?</div>
-        <div class="faq-a">Ajoutez ces deux lignes dans votre fichier BMS <code>User/Config/Falcon BMS User.cfg</code> :<br><br>
+        <div class="faq-a">Ajoutez cette ligne dans votre fichier BMS <code>User/Config/Falcon BMS User.cfg</code> :<br><br>
         <code>set g_bTacviewRealTime 1</code><br><br>
         Falcon-Pad se connecte automatiquement au port 42674 au demarrage.</div>
       </div>
@@ -179,6 +183,13 @@
 
 <!-- FOOTER -->
 <footer>
+  <div class="footer-partners">
+<a href="https://www.falcon-bms.com/" target="_blank" class="partner-link partner-text">Falcon BMS</a>
+    <a href="https://store.steampowered.com/app/429530/Falcon_40" target="_blank" class="partner-link partner-steam">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.492 1.009 2.447-.397.957-1.494 1.411-2.455 1.02zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.252 0-2.265-1.014-2.265-2.265z"/></svg>
+      <span>Acheter Falcon 4.0 sur Steam</span>
+    </a>
+  </div>
   <p>Falcon-Pad &copy; 2024 <a href="https://www.falcon-charts.com">Riesu</a> &mdash; GNU GPL v3 &mdash; Non affilie a Benchmark Sims</p>
 </footer>
 

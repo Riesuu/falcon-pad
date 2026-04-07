@@ -94,7 +94,10 @@
       "WebFetch(domain:github.com)",
       "Bash(wc -l /c/_dev/git/projects/falcon-pad/tests/*.py)",
       "Bash(C:/_dev/Python313/python.exe -m pytest tests/test_trtt.py -v --tb=short)",
-      "Bash(C:/_dev/Python313/python.exe -m pip freeze)"
+      "Bash(C:/_dev/Python313/python.exe -m pip freeze)",
+      "Bash(curl -L \"https://www.falcon-charts.com/inc/img/logo.png\" -o \"c:/_dev/git/projects/falcon-pad/website/falcon-charts-logo.png\")",
+      "Bash(curl -L \"https://www.falcon-bms.com/wp-content/uploads/2020/01/BMS-Logo-300x102.png\" -o \"c:/_dev/git/projects/falcon-pad/website/falcon-bms-logo.png\")",
+      "Bash(ls -la \"c:/_dev/git/projects/falcon-pad/website/\"*.png \"c:/_dev/git/projects/falcon-pad/website/\"*.ico)"
     ]
   }
 }
