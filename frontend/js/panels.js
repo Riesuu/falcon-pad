@@ -149,7 +149,6 @@ async function loadSettings() {
   try {
     const d = await(await fetch('/api/settings')).json();
     document.getElementById('sp-port').value    = d.port         || 8000;
-    document.getElementById('sp-briefdir').value= d.briefing_dir || '';
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
     var ll = document.getElementById('sp-loglevel');
     if (ll) { ll.dataset.val = d.log_level || 'production'; ll.textContent = (d.log_level || 'production').toUpperCase(); }
@@ -169,7 +168,6 @@ function toggleSettings() {
 
 async function saveSettings() {
   const port     = parseInt(document.getElementById('sp-port').value);
-  const bdir     = document.getElementById('sp-briefdir').value.trim();
   const bcast    = parseInt(document.getElementById('sp-bcast').value);
   const status   = document.getElementById('sp-status');
   const portWarn = document.getElementById('sp-port-warn');
@@ -183,7 +181,6 @@ async function saveSettings() {
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         port:         isNaN(port)  ? null : port,
-        briefing_dir: bdir         || null,
         broadcast_ms: isNaN(bcast) ? null : bcast,
         log_level:    (document.getElementById('sp-loglevel').dataset.val) || null,
       })

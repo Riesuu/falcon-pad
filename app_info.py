@@ -114,7 +114,7 @@ BASE_DIR     = _resolve_base_dir()
 BUNDLE_DIR   = _resolve_bundle_dir()
 CONFIG_DIR   = _os.path.join(BASE_DIR, "config")
 LOG_DIR      = _os.path.join(BASE_DIR, "logs")
-BRIEFING_DIR = _os.path.join(BASE_DIR, "briefing")
+BRIEFING_DIR = _os.path.join(BASE_DIR, "personal")
 CONFIG_FILE  = _os.path.join(CONFIG_DIR, "falcon_pad_config.json")
 
 # Derived paths

@@ -14,11 +14,11 @@ WIN_H = 400
 HEADER_H = 80
 ACCENT_LINE_H = 3
 
-# ── Colors (matched to logo: navy, red, white) ─────────────────────────────
+# ── Colors (matched to logo: navy, green, white) ────────────────────────────
 BG         = "#060a12"
 BG2        = "#0b1220"
-ACCENT     = "#c0392b"
-ACCENT_DIM = "#3d1410"
+ACCENT     = "#4ade80"
+ACCENT_DIM = "#0f2b18"
 RED        = "#c0392b"
 RED_DIM    = "#1a0808"
 RED_HOV    = "#3d1010"

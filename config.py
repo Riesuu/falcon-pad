@@ -4,7 +4,7 @@ falcon_pad.config — App configuration persistence and logging setup.
 
 Public API:
     APP_CONFIG   — dict with live config values
-    BRIEFING_DIR — current briefing directory (mutable via settings API)
+    BRIEFING_DIR — personal briefing directory (fixed at app root /personal)
     LOG_FILE     — path to rotating log file
     load()       — reload config from disk
     save(cfg)    — persist config to disk
@@ -28,7 +28,6 @@ import app_info
 
 _DEFAULTS: dict = {
     "port":         app_info.DEFAULT_PORT,
-    "briefing_dir": app_info.BRIEFING_DIR,
     "broadcast_ms": app_info.DEFAULT_BROADCAST_MS,
     "theme":        "dark",
     "log_level":    "production",
@@ -59,7 +58,7 @@ def save(cfg: dict) -> None:
 
 
 APP_CONFIG:   dict = load()
-BRIEFING_DIR: str  = str(APP_CONFIG["briefing_dir"])
+BRIEFING_DIR: str  = app_info.BRIEFING_DIR
 os.makedirs(BRIEFING_DIR, exist_ok=True)
 
 # ── Logging ───────────────────────────────────────────────────────────────────

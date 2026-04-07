@@ -148,7 +148,6 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     # ── Settings ─────────────────────────────────────────────────
     class SettingsModel(BaseModel):
         port:         Optional[int] = None
-        briefing_dir: Optional[str] = None
         broadcast_ms: Optional[int] = None
         theme:        Optional[str] = None
         log_level:    Optional[str] = None
@@ -163,15 +162,6 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         if s.port is not None and app_info.PORT_MIN <= s.port <= app_info.PORT_MAX and s.port != config.APP_CONFIG.get("port"):
             config.APP_CONFIG["port"] = s.port
             changed.append("port")
-        if s.briefing_dir is not None and s.briefing_dir.strip():
-            nd = s.briefing_dir.strip()
-            try:
-                os.makedirs(nd, exist_ok=True)
-                config.APP_CONFIG["briefing_dir"] = nd
-                config.BRIEFING_DIR = nd
-                changed.append("briefing_dir")
-            except Exception as e:
-                raise HTTPException(400, f"Invalid folder: {e}")
         if s.broadcast_ms is not None and app_info.BROADCAST_MS_MIN <= s.broadcast_ms <= app_info.BROADCAST_MS_MAX:
             config.APP_CONFIG["broadcast_ms"] = s.broadcast_ms
             changed.append("broadcast_ms")
