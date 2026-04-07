@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Falcon-Pad — Tactical companion app for Falcon BMS
-Copyright (C) 2024  Riesu <contact@falcon-charts.com>  GNU GPL v3
+Copyright (C) 2026  Riesu <contact@falcon-charts.com>  GNU GPL v3
 """
 
 import asyncio

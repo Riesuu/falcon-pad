@@ -10,7 +10,7 @@ Public API:
     save(cfg)    — persist config to disk
     log_sep(t)   — print a separator to the log
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations

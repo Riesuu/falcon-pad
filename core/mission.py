@@ -16,7 +16,7 @@ Public API:
     find_latest_ini(extra_patterns)  — find most recent .ini with [STPT]
     parse_ini_file(path)      — parse and set mission_data from file
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations

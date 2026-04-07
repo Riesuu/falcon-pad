@@ -15,7 +15,7 @@ Public API:
     get_contacts(...)         — filtered contact list for broadcast
     get_diagnostics()         — dict for /api/acmi/status + diag logging
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations

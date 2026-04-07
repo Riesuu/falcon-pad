@@ -23,7 +23,7 @@ Usage from falcon_pad.py:
     stpts = get_steerpoints(strings)
     dl_marks = get_dl_markpoints(strings, own_lat, own_lon)
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations

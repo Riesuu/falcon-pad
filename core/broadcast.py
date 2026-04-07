@@ -6,7 +6,7 @@ Runs two async loops:
     broadcast_loop()     — push aircraft, contacts, mission, HSD, markpoints
     ini_watcher_loop()   — auto-load .ini files when BMS is not connected
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 import asyncio

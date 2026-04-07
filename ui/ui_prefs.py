@@ -8,7 +8,7 @@ Public API:
     load()    — load from disk (returns dict)
     save(p)   — persist dict to disk
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations

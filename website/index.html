@@ -29,8 +29,14 @@
   <h1>Tactical Companion<br>for <span>Falcon BMS 4.38</span></h1>
   <p>Real-time map, steerpoints, checklists, briefings and aircraft contacts — all on your tablet while you fly.</p>
   <div class="hero-btns">
-    <a href="https://github.com/riesu/falcon-pad/releases" class="btn btn-primary">Download</a>
-    <a href="https://github.com/riesu/falcon-pad" class="btn btn-secondary">View on GitHub</a>
+    <a href="https://github.com/riesu/falcon-pad/releases/latest/download/FalconPad.exe" class="btn btn-primary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+      Download
+    </a>
+    <a href="https://github.com/riesu/falcon-pad" target="_blank" class="btn btn-secondary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+      View on GitHub
+    </a>
   </div>
   <div class="hero-tag">
     <span>Free &amp; Open Source</span>
@@ -48,12 +54,12 @@
       <div class="feature">
         <div class="feature-icon">&#x1f5fa;</div>
         <h3>Real-Time Map</h3>
-        <p>Your aircraft position, heading, altitude and speed updated in real-time via BMS SharedMemory. Dark, satellite and terrain map layers.</p>
+        <p>Your aircraft position, heading, altitude and speed updated in real-time automatically. Dark, satellite and terrain map layers.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x1f4cd;</div>
         <h3>Steerpoints &amp; Flight Plan</h3>
-        <p>Auto-loaded from SharedMemory or DTC .ini files. Displayed on the map with altitude, index and flight plan lines.</p>
+        <p>Auto-loaded from BMS or your DTC .ini files. Displayed on the map with altitude, index and flight plan lines.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x1f534;</div>
@@ -63,17 +69,17 @@
       <div class="feature">
         <div class="feature-icon">&#x1f4e1;</div>
         <h3>Radio Presets &amp; COMMS</h3>
-        <p>UHF/VHF presets and TACAN auto-loaded from pilot profile. Departure airport detected via COMMS TACAN channel.</p>
+        <p>UHF/VHF presets and TACAN auto-loaded from your pilot profile. Departure airport detected automatically.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x1f3af;</div>
         <h3>Bullseye</h3>
-        <p>Bullseye position with range rings (20/40/60/80/100 NM), 8 radials and bearing labels. Dual-source: FlightData2 + StringData fallback.</p>
+        <p>Bullseye position with range rings (20/40/60/80/100 NM), 8 radials and bearing labels. Loaded automatically from BMS.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x2708;</div>
         <h3>ACMI Contacts</h3>
-        <p>All aircraft from the Tacview TRTT stream — friendly, enemy and unknown. Color-coded blips: green (ally), red (enemy), amber (unknown). Callsign, altitude, heading and speed labels.</p>
+        <p>All aircraft in the mission: friendly, enemy and unknown. Color-coded blips: green (ally), red (enemy), amber (unknown). Callsign, altitude, heading and speed labels.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x2705;</div>
@@ -83,12 +89,12 @@
       <div class="feature">
         <div class="feature-icon">&#x1f4c4;</div>
         <h3>Briefing Viewer</h3>
-        <p>PDF, images, DOCX and HTML files. PDF.js rendering with pinch-to-zoom on tablets. Upload via the app or drop files directly in the <code>personal/</code> folder. BMS-generated briefings auto-loaded from the TRTT stream.</p>
+        <p>PDF, images, DOCX and HTML files. Pinch-to-zoom on tablets. Upload via the app or drop files directly in the <code>personal/</code> folder. BMS briefings loaded automatically.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x1f310;</div>
         <h3>Multi-Theater</h3>
-        <p>Korea, Korea KTO, Balkans, Israel, Aegean, Iberia, Nordic and more. Auto-detection from BMS StringData.</p>
+        <p>KTO, Israel, Balkans, HTO. Theater detected automatically at runtime.</p>
       </div>
     </div>
   </div>
@@ -102,7 +108,12 @@
     <div class="setup-steps">
       <div class="step">
         <h4>Download &amp; Extract</h4>
-        <p>Download <code>FalconPad.exe</code> from <a href="https://github.com/riesu/falcon-pad/releases">GitHub Releases</a> and place it anywhere.</p>
+        <p>Download <code>FalconPad.exe</code> from <a href="https://github.com/riesu/falcon-pad/releases">GitHub Releases</a> and place it in the BMS <code>Tools</code> folder.</p>
+      </div>
+      <div class="step">
+        <h4>Enables TacView realtime TCP server</h4>
+        <p>To see aircraft on the map, add this line to <code>User/Config/Falcon BMS User.cfg</code>:<br><br>
+        <code>set g_bTacviewRealTime 1</code></p>
       </div>
       <div class="step">
         <h4>Open Port 8000 in Windows Firewall</h4>
@@ -115,13 +126,8 @@
         <p>Run <code>FalconPad.exe</code>. The tray window shows your local and network URLs.</p>
       </div>
       <div class="step">
-        <h4>Open on Tablet</h4>
-        <p>On your tablet or phone browser, go to the <strong>Network URL</strong> shown (e.g. <code>http://192.168.1.32:8000</code>). Both devices must be on the same WiFi network.</p>
-      </div>
-      <div class="step">
-        <h4>Enable aircraft contacts (optional)</h4>
-        <p>To see aircraft on the map, add this line to <code>User/Config/Falcon BMS User.cfg</code>:<br><br>
-        <code>set g_bTacviewRealTime 1</code></p>
+        <h4>Remote Access</h4>
+        <p>On your tablet or phone browser, go to the <strong>Network URL</strong> shown (e.g. <code>http://192.168.0.69:8000</code>). Both devices must be on the same network.</p>
       </div>
       <div class="step">
         <h4>Fly!</h4>
@@ -190,7 +196,7 @@
       <span>Buy Falcon 4.0 on Steam</span>
     </a>
   </div>
-  <p>Falcon-Pad &copy; 2024 <a href="https://www.falcon-charts.com">Riesu</a> &mdash; GNU GPL v3 &mdash; Not affiliated with Benchmark Sims</p>
+  <p>Falcon-Pad &copy; 2026 <a href="https://www.falcon-charts.com">Riesu</a> · GNU GPL v3 · Not affiliated with Benchmark Sims</p>
 </footer>
 
 <script>

@@ -12,7 +12,7 @@ To add a new theater:
     3. The theater name must match (case-insensitive) what BMS exposes
        in StringData ThrName (StringIdentifier 13).
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations

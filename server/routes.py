@@ -2,7 +2,7 @@
 """
 falcon_pad.routes — All FastAPI API endpoints.
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 import configparser

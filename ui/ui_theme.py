@@ -5,7 +5,7 @@ falcon_pad.ui_theme — Qt GUI theme constants for the desktop tray window.
 All colors, fonts, layout dimensions, labels and timings live here.
 Import from here in falcon_pad.py — nothing hardcoded in the widget.
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 # ── Window ──────────────────────────────────────────────────────────────────

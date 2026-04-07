@@ -11,7 +11,7 @@ Public API:
     safe_int32(addr) → int | None
     BMSSharedMemory  — .connected, .ptr1, .ptr2, .shm_ptrs, .get_position()
 
-Copyright (C) 2024  Riesu — GNU GPL v3
+Copyright (C) 2026  Riesu — GNU GPL v3
 """
 
 from __future__ import annotations
