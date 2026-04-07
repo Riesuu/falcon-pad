@@ -1,0 +1,125 @@
+# -*- coding: utf-8 -*-
+"""
+Falcon-Pad — Application identity constants.
+
+Single source of truth. Import from here everywhere.
+Change version/author/URLs here ONCE — propagates to Python, logs, Qt GUI, and frontend.
+"""
+
+NAME    = "Falcon-Pad || Tactical Companion for BMS"
+VERSION = "0.3"
+AUTHOR  = "Riesu"
+CONTACT = "contact@falcon-charts.com"
+WEBSITE = "https://pad.falcon-charts.com"
+CHARTS  = "https://www.falcon-charts.com"
+GITHUB  = "https://github.com/Riesuu/falcon-pad"
+LICENSE = "GNU GPL v3"
+BMS     = "Falcon BMS 4.38"
+
+SHORT   = "Falcon-Pad"
+
+# ── Network defaults ─────────────────────────────────────────────────────────
+DEFAULT_PORT         = 8000
+DEFAULT_HOST         = "0.0.0.0"
+DEFAULT_BROADCAST_MS = 200
+BROADCAST_MS_MIN     = 50
+BROADCAST_MS_MAX     = 2000
+
+# ── TRTT (Tacview Real-Time Telemetry) ───────────────────────────────────────
+TRTT_HOST              = "127.0.0.1"
+TRTT_PORT              = 42674
+TRTT_HANDSHAKE_TIMEOUT = 5.0
+TRTT_INITIAL_TIMEOUT   = 10.0
+TRTT_RECEIVE_TIMEOUT   = 30.0
+TRTT_RECONNECT_SLEEP   = 5
+
+# ── BMS detection ────────────────────────────────────────────────────────────
+BMS_REGISTRY_BASE   = r"SOFTWARE\WOW6432Node\Benchmark Sims"
+BMS_REGISTRY_PREFIX = "falcon bms"
+BMS_REGISTRY_KEY    = "InstallDir"
+BMS_USER_CONFIG_SUB = ("User", "Config")
+BMS_RECONNECT_S     = 5.0
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+LOG_FILENAME     = "falcon_pad.log"
+LOG_MAX_BYTES    = 2 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
+
+# ── Briefing ─────────────────────────────────────────────────────────────────
+BRIEFING_MAX_MB      = 50
+BRIEFING_ALLOWED_EXT = {".pdf", ".png", ".jpg", ".jpeg", ".docx", ".html", ".htm"}
+
+# ── Mission / distances ──────────────────────────────────────────────────────
+FT_TO_M           = 0.3048
+FT_TO_NM_DIVISOR  = 6076.12
+GREAT_CIRCLE_NM   = 3440.065
+AIRPORT_SEARCH_NM = 5.0
+PPT_DEFAULT_RANGE_M  = 27800
+PPT_DEFAULT_RANGE_NM = 15
+M_TO_FT           = 3.28084
+KT_PER_MS         = 1.944
+
+# ── Paths / filenames ───────────────────────────────────────────────────────
+FRONTEND_SUBDIR      = "frontend"
+IMAGES_SUBDIR        = "images"
+ICON_FILENAME        = "FPLogo.ico"
+INDEX_HTML           = "index.html"
+CHECKLIST_REL_PATH   = ("data", "checklists", "f16_checklist.json")
+
+# ── Server / HTTP ───────────────────────────────────────────────────────────
+STATIC_ROUTE          = "/static"
+CACHE_CONTROL_STATIC  = "no-cache, must-revalidate"
+ACCESS_DENIED_MSG     = "Access denied — local network only"
+DNS_PROBE_HOST        = "8.8.8.8"
+DNS_PROBE_PORT        = 80
+INI_ENCODING          = "latin-1"
+BMS_CONFIG_HINT       = "set g_bTacviewRealTime 1  (User/config/Falcon BMS User.cfg)"
+
+# ── MIME types ──────────────────────────────────────────────────────────────
+MIME_MAP = {
+    ".pdf":  "application/pdf",
+    ".png":  "image/png",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".html": "text/html",
+    ".htm":  "text/html",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MIME_DEFAULT = "application/octet-stream"
+
+# ── Settings validation ─────────────────────────────────────────────────────
+VALID_THEMES     = ("dark", "light")
+VALID_LAYERS     = ("dark", "osm", "satellite", "terrain")
+PORT_MIN         = 1024
+PORT_MAX         = 65535
+SIZE_MIN         = 0.5
+SIZE_MAX         = 50.0
+
+import os as _os, sys as _sys
+
+def _resolve_base_dir() -> str:
+    """Return project root — works in dev and .exe PyInstaller."""
+    if getattr(_sys, 'frozen', False):
+        return _os.path.dirname(_sys.executable)
+    return _os.path.dirname(_os.path.abspath(__file__))
+
+def _resolve_bundle_dir() -> str:
+    """Bundled assets directory (frontend, data). _MEIPASS in --onefile mode."""
+    if getattr(_sys, 'frozen', False):
+        return getattr(_sys, '_MEIPASS', _os.path.dirname(_sys.executable))
+    return _os.path.dirname(_os.path.abspath(__file__))
+
+BASE_DIR     = _resolve_base_dir()
+BUNDLE_DIR   = _resolve_bundle_dir()
+CONFIG_DIR   = _os.path.join(BASE_DIR, "config")
+LOG_DIR      = _os.path.join(BASE_DIR, "logs")
+BRIEFING_DIR = _os.path.join(BASE_DIR, "personal")
+CONFIG_FILE  = _os.path.join(CONFIG_DIR, "falcon_pad_config.json")
+
+# Derived paths
+FRONTEND_DIR = _os.path.join(BUNDLE_DIR, FRONTEND_SUBDIR)
+ASSETS_DIR   = _os.path.join(FRONTEND_DIR, IMAGES_SUBDIR)
+
+# Create required directories
+for _d in (CONFIG_DIR, LOG_DIR, BRIEFING_DIR):
+    _os.makedirs(_d, exist_ok=True)

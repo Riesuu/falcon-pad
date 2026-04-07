@@ -1,0 +1,1412 @@
+[
+  {
+    "section": "BEFORE STARTING ENGINE",
+    "color": "#4ade80"
+  },
+  {
+    "n": 1,
+    "item": "Canopy",
+    "status": "ARMS IN, CLOSE & SPIDER LOCK",
+    "loc": "Canopy"
+  },
+  {
+    "n": 2,
+    "item": "MAIN PWR switch",
+    "status": "BATT — check lights",
+    "loc": "Elec panel"
+  },
+  {
+    "n": 3,
+    "item": "FLCS PWR TEST switch",
+    "status": "TEST and hold — check lights",
+    "loc": "Test panel"
+  },
+  {
+    "n": 4,
+    "item": "FLCS PWR TEST switch",
+    "status": "Release",
+    "loc": "Test panel"
+  },
+  {
+    "n": 5,
+    "item": "JFS RUN light",
+    "status": "Check OFF",
+    "loc": "JFS panel"
+  },
+  {
+    "n": 6,
+    "item": "MAIN PWR switch",
+    "status": "MAIN PWR — check lights",
+    "loc": "Elec panel"
+  },
+  {
+    "n": 7,
+    "item": "EPU GEN / EPU PMG",
+    "status": "Confirm OFF",
+    "loc": "Elec panel"
+  },
+  {
+    "section": "STARTING ENGINE",
+    "color": "#4ade80"
+  },
+  {
+    "note": "Do not leave MAIN PWR in BATT/MAIN PWR >5 min without engine running"
+  },
+  {
+    "n": 1,
+    "item": "JFS switch",
+    "status": "START 2 — JFS RUN light ON",
+    "loc": "JFS panel"
+  },
+  {
+    "n": 2,
+    "item": "SEC caution light",
+    "status": "Check OFF",
+    "loc": "Caution panel"
+  },
+  {
+    "n": 3,
+    "item": "Throttle",
+    "status": "IDLE at 20% RPM min",
+    "loc": "Throttle"
+  },
+  {
+    "note": "FTIT <800°C — otherwise SHUTDOWN! HYD A&B >1000 psi"
+  },
+  {
+    "n": 4,
+    "item": "ENGINE warning light",
+    "status": "OFF at ~55% RPM",
+    "loc": "Warning lights"
+  },
+  {
+    "n": 5,
+    "item": "JFS switch",
+    "status": "Confirm OFF",
+    "loc": "JFS panel"
+  },
+  {
+    "n": 6,
+    "item": "HYD/OIL PRESS light",
+    "status": "OFF",
+    "loc": "Warning lights"
+  },
+  {
+    "n": 7,
+    "item": "FUEL FLOW",
+    "status": "500-2000 pph",
+    "loc": "Engine gauges"
+  },
+  {
+    "n": 8,
+    "item": "OIL pressure",
+    "status": "15 psi minimum",
+    "loc": "Engine gauges"
+  },
+  {
+    "n": 9,
+    "item": "NOZ POS",
+    "status": ">80%",
+    "loc": "Engine gauges"
+  },
+  {
+    "n": 10,
+    "item": "RPM",
+    "status": "65-77%",
+    "loc": "Engine gauges"
+  },
+  {
+    "n": 11,
+    "item": "FTIT",
+    "status": "625°C or less",
+    "loc": "Engine gauges"
+  },
+  {
+    "n": 12,
+    "item": "HYD PRESS A & B",
+    "status": "2850-3250 psi",
+    "loc": "HYD gauges"
+  },
+  {
+    "n": 13,
+    "item": "EPU FUEL QTY",
+    "status": "95-102%",
+    "loc": "EPU gauge"
+  },
+  {
+    "section": "AFTER ENGINE START",
+    "color": "#4ade80"
+  },
+  {
+    "n": 1,
+    "item": "PROBE HEAT switch",
+    "status": "TEST then PROBE HEAT",
+    "loc": "Test panel"
+  },
+  {
+    "n": 2,
+    "item": "FIRE & OHEAT DETECT",
+    "status": "Test — check lights",
+    "loc": "Test panel"
+  },
+  {
+    "n": 3,
+    "item": "MAL & IND LTS",
+    "status": "Test — check VMS & lights",
+    "loc": "Test panel"
+  },
+  {
+    "section": "SEC CHECK",
+    "color": "#4ade80"
+  },
+  {
+    "n": 1,
+    "item": "Throttle",
+    "status": "IDLE 30 sec, brakes apply",
+    "loc": "Throttle"
+  },
+  {
+    "n": 2,
+    "item": "ENG CONT switch",
+    "status": "SEC — NOZ <5%, SEC light ON",
+    "loc": "ENG CONT panel"
+  },
+  {
+    "n": 3,
+    "item": "Throttle",
+    "status": "73% min — check response",
+    "loc": "Throttle"
+  },
+  {
+    "n": 4,
+    "item": "ENG CONT switch",
+    "status": "PRI — NOZ >80%, SEC OFF",
+    "loc": "ENG CONT panel"
+  },
+  {
+    "section": "EPU CHECK",
+    "color": "#4ade80"
+  },
+  {
+    "note": "EPU check MUST be performed BEFORE turning on avionics"
+  },
+  {
+    "n": 1,
+    "item": "OXYGEN",
+    "status": "100%",
+    "loc": "O2 regulator"
+  },
+  {
+    "n": 2,
+    "item": "EPU switch",
+    "status": "OFF then NORM",
+    "loc": "EPU panel"
+  },
+  {
+    "n": 3,
+    "item": "Brakes",
+    "status": "Apply",
+    "loc": "Rudder pedals"
+  },
+  {
+    "n": 4,
+    "item": "Throttle",
+    "status": "5% above idle, up to 85%",
+    "loc": "Throttle"
+  },
+  {
+    "n": 5,
+    "item": "EPU/GEN TEST switch",
+    "status": "EPU/GEN and HOLD",
+    "loc": "Test panel"
+  },
+  {
+    "n": 6,
+    "item": "EPU RUN light",
+    "status": "ON 5 sec min (within 10 sec)",
+    "loc": "EPU panel"
+  },
+  {
+    "n": 7,
+    "item": "EPU/GEN TEST switch",
+    "status": "OFF — Throttle IDLE",
+    "loc": "Test panel"
+  },
+  {
+    "n": 8,
+    "item": "EXT LIGHTING POSITION",
+    "status": "STEADY",
+    "loc": "Ext Lightning panel"
+  },
+  {
+    "section": "AVIONICS POWER",
+    "color": "#4ade80"
+  },
+  {
+    "n": 1,
+    "item": "MMC switch",
+    "status": "MMC",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 2,
+    "item": "ST STA switch",
+    "status": "ST STA",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 3,
+    "item": "MFD switch",
+    "status": "MFD (24 sec warmup)",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 4,
+    "item": "UFC switch",
+    "status": "UFC",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 5,
+    "item": "GPS TRK switch",
+    "status": "GPS TRK",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 6,
+    "item": "DL switch",
+    "status": "DL",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 7,
+    "item": "Altimeter QNH",
+    "status": "Set to match field elevation",
+    "loc": "HUD panel"
+  },
+  {
+    "n": 8,
+    "item": "EGI",
+    "status": "ALIGN NORM (after DED visible)",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 9,
+    "item": "INS",
+    "status": "Align — wait for RDY",
+    "loc": "DED"
+  },
+  {
+    "section": "SENSORS & AVIONICS",
+    "color": "#4ade80"
+  },
+  {
+    "n": 1,
+    "item": "LEFT HDPT switch",
+    "status": "As required (NVP)",
+    "loc": "SNSR PWR panel"
+  },
+  {
+    "n": 2,
+    "item": "RIGHT HDPT switch",
+    "status": "As required (TGP)",
+    "loc": "SNSR PWR panel"
+  },
+  {
+    "n": 3,
+    "item": "FCR switch",
+    "status": "FCR",
+    "loc": "SNSR PWR panel"
+  },
+  {
+    "n": 4,
+    "item": "RDR ALT switch",
+    "status": "RDR ALT (STBY if crew near)",
+    "loc": "SNSR PWR panel"
+  },
+  {
+    "n": 5,
+    "item": "HUD / ASHM",
+    "status": "ON",
+    "loc": "HUD panel"
+  },
+  {
+    "n": 6,
+    "item": "HMCS SYMBOLOGY INT",
+    "status": "ON (WARM UP)",
+    "loc": "HMCS panel"
+  },
+  {
+    "n": 7,
+    "item": "Ejection seat",
+    "status": "Adjust position",
+    "loc": "Right sidewall"
+  },
+  {
+    "n": 8,
+    "item": "IFF MASTER knob",
+    "status": "STBY",
+    "loc": "IFF panel"
+  },
+  {
+    "n": 9,
+    "item": "C & I knob",
+    "status": "UFC",
+    "loc": "IFF panel"
+  },
+  {
+    "n": 10,
+    "item": "MFD — MFL",
+    "status": "Clear",
+    "loc": "MFD"
+  },
+  {
+    "n": 11,
+    "item": "MFD — DTC",
+    "status": "Load",
+    "loc": "MFD"
+  },
+  {
+    "section": "FLCS BIT CHECK",
+    "color": "#4ade80"
+  },
+  {
+    "n": 1,
+    "item": "LMFD",
+    "status": "FLCS page",
+    "loc": "Left MFD"
+  },
+  {
+    "n": 2,
+    "item": "TRIM Check",
+    "status": "NEUTRAL-NORM",
+    "loc": "Trim panel"
+  },
+  {
+    "n": 3,
+    "item": "FLT CONTROL Panel",
+    "status": "Check all switches inward",
+    "loc": "FLT CTRL panel"
+  },
+  {
+    "n": 4,
+    "item": "Flight controls",
+    "status": "Cycle (Stick & Rudder) 20s",
+    "loc": "Stick / pedals"
+  },
+  {
+    "n": 5,
+    "item": "FLCS BIT",
+    "status": "Initiate — wait ~45 sec",
+    "loc": "BIT switch"
+  },
+  {
+    "n": 6,
+    "item": "LMFD — FLCS",
+    "status": "BIT PASS message",
+    "loc": "Left MFD"
+  },
+  {
+    "n": 7,
+    "item": "WHEELS down lights",
+    "status": "Check three green",
+    "loc": "LG panel"
+  },
+  {
+    "n": 8,
+    "item": "EPU FUEL QUANTITY",
+    "status": "95-102%",
+    "loc": "EPU gauge"
+  },
+  {
+    "section": "FINAL SETUP",
+    "color": "#4ade80"
+  },
+  {
+    "n": 1,
+    "item": "MFDs",
+    "status": "As desired",
+    "loc": "MFDs"
+  },
+  {
+    "n": 2,
+    "item": "UHF / VHF Radios",
+    "status": "As desired",
+    "loc": "Audio panels"
+  },
+  {
+    "n": 3,
+    "item": "Avionics",
+    "status": "Program / verify",
+    "loc": "ICP / MFD"
+  },
+  {
+    "n": 4,
+    "item": "Speed Brakes",
+    "status": "Cycle (60° fully open)",
+    "loc": "Throttle SPD BRK"
+  },
+  {
+    "n": 5,
+    "item": "DBU CHECK",
+    "status": "BACKUP then OFF",
+    "loc": "DIGITAL BACKUP sw"
+  },
+  {
+    "n": 6,
+    "item": "TRIM CHECK",
+    "status": "DISC then NORM",
+    "loc": "TRIM/AP switch"
+  },
+  {
+    "n": 7,
+    "item": "Brakes",
+    "status": "Check both channels",
+    "loc": "Rudder pedals"
+  },
+  {
+    "n": 8,
+    "item": "Anti-ice",
+    "status": "Check (OFF, verify FTIT, AUTO)",
+    "loc": "Anti-ice panel"
+  },
+  {
+    "n": 9,
+    "item": "Seat",
+    "status": "Adjust as desired",
+    "loc": "Right sidewall"
+  },
+  {
+    "section": "BEFORE TAXI",
+    "color": "#60a5fa"
+  },
+  {
+    "n": 1,
+    "item": "Canopy",
+    "status": "Close and lock",
+    "loc": "Canopy"
+  },
+  {
+    "n": 2,
+    "item": "Radios",
+    "status": "Set and check",
+    "loc": "Audio panels"
+  },
+  {
+    "n": 3,
+    "item": "Altimeter",
+    "status": "Set and check",
+    "loc": "HUD panel"
+  },
+  {
+    "n": 4,
+    "item": "Exterior lights",
+    "status": "As required",
+    "loc": "Ext Lightning panel"
+  },
+  {
+    "n": 5,
+    "item": "EGI knob",
+    "status": "NAV",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 6,
+    "item": "Chocks",
+    "status": "Remove",
+    "loc": "Ground crew"
+  },
+  {
+    "section": "TAXI",
+    "color": "#60a5fa"
+  },
+  {
+    "n": 1,
+    "item": "Brakes and NWS",
+    "status": "Check",
+    "loc": "Stick / pedals"
+  },
+  {
+    "n": 2,
+    "item": "Heading",
+    "status": "Check",
+    "loc": "HSI / HUD"
+  },
+  {
+    "n": 3,
+    "item": "Flight instruments",
+    "status": "Check operation",
+    "loc": "Cockpit"
+  },
+  {
+    "section": "BEFORE TAKEOFF",
+    "color": "#fbbf24"
+  },
+  {
+    "n": 1,
+    "item": "ALT FLAPS switch",
+    "status": "NORM",
+    "loc": "Left aux console"
+  },
+  {
+    "n": 2,
+    "item": "MANUAL TF FLYUP",
+    "status": "ENABLE",
+    "loc": "Left console"
+  },
+  {
+    "n": 3,
+    "item": "Trim",
+    "status": "Pitch/yaw center, roll set",
+    "loc": "Trim panel"
+  },
+  {
+    "n": 4,
+    "item": "ENG CONT switch",
+    "status": "PRI (guard down)",
+    "loc": "ENG CONT panel"
+  },
+  {
+    "n": 5,
+    "item": "Speedbrakes",
+    "status": "Closed",
+    "loc": "Throttle"
+  },
+  {
+    "n": 6,
+    "item": "Canopy",
+    "status": "Close, lock, light off",
+    "loc": "Canopy"
+  },
+  {
+    "n": 7,
+    "item": "IFF",
+    "status": "Set and check",
+    "loc": "IFF panel"
+  },
+  {
+    "n": 8,
+    "item": "External tanks",
+    "status": "Verify feeding",
+    "loc": "FUEL QTY"
+  },
+  {
+    "n": 9,
+    "item": "FUEL QTY SEL knob",
+    "status": "NORM",
+    "loc": "Fuel panel"
+  },
+  {
+    "n": 10,
+    "item": "STORES CONFIG switch",
+    "status": "As required",
+    "loc": "Left aux console"
+  },
+  {
+    "n": 11,
+    "item": "Harness & anti-g",
+    "status": "Check",
+    "loc": "Cockpit"
+  },
+  {
+    "n": 12,
+    "item": "PROBE HEAT switch",
+    "status": "PROBE HEAT",
+    "loc": "Test panel"
+  },
+  {
+    "n": 13,
+    "item": "Ejection safety lever",
+    "status": "ARM (down)",
+    "loc": "Seat"
+  },
+  {
+    "n": 14,
+    "item": "Flight controls",
+    "status": "Cycle",
+    "loc": "Stick / pedals"
+  },
+  {
+    "n": 15,
+    "item": "OIL / HYD pressures",
+    "status": "Check",
+    "loc": "Engine gauges"
+  },
+  {
+    "n": 16,
+    "item": "Warning/caution lights",
+    "status": "Check all clear",
+    "loc": "Caution panel"
+  },
+  {
+    "n": 17,
+    "item": "TGP",
+    "status": "Stow",
+    "loc": "MFD"
+  },
+  {
+    "n": 18,
+    "item": "ECM panel",
+    "status": "As required",
+    "loc": "ECM panel"
+  },
+  {
+    "section": "AFTER TAKEOFF",
+    "color": "#fbbf24"
+  },
+  {
+    "n": 1,
+    "item": "Gear",
+    "status": "UP",
+    "loc": "LG handle"
+  },
+  {
+    "n": 2,
+    "item": "Gear indicators",
+    "status": "3 up / no lights",
+    "loc": "LG panel"
+  },
+  {
+    "n": 3,
+    "item": "Landing Light",
+    "status": "OFF",
+    "loc": "LG panel"
+  },
+  {
+    "n": 4,
+    "item": "Fuel",
+    "status": "Check feeding & balance",
+    "loc": "Fuel gauges"
+  },
+  {
+    "n": 5,
+    "item": "Engine instruments",
+    "status": "Check in limits",
+    "loc": "Engine gauges"
+  },
+  {
+    "n": 6,
+    "item": "Altimeter",
+    "status": "Crosscheck RALT vs BARO",
+    "loc": "HUD / DED"
+  },
+  {
+    "n": 7,
+    "item": "Autopilot",
+    "status": "As required",
+    "loc": "ICP"
+  },
+  {
+    "n": 8,
+    "item": "Steerpoint",
+    "status": "Set for route",
+    "loc": "ICP"
+  },
+  {
+    "section": "FENCE IN",
+    "color": "#f97316"
+  },
+  {
+    "n": 1,
+    "item": "Master Arm",
+    "status": "ARM",
+    "loc": "Throttle / ARM switch"
+  },
+  {
+    "n": 2,
+    "item": "Laser Arm",
+    "status": "ARM",
+    "loc": "Left aux console"
+  },
+  {
+    "n": 3,
+    "item": "RF switch",
+    "status": "NORM",
+    "loc": "Threat warning aux"
+  },
+  {
+    "n": 4,
+    "item": "CMDS",
+    "status": "ON",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 5,
+    "item": "ECM",
+    "status": "ON",
+    "loc": "ECM panel"
+  },
+  {
+    "n": 6,
+    "item": "RWR",
+    "status": "Check",
+    "loc": "MFD"
+  },
+  {
+    "n": 7,
+    "item": "Chaff / Flare pgm",
+    "status": "Verify",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 8,
+    "item": "FCR",
+    "status": "Set mode & range",
+    "loc": "MFD"
+  },
+  {
+    "n": 9,
+    "item": "MFDs",
+    "status": "Set tactical pages",
+    "loc": "MFD"
+  },
+  {
+    "n": 10,
+    "item": "Bullseye",
+    "status": "Verify on HSD",
+    "loc": "MFD"
+  },
+  {
+    "n": 11,
+    "item": "Bingo fuel",
+    "status": "Set",
+    "loc": "DED"
+  },
+  {
+    "n": 12,
+    "item": "Datalink",
+    "status": "Check",
+    "loc": "MFD"
+  },
+  {
+    "section": "FENCE OUT",
+    "color": "#f97316"
+  },
+  {
+    "n": 1,
+    "item": "Master Arm",
+    "status": "SAFE",
+    "loc": "Throttle / ARM switch"
+  },
+  {
+    "n": 2,
+    "item": "Laser Arm",
+    "status": "OFF",
+    "loc": "Left aux console"
+  },
+  {
+    "n": 3,
+    "item": "ECM",
+    "status": "STBY",
+    "loc": "ECM panel"
+  },
+  {
+    "n": 4,
+    "item": "Gun",
+    "status": "SAFE",
+    "loc": "SMS / MFD"
+  },
+  {
+    "n": 5,
+    "item": "RF switch",
+    "status": "As required",
+    "loc": "Threat warning aux"
+  },
+  {
+    "section": "BEFORE LANDING",
+    "color": "#a78bfa"
+  },
+  {
+    "n": 1,
+    "item": "Altimeter",
+    "status": "Set QNH destination",
+    "loc": "HUD panel"
+  },
+  {
+    "n": 2,
+    "item": "TACAN",
+    "status": "Set destination channel",
+    "loc": "ICP"
+  },
+  {
+    "n": 3,
+    "item": "ILS",
+    "status": "Set freq / CRS",
+    "loc": "ICP"
+  },
+  {
+    "n": 4,
+    "item": "Gear",
+    "status": "DOWN (below 300 KIAS)",
+    "loc": "LG handle"
+  },
+  {
+    "n": 5,
+    "item": "Gear indicators",
+    "status": "3 green — down & locked",
+    "loc": "LG panel"
+  },
+  {
+    "n": 6,
+    "item": "Speed",
+    "status": "On-speed AOA (11–13° AOA)",
+    "loc": "HUD / AOA indexer"
+  },
+  {
+    "n": 7,
+    "item": "Landing Light",
+    "status": "ON",
+    "loc": "LG panel"
+  },
+  {
+    "n": 8,
+    "item": "Hook",
+    "status": "As required",
+    "loc": "LG panel"
+  },
+  {
+    "section": "AFTER LANDING",
+    "color": "#a78bfa"
+  },
+  {
+    "n": 1,
+    "item": "NWS",
+    "status": "Engage",
+    "loc": "Stick"
+  },
+  {
+    "n": 2,
+    "item": "Speed Brakes",
+    "status": "Retract",
+    "loc": "Throttle"
+  },
+  {
+    "n": 3,
+    "item": "Hook",
+    "status": "Retract",
+    "loc": "LG panel"
+  },
+  {
+    "n": 4,
+    "item": "Landing Light",
+    "status": "OFF",
+    "loc": "LG panel"
+  },
+  {
+    "n": 5,
+    "item": "Radar",
+    "status": "STBY",
+    "loc": "MFD"
+  },
+  {
+    "n": 6,
+    "item": "ECM",
+    "status": "OFF",
+    "loc": "ECM panel"
+  },
+  {
+    "n": 7,
+    "item": "IFF Master",
+    "status": "STBY",
+    "loc": "IFF panel"
+  },
+  {
+    "n": 8,
+    "item": "CMDS",
+    "status": "OFF",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 9,
+    "item": "Master Arm",
+    "status": "SAFE",
+    "loc": "Throttle / ARM switch"
+  },
+  {
+    "n": 10,
+    "item": "Probe Heat",
+    "status": "OFF",
+    "loc": "Test panel"
+  },
+  {
+    "section": "ENGINE SHUTDOWN",
+    "color": "#ef4444"
+  },
+  {
+    "n": 1,
+    "item": "Parking Brake",
+    "status": "Set",
+    "loc": "LG panel"
+  },
+  {
+    "n": 2,
+    "item": "NWS",
+    "status": "Disengage",
+    "loc": "Stick"
+  },
+  {
+    "n": 3,
+    "item": "Avionics Power",
+    "status": "All OFF",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 4,
+    "item": "Sensors Power",
+    "status": "All OFF",
+    "loc": "Sensor power panel"
+  },
+  {
+    "n": 5,
+    "item": "C&I knob",
+    "status": "OFF",
+    "loc": "IFF panel"
+  },
+  {
+    "n": 6,
+    "item": "INS knob",
+    "status": "OFF",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 7,
+    "item": "IFF Master",
+    "status": "OFF",
+    "loc": "IFF panel"
+  },
+  {
+    "n": 8,
+    "item": "ECM",
+    "status": "OFF",
+    "loc": "ECM panel"
+  },
+  {
+    "n": 9,
+    "item": "Lighting",
+    "status": "All OFF",
+    "loc": "Lightning panel"
+  },
+  {
+    "n": 10,
+    "item": "Air Source",
+    "status": "OFF",
+    "loc": "Air Cond panel"
+  },
+  {
+    "n": 11,
+    "item": "Seat",
+    "status": "SAFE",
+    "loc": "Seat"
+  },
+  {
+    "n": 12,
+    "item": "Canopy",
+    "status": "Open",
+    "loc": "Canopy switch"
+  },
+  {
+    "n": 13,
+    "item": "Throttle",
+    "status": "OFF",
+    "loc": "Throttle"
+  },
+  {
+    "n": 14,
+    "item": "Main Power",
+    "status": "OFF",
+    "loc": "Elec panel"
+  },
+  {
+    "section": "IDM / DATALINK",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "DL switch",
+    "status": "DL",
+    "loc": "Avionics Power panel"
+  },
+  {
+    "n": 2,
+    "item": "ICP LIST > 0 > RCL",
+    "status": "Access DL page",
+    "loc": "ICP"
+  },
+  {
+    "n": 3,
+    "item": "Add DL members",
+    "status": "Enter callsign/TNDL#",
+    "loc": "DED"
+  },
+  {
+    "n": 4,
+    "item": "CONT (OSB 6)",
+    "status": "Enable CONT datalink",
+    "loc": "HSD MFD"
+  },
+  {
+    "n": 5,
+    "item": "IDM page (MFD)",
+    "status": "Check OWN / members",
+    "loc": "MFD"
+  },
+  {
+    "n": 6,
+    "item": "Send BIT",
+    "status": "TMS Right Long",
+    "loc": "TQS"
+  },
+  {
+    "n": 7,
+    "item": "Verify DL symbols",
+    "status": "Check wingmen on HSD",
+    "loc": "HSD MFD"
+  },
+  {
+    "section": "MARKPOINTS",
+    "color": "#22d3ee"
+  },
+  {
+    "note": "Markpoints are stored via the ICP MARK page"
+  },
+  {
+    "n": 1,
+    "item": "ICP: LIST > 7",
+    "status": "Open MARK page on DED",
+    "loc": "ICP"
+  },
+  {
+    "n": 2,
+    "item": "Create MK at SPI",
+    "status": "TMS Up Long (creates MK)",
+    "loc": "TQS"
+  },
+  {
+    "n": 3,
+    "item": "Create MK at cursor",
+    "status": "TMS Up Long (FCR/TGP SOI)",
+    "loc": "TQS"
+  },
+  {
+    "n": 4,
+    "item": "Read MK on DED",
+    "status": "SEQ to cycle through MKs",
+    "loc": "ICP SEQ button"
+  },
+  {
+    "n": 5,
+    "item": "Navigate to MK",
+    "status": "STPT > select MK number",
+    "loc": "ICP STPT button"
+  },
+  {
+    "n": 6,
+    "item": "Delete MK",
+    "status": "Not available in BMS",
+    "loc": "—"
+  },
+  {
+    "section": "STEERPOINT MANAGEMENT",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "ICP: STPT button",
+    "status": "Open STPT page",
+    "loc": "ICP"
+  },
+  {
+    "n": 2,
+    "item": "Select STPT number",
+    "status": "Type number + ENTR",
+    "loc": "ICP keypad"
+  },
+  {
+    "n": 3,
+    "item": "Edit STPT (LAT)",
+    "status": "DCS down > type LAT > ENTR",
+    "loc": "DED"
+  },
+  {
+    "n": 4,
+    "item": "Edit STPT (LON)",
+    "status": "DCS down > type LON > ENTR",
+    "loc": "DED"
+  },
+  {
+    "n": 5,
+    "item": "Edit STPT (ELEV)",
+    "status": "DCS down > type ELEV > ENTR",
+    "loc": "DED"
+  },
+  {
+    "n": 6,
+    "item": "Make SPI at STPT",
+    "status": "China Hat Fwd Long",
+    "loc": "TQS"
+  },
+  {
+    "n": 7,
+    "item": "STPT cycle",
+    "status": "ICP STPT UP/DN",
+    "loc": "ICP"
+  },
+  {
+    "section": "TACAN SETUP",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "ICP: T-ILS button",
+    "status": "Open TCN page on DED",
+    "loc": "ICP"
+  },
+  {
+    "n": 2,
+    "item": "Enter channel",
+    "status": "Type channel + ENTR",
+    "loc": "ICP keypad"
+  },
+  {
+    "n": 3,
+    "item": "Select band",
+    "status": "DCS to move asterisks to X/Y",
+    "loc": "DCS switch"
+  },
+  {
+    "n": 4,
+    "item": "Select mode",
+    "status": "DCS to T/R or A/A T/R",
+    "loc": "DCS switch"
+  },
+  {
+    "n": 5,
+    "item": "HSI mode",
+    "status": "TCN or NAV/TCN",
+    "loc": "HSI / ICP"
+  },
+  {
+    "section": "ILS SETUP",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "ICP: T-ILS button x2",
+    "status": "Open ILS page on DED",
+    "loc": "ICP"
+  },
+  {
+    "n": 2,
+    "item": "Enter ILS frequency",
+    "status": "Type freq + ENTR",
+    "loc": "ICP keypad"
+  },
+  {
+    "n": 3,
+    "item": "Set CRS",
+    "status": "DCS down > type CRS + ENTR",
+    "loc": "DED"
+  },
+  {
+    "n": 4,
+    "item": "HSI mode",
+    "status": "ILS/TCN or ILS/NAV",
+    "loc": "HSI / ICP"
+  },
+  {
+    "n": 5,
+    "item": "Verify on HUD",
+    "status": "GS & LOC bars visible",
+    "loc": "HUD"
+  },
+  {
+    "section": "JHMCS ALIGNMENT",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "ICP: LIST button",
+    "status": "Depress",
+    "loc": "ICP"
+  },
+  {
+    "n": 2,
+    "item": "ICP: 0 button",
+    "status": "Depress",
+    "loc": "ICP"
+  },
+  {
+    "n": 3,
+    "item": "RCL",
+    "status": "Depress",
+    "loc": "ICP"
+  },
+  {
+    "n": 4,
+    "item": "SEQ",
+    "status": "Depress",
+    "loc": "ICP"
+  },
+  {
+    "n": 5,
+    "item": "0 — Align",
+    "status": "Cursor enable until \"ok\"",
+    "loc": "DED"
+  },
+  {
+    "n": 6,
+    "item": "0 — Align (AZ/EL)",
+    "status": "Look at HUD cross",
+    "loc": "HMCS"
+  },
+  {
+    "n": 7,
+    "item": "0 — Align (ROLL)",
+    "status": "Tilt head",
+    "loc": "HMCS"
+  },
+  {
+    "n": 8,
+    "item": "RTN",
+    "status": "Depress",
+    "loc": "ICP"
+  },
+  {
+    "section": "AIR REFUELING",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "MASTER ARM switch",
+    "status": "OFF or SIM",
+    "loc": "Throttle"
+  },
+  {
+    "n": 2,
+    "item": "LASER ARM switch",
+    "status": "OFF",
+    "loc": "Left aux console"
+  },
+  {
+    "n": 3,
+    "item": "CMDS switches",
+    "status": "OFF",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 4,
+    "item": "Emitters",
+    "status": "STBY/OFF as required",
+    "loc": "ECM/FCR/RDR ALT"
+  },
+  {
+    "n": 5,
+    "item": "AIR REFUEL switch",
+    "status": "OPEN — RDY light",
+    "loc": "Fuel panel"
+  },
+  {
+    "n": 6,
+    "item": "Contact",
+    "status": "AR/NWS light — monitor fuel",
+    "loc": "AR indicator"
+  },
+  {
+    "n": 7,
+    "item": "Disconnect",
+    "status": "A/R DISC button — DISC light",
+    "loc": "Stick"
+  },
+  {
+    "n": 8,
+    "item": "AIR REFUEL switch",
+    "status": "CLOSE",
+    "loc": "Fuel panel"
+  },
+  {
+    "n": 9,
+    "item": "Post-AR",
+    "status": "Restore MASTER ARM, CMDS, FCR",
+    "loc": "All panels"
+  },
+  {
+    "section": "BINGO / JOKER FUEL",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "ICP: LIST > 1",
+    "status": "Open DEST page",
+    "loc": "ICP"
+  },
+  {
+    "n": 2,
+    "item": "DCS to BINGO field",
+    "status": "Move asterisks",
+    "loc": "DCS switch"
+  },
+  {
+    "n": 3,
+    "item": "Enter BINGO fuel",
+    "status": "Type value + ENTR",
+    "loc": "ICP keypad"
+  },
+  {
+    "n": 4,
+    "item": "VMS \"BINGO\" call",
+    "status": "Triggers at set fuel level",
+    "loc": "Audio"
+  },
+  {
+    "section": "CHAFF / FLARE PROGRAMS",
+    "color": "#22d3ee"
+  },
+  {
+    "n": 1,
+    "item": "CMDS RWR switch",
+    "status": "ON",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 2,
+    "item": "CMDS JMR switch",
+    "status": "ON",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 3,
+    "item": "CMDS CH switch",
+    "status": "ON",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 4,
+    "item": "CMDS FL switch",
+    "status": "ON",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 5,
+    "item": "CMDS MODE switch",
+    "status": "MAN or SEMI or AUTO",
+    "loc": "CMDS panel"
+  },
+  {
+    "n": 6,
+    "item": "MFD EWS page",
+    "status": "Check programs & qty",
+    "loc": "MFD"
+  },
+  {
+    "n": 7,
+    "item": "CMS Aft",
+    "status": "Consent (dispense)",
+    "loc": "TQS"
+  },
+  {
+    "n": 8,
+    "item": "CMS Fwd",
+    "status": "Manual program 1-4",
+    "loc": "TQS"
+  }
+]
