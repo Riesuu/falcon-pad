@@ -40,6 +40,7 @@ DEFAULTS: dict = {
     "color_aircraft":   "#5eead4",
     "color_ally":       "#4ade80",
     "color_enemy":      "#ef4444",
+    "color_unknown":    "#f59e0b",
     "color_ap_blue":    "#60a5fa",
     "color_ap_red":     "#f87171",
     # HSD line colors L1–L4

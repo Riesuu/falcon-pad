@@ -149,7 +149,7 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                 await broadcast(ws_clients, json.dumps({"type": "aircraft", "data": pos}))
                 own_lat = pos.get("lat")
                 own_lon = pos.get("lon")
-                acmi_c = trtt.get_contacts(own_lat=own_lat, own_lon=own_lon, allies_only=True, max_nm=app_info.ACMI_CONTACT_NM)
+                acmi_c = trtt.get_contacts()
                 if acmi_c:
                     await broadcast(ws_clients, json.dumps({"type": "acmi", "data": acmi_c}))
                 if bms.connected and ptr_str:

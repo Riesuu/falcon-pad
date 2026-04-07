@@ -70,10 +70,10 @@ class TestUpdateFromShm:
         mission.update_from_shm([], threats)
         assert mission.mission_data["threats"] == threats
 
-    def test_keeps_old_threats_when_empty(self):
+    def test_clears_threats_when_empty(self):
         mission.mission_data["threats"] = [{"lat": 36.0}]
         mission.update_from_shm([{"lat": 37.0, "lon": 127.0}], [])
-        assert mission.mission_data["threats"] == [{"lat": 36.0}]
+        assert mission.mission_data["threats"] == []
 
     def test_different_route_triggers_update(self):
         mission.update_from_shm([{"lat": 37.0, "lon": 127.0}], [])

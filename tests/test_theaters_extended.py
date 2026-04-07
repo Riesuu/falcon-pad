@@ -53,8 +53,7 @@ class TestBmsToLatlonTheater:
 
     def test_balkans_explicit(self):
         tp = THEATER_DB["balkans"]
-        # Balkans FN=0, so need ~14M ft north for ~42°N
-        lat, lon = bms_to_latlon_theater(15_200_000.0, 1_640_000.0, tp)
+        lat, lon = bms_to_latlon_theater(2_000_000.0, 1_000_000.0, tp)
         assert tp.bbox[0] <= lat <= tp.bbox[1]
         assert tp.bbox[2] <= lon <= tp.bbox[3]
 

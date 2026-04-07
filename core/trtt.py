@@ -207,15 +207,18 @@ def _client_loop() -> None:
                         p = obj_props[obj_id]
 
                         if 'Name'   in props: p['name']      = props['Name']
-                        if 'Color'  in props: p['color']     = _parse_color(props['Color'])
-                        # Coalition as fallback when Color absent
-                        if 'Coalition' in props and p['color'] == 3:
-                            co = props['Coalition'].lower()
-                            if 'allies' in co:   p['color'] = 1
-                            elif 'enemies' in co: p['color'] = 2
                         if 'Type'   in props: p['acmi_type'] = _parse_type(props['Type'])
                         if 'Pilot'  in props: p['pilot']     = props['Pilot']
                         if 'Group'  in props and not p['name']: p['name'] = props['Group']
+                        # Coalition is authoritative for friend/foe (per ACMI spec)
+                        # Color used only as fallback when Coalition absent
+                        if 'Coalition' in props:
+                            co = props['Coalition'].lower()
+                            if 'allies' in co:    p['color'] = 1
+                            elif 'enemies' in co: p['color'] = 2
+                            else:                 p['color'] = 3
+                        elif 'Color' in props:
+                            p['color'] = _parse_color(props['Color'])
 
                         # Filter: air only
                         at = p.get('acmi_type', 'other')
@@ -310,47 +313,23 @@ def is_connected() -> bool:
     return _connected
 
 
-def get_contacts(*, own_lat: Optional[float] = None,
-                 own_lon: Optional[float] = None,
-                 max_nm: float = 9999.0,
-                 allies_only: bool = False) -> List[dict]:
-    """
-    Return filtered TRTT contacts.
-
-    Parameters:
-        own_lat/own_lon: ownship position (for range filter + self-exclusion)
-        max_nm:          max range in NM (solo=240, multi=ignored)
-        allies_only:     if True, exclude confirmed enemies (camp=2)
-    """
+def get_contacts() -> List[dict]:
+    """Return all non-stale air contacts from the TRTT stream."""
     now = time.time()
     with _lock:
         snapshot = list(_contacts.items())
 
     result: List[dict] = []
     for obj_id, c in snapshot:
-        # Stale check (>30s = destroyed)
+        # Stale check (>30s = destroyed/gone)
         if now - c.get('_ts', 0) > 30.0:
             continue
-        # Camp filter: exclude confirmed enemies (camp=2), keep friendlies + unknown
-        if allies_only and c.get('camp', 3) == 2:
-            continue
-        # Type filter: air only; 'other' kept only if recent (<10s)
+        # Air only; drop ground/sea/weapons/navaids
         ct = c.get('type_name', 'other')
         if ct in ('ground', 'sea', 'weapon', 'navaid'):
             continue
         if ct == 'other' and (now - c.get('_ts', 0)) > 10.0:
             continue
-        # Range filter
-        if own_lat is not None and own_lon is not None and max_nm < 9999.0:
-            dlat = c['lat'] - own_lat
-            dlon = (c['lon'] - own_lon) * math.cos(math.radians(own_lat))
-            dist_nm = math.sqrt(dlat**2 + dlon**2) * 60.0
-            if dist_nm > max_nm:
-                continue
-        # Self-exclusion (same position ≈ ownship)
-        if own_lat is not None and own_lon is not None:
-            if abs(c['lat'] - own_lat) < 0.002 and abs(c['lon'] - own_lon) < 0.002:
-                continue
         result.append({k: v for k, v in c.items() if k != '_ts'})
     return result
 

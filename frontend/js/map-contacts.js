@@ -1,5 +1,5 @@
 // Falcon-Pad — map-contacts.js
-// ACMI contacts (allies), HSD lines, MK markpoints
+// ACMI contacts (allies / enemies / unknown), HSD lines, MK markpoints
 // Copyright (C) 2024 Riesu — GNU GPL v3
 
 // ── ACMI contacts ──────────────────────────────────────────────
@@ -38,10 +38,9 @@ function updateAcmiContacts(contacts){
     groups.push({leader:i,members,cLat,cLon});
   }
 
-  // Render blips (skip unknown/neutral — not realistic, not on HSD)
+  // Render blips: friendly=square, enemy=triangle, unknown=diamond
   valid.forEach(c=>{
     const camp=c.camp||3;
-    if(camp!==1&&camp!==2) return;
     const hdg=(c.heading||0);
     let svg;
     if(camp===1){
@@ -51,19 +50,25 @@ function updateAcmiContacts(contacts){
         ${c.heading!=null?`<line x1="${cx}" y1="${cx}" x2="${cx}" y2="${cx-lineLen}"
           stroke="${C_ALLY}" stroke-width="1.5"
           transform="rotate(${hdg},${cx},${cx})"/>`:''}</svg>`;
-    } else {
-      const col=C_ENEMY;
+    } else if(camp===2){
       svg=`<svg width="${iconSz}" height="${iconSz}" viewBox="0 0 ${iconSz} ${iconSz}">
         <g transform="rotate(${hdg},${cx},${cx})">
           <polygon points="${cx},${cx-8} ${cx-6},${cx+5} ${cx+6},${cx+5}"
-            fill="${col}" stroke="${col}" stroke-width="0.5" stroke-linejoin="round"/>
+            fill="${C_ENEMY}" stroke="${C_ENEMY}" stroke-width="0.5" stroke-linejoin="round"/>
           <line x1="${cx}" y1="${cx-8}" x2="${cx}" y2="${cx-20}"
-            stroke="${col}" stroke-width="1.5" opacity=".7"/>
+            stroke="${C_ENEMY}" stroke-width="1.5" opacity=".7"/>
         </g></svg>`;
+    } else {
+      svg=`<svg width="${iconSz}" height="${iconSz}" viewBox="0 0 ${iconSz} ${iconSz}">
+        <polygon points="${cx},${cx-7} ${cx+7},${cx} ${cx},${cx+7} ${cx-7},${cx}"
+          fill="none" stroke="${C_UNKNOWN}" stroke-width="1.5"/>
+        ${c.heading!=null?`<line x1="${cx}" y1="${cx}" x2="${cx}" y2="${cx-lineLen}"
+          stroke="${C_UNKNOWN}" stroke-width="1.5"
+          transform="rotate(${hdg},${cx},${cx})"/>`:''}</svg>`;
     }
     const mS=L.marker([c.lat,c.lon],{icon:L.divIcon({
       html:svg,className:'',iconSize:[iconSz,iconSz],iconAnchor:[cx,cx]
-    }),zIndexOffset:camp===1?80:70,interactive:false});
+    }),zIndexOffset:camp===1?80:camp===2?70:60,interactive:false});
     mS.addTo(map);acmiMarkers.push(mS);
   });
 

@@ -21,36 +21,6 @@
   } catch(e) { /* app/info fetch failed */ }
 })();
 
-function toggleTRTTPanel(){
-  const p=document.getElementById('trttPanel');
-  const visible=p.style.display==='none';
-  p.style.display=visible?'block':'none';
-  if(visible){
-    fetch('/api/acmi/status').then(r=>r.json()).then(d=>{
-      const parts=(d.trtt_host||'127.0.0.1:42674').split(':');
-      document.getElementById('trttHostInput').value=parts[0];
-      document.getElementById('trttPortInput').value=parts[1]||'42674';
-      const _tps=document.getElementById('trttPanelStatus');
-      if(_tps)_tps.textContent=d.connected?'● Connected — '+d.nb_contacts+' contacts':'○ Not connected';
-    }).catch(()=>{});
-  }
-}
-async function applyTRTTConfig(){
-  const host=document.getElementById('trttHostInput').value.trim();
-  const port=parseInt(document.getElementById('trttPortInput').value)||42674;
-  const _tps=document.getElementById('trttPanelStatus');
-  if(!host){if(_tps)_tps.textContent='Enter an IP';return;}
-  if(_tps)_tps.textContent='Connecting…';
-  try{
-    const r=await fetch('/api/trtt/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host,port})});
-    const d=await r.json();
-    if(_tps)_tps.textContent=d.status==='ok'?'✓ '+d.trtt_host:'Error';
-  }catch(e){if(_tps)_tps.textContent='Error: '+e.message;}
-}
-document.addEventListener('click',e=>{
-  if(!e.target.closest('#trttPanel')&&!e.target.closest('#trttConfigBtn'))
-    {const _tp=document.getElementById('trttPanel');if(_tp)_tp.style.display='none';}
-});
 
 // ══════════════════════════════════════════════════════════════════
 //  SETTINGS
@@ -150,8 +120,6 @@ async function loadSettings() {
     const d = await(await fetch('/api/settings')).json();
     document.getElementById('sp-port').value    = d.port         || 8000;
     document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
-    var ll = document.getElementById('sp-loglevel');
-    if (ll) { ll.dataset.val = d.log_level || 'production'; ll.textContent = (d.log_level || 'production').toUpperCase(); }
     // Sync element colors & sizes
     _syncElemControls(d);
   } catch(e) {}
@@ -182,7 +150,6 @@ async function saveSettings() {
       body: JSON.stringify({
         port:         isNaN(port)  ? null : port,
         broadcast_ms: isNaN(bcast) ? null : bcast,
-        log_level:    (document.getElementById('sp-loglevel').dataset.val) || null,
       })
     });
     const d = await r.json();
@@ -224,13 +191,13 @@ function updateZulu(){
     const elapsed = Math.floor((Date.now() - _bmsTimeTs) / 1000);
     secs = (_bmsTimeSec + elapsed) % 86400;
     el.title = 'BMS Time';
-    el.style.color = 'rgba(74,222,128,.55)';
+    el.style.color = 'rgba(74,222,128,1)';
   } else {
     // Fallback UTC
     const n = new Date();
     secs = n.getUTCHours()*3600 + n.getUTCMinutes()*60 + n.getUTCSeconds();
     el.title = 'UTC Time (BMS not connected)';
-    el.style.color = 'rgba(74,222,128,.35)';
+    el.style.color = 'rgba(74,222,128,.6)';
   }
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);

@@ -54,7 +54,6 @@ FT_TO_M           = 0.3048
 FT_TO_NM_DIVISOR  = 6076.12
 GREAT_CIRCLE_NM   = 3440.065
 AIRPORT_SEARCH_NM = 5.0
-ACMI_CONTACT_NM   = 240.0
 PPT_DEFAULT_RANGE_M  = 27800
 PPT_DEFAULT_RANGE_NM = 15
 M_TO_FT           = 3.28084
@@ -84,12 +83,12 @@ MIME_MAP = {
     ".jpeg": "image/jpeg",
     ".html": "text/html",
     ".htm":  "text/html",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 MIME_DEFAULT = "application/octet-stream"
 
 # ── Settings validation ─────────────────────────────────────────────────────
 VALID_THEMES     = ("dark", "light")
-VALID_LOG_LEVELS = ("production", "debug")
 VALID_LAYERS     = ("dark", "osm", "satellite", "terrain")
 PORT_MIN         = 1024
 PORT_MAX         = 65535

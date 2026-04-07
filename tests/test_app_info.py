@@ -117,10 +117,6 @@ class TestValidation:
         assert "dark" in app_info.VALID_THEMES
         assert "light" in app_info.VALID_THEMES
 
-    def test_valid_log_levels(self):
-        assert "production" in app_info.VALID_LOG_LEVELS
-        assert "debug" in app_info.VALID_LOG_LEVELS
-
     def test_valid_layers(self):
         assert len(app_info.VALID_LAYERS) >= 3
 

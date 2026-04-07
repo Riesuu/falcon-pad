@@ -378,8 +378,7 @@ def update_from_shm(route: list, threats: list) -> None:
     _shm_mission_hash = h
     new_data = dict(mission_data)
     new_data["route"] = route
-    if threats:
-        new_data["threats"] = threats
+    new_data["threats"] = threats
     # Preserve INI type-code airfields if available (more precise than SHM guess)
     existing_af = mission_data.get("airfields", {})
     if route and len(route) >= 2 and not existing_af.get("_typed"):

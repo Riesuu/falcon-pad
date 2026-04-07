@@ -15,7 +15,7 @@ class TestLoad:
 
     def test_has_all_default_keys(self):
         result = config.load()
-        for key in ("port", "briefing_dir", "broadcast_ms", "theme"):
+        for key in ("port", "broadcast_ms", "theme"):
             assert key in result
 
     def test_unknown_keys_ignored(self, tmp_path, monkeypatch):
@@ -64,9 +64,6 @@ class TestLogSep:
 class TestModuleState:
     def test_app_config_is_dict(self):
         assert isinstance(config.APP_CONFIG, dict)
-
-    def test_briefing_dir_is_str(self):
-        assert isinstance(config.BRIEFING_DIR, str)
 
     def test_log_file_is_str(self):
         assert isinstance(config.LOG_FILE, str)

@@ -99,7 +99,6 @@ def _import_pure_functions():
     # 5. _load_config / _save_config
     _DEFAULT_CONFIG = {
         "port":          8000,
-        "briefing_dir":  "",
         "broadcast_ms":  200,
         "theme":         "dark",
     }
@@ -403,8 +402,7 @@ class TestConfig(unittest.TestCase):
 
     def test_save_creates_directories(self):
         deep = os.path.join(self._tmp, "a", "b", "c", "config.json")
-        _fp._save_config(deep, {"port": 7777, "broadcast_ms": 100,
-                                "theme": "dark", "briefing_dir": ""})
+        _fp._save_config(deep, {"port": 7777, "broadcast_ms": 100, "theme": "dark"})
         self.assertTrue(os.path.exists(deep))
 
 

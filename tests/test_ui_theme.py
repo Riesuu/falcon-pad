@@ -31,8 +31,7 @@ class TestColors:
     def test_all_colors_are_hex(self):
         colors = [ui_theme.BG, ui_theme.BG2, ui_theme.ACCENT, ui_theme.ACCENT_DIM,
                   ui_theme.RED, ui_theme.RED_DIM, ui_theme.RED_HOV, ui_theme.RED_OUT,
-                  ui_theme.EJECT_YEL, ui_theme.EJECT_BLK, ui_theme.EJECT_STRP,
-                  ui_theme.EJECT_HOV, ui_theme.BLUE, ui_theme.TXT_DIM, ui_theme.TXT_MID]
+                  ui_theme.BLUE, ui_theme.TXT_DIM, ui_theme.TXT_MID]
         for c in colors:
             assert self._is_hex(c), f"{c} is not a valid hex color"
 

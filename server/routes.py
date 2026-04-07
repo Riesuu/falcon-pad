@@ -11,7 +11,6 @@ import json
 import logging
 import os
 import re
-from logging.handlers import RotatingFileHandler
 from typing import Optional
 
 from fastapi import File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
@@ -108,13 +107,6 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
 
         return {"dep": None, "arr": None, "alt": None}
 
-    @app.get("/api/mission/radio")
-    async def get_mission_radio():
-        return {
-            "radio": mission.mission_data.get("radio", {}),
-            "comms": mission.mission_data.get("comms", {}),
-        }
-
     @app.post("/api/upload")
     async def upload_mission(file: UploadFile = File(...)):
         try:
@@ -150,7 +142,6 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         port:         Optional[int] = None
         broadcast_ms: Optional[int] = None
         theme:        Optional[str] = None
-        log_level:    Optional[str] = None
 
     @app.get("/api/settings")
     async def settings_get():
@@ -168,14 +159,6 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
         if s.theme is not None and s.theme in app_info.VALID_THEMES:
             config.APP_CONFIG["theme"] = s.theme
             changed.append("theme")
-        if s.log_level is not None and s.log_level in app_info.VALID_LOG_LEVELS:
-            config.APP_CONFIG["log_level"] = s.log_level
-            lvl = logging.DEBUG if s.log_level == "debug" else logging.INFO
-            logging.getLogger().setLevel(lvl)
-            for h in logging.getLogger().handlers:
-                if isinstance(h, RotatingFileHandler):
-                    h.setLevel(lvl)
-            changed.append("log_level")
         config.save(config.APP_CONFIG)
         needs_restart = "port" in changed
         logger.info(f"Settings: {changed}" + (" — RESTART required (port)" if needs_restart else ""))
@@ -191,24 +174,6 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                 "author": app_info.AUTHOR, "website": app_info.WEBSITE,
                 "charts": app_info.CHARTS,
                 "github": app_info.GITHUB, "bms": app_info.BMS}
-
-    @app.get("/api/theaters")
-    async def theaters_list():
-        active = get_theater_name().lower() if is_theater_detected() else None
-        seen = set()
-        theaters = []
-        for key, tp in THEATER_DB.items():
-            canonical = tp.name.lower()
-            if canonical in seen:
-                continue
-            seen.add(canonical)
-            theaters.append({
-                "name": tp.name,
-                "active": canonical == (active or "").lower(),
-                "bbox": {"lat_min": tp.bbox[0], "lat_max": tp.bbox[1],
-                         "lon_min": tp.bbox[2], "lon_max": tp.bbox[3]},
-            })
-        return {"theaters": theaters, "active": get_theater_name() if is_theater_detected() else None}
 
     @app.get("/api/theater")
     async def theater_info():
@@ -294,29 +259,6 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                     pass
         ui_prefs.save(ui_prefs.prefs)
         return {"ok": True, "prefs": ui_prefs.prefs}
-
-    # ── ACMI / TRTT ──────────────────────────────────────────────
-    class TrttConfigModel(BaseModel):
-        host: Optional[str] = None
-        port: Optional[int] = None
-
-    @app.post("/api/trtt/config")
-    async def trtt_config(c: TrttConfigModel):
-        if c.host:
-            trtt.HOST = c.host.strip()
-        if c.port and app_info.PORT_MIN <= c.port <= app_info.PORT_MAX:
-            trtt.PORT = c.port
-        logger.info(f"TRTT config: {trtt.HOST}:{trtt.PORT}")
-        return {"status": "ok", "trtt_host": f"{trtt.HOST}:{trtt.PORT}"}
-
-    @app.get("/api/acmi/status")
-    async def acmi_status():
-        diag = trtt.get_diagnostics()
-        return {"trtt_host": diag.get("host", ""),
-                "connected": diag.get("connected", False),
-                "thread_alive": diag.get("thread_alive", False),
-                "nb_contacts": diag.get("nb_contacts_raw", 0),
-                "config_bms": app_info.BMS_CONFIG_HINT}
 
     # ── Briefing ─────────────────────────────────────────────────
     _BRIEFING_ALLOWED = app_info.BRIEFING_ALLOWED_EXT

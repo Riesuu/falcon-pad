@@ -134,6 +134,7 @@ var C_MK    = '#fbbf24'; var S_MK    = 2.5;
 var C_AIRCRAFT = '#5eead4';
 var C_ALLY     = '#4ade80';
 var C_ENEMY    = '#ef4444';
+var C_UNKNOWN  = '#f59e0b';
 var C_AP_BLUE  = '#60a5fa';
 var C_AP_RED   = '#f87171';
 
@@ -155,6 +156,7 @@ function applyUiPrefs(p) {
   if(p.color_aircraft) C_AIRCRAFT = p.color_aircraft;
   if(p.color_ally)     C_ALLY     = p.color_ally;
   if(p.color_enemy)    C_ENEMY    = p.color_enemy;
+  if(p.color_unknown)  C_UNKNOWN  = p.color_unknown;
   if(p.color_ap_blue)  C_AP_BLUE  = p.color_ap_blue;
   if(p.color_ap_red)   C_AP_RED   = p.color_ap_red;
   if(p.size_bull)   S_BULL  = p.size_bull;

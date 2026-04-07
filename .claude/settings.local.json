@@ -80,7 +80,20 @@
       "Bash(python -m pytest tests/test_theaters.py tests/test_theaters_extended.py -x -q)",
       "Bash(git stash:*)",
       "Bash(python -m pytest tests/test_theaters_extended.py::TestBmsToLatlonTheater::test_balkans_explicit -x -q)",
-      "Bash(grep -v \"^\\\\s*//\")"
+      "Bash(grep -v \"^\\\\s*//\")",
+      "Bash(grep -n \"color_aircraft\\\\|color_ally\\\\|color_enemy\\\\|color_ap_blue\\\\|color_ap_red\" c:/_dev/git/projects/falcon-pad/frontend/js/*.js)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(git log:*)",
+      "Bash(python -m pytest tests/test_config.py -v)",
+      "Bash(python -m pytest tests/ -x -q --tb=short)",
+      "Bash(C:/_dev/Python313/python.exe -m pip install pytest pytest-asyncio httpx -q)",
+      "Bash(C:/_dev/Python313/python.exe -m pytest tests/ -x -q --tb=short)",
+      "Bash(C:/_dev/Python313/python.exe -m pytest tests/ -q --tb=short)",
+      "Bash(C:/_dev/Python313/python.exe -c ':*)",
+      "WebFetch(domain:www.tacview.net)",
+      "WebFetch(domain:github.com)",
+      "Bash(wc -l /c/_dev/git/projects/falcon-pad/tests/*.py)",
+      "Bash(C:/_dev/Python313/python.exe -m pytest tests/test_trtt.py -v --tb=short)"
     ]
   }
 }
