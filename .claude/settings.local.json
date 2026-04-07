@@ -93,7 +93,8 @@
       "WebFetch(domain:www.tacview.net)",
       "WebFetch(domain:github.com)",
       "Bash(wc -l /c/_dev/git/projects/falcon-pad/tests/*.py)",
-      "Bash(C:/_dev/Python313/python.exe -m pytest tests/test_trtt.py -v --tb=short)"
+      "Bash(C:/_dev/Python313/python.exe -m pytest tests/test_trtt.py -v --tb=short)",
+      "Bash(C:/_dev/Python313/python.exe -m pip freeze)"
     ]
   }
 }

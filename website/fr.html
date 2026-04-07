@@ -74,7 +74,7 @@
       <div class="feature">
         <div class="feature-icon">&#x2708;</div>
         <h3>Contacts ACMI</h3>
-        <p>Contacts allies en temps-reel via Tacview Real-Time Telemetry (TRTT). Indicatif, altitude, cap et vitesse affiches.</p>
+        <p>Tous les aéronefs du flux TRTT Tacview — allies, ennemis et inconnus. Marqueurs codes par couleur : vert (allie), rouge (ennemi), ambre (inconnu). Indicatif, altitude, cap et vitesse affiches.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x2705;</div>
@@ -84,7 +84,7 @@
       <div class="feature">
         <div class="feature-icon">&#x1f4c4;</div>
         <h3>Visionneuse Briefing</h3>
-        <p>Fichiers PDF, images, DOCX et HTML. Rendu PDF.js avec zoom tactile sur tablette. Upload depuis l'application.</p>
+        <p>Fichiers PDF, images, DOCX et HTML. Rendu PDF.js avec zoom tactile sur tablette. Upload via l'appli ou depot direct dans le dossier <code>personal/</code>. Briefings BMS chargés automatiquement.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x1f310;</div>
@@ -106,12 +106,18 @@
         <p>Telechargez <code>FalconPad.exe</code> depuis <a href="https://github.com/riesu/falcon-pad/releases">GitHub Releases</a> et placez-le n'importe ou.</p>
       </div>
       <div class="step">
+        <h4>Ouvrir le port 8000 dans le pare-feu Windows</h4>
+        <p>Ouvrez une <strong>invite de commandes en tant qu'Administrateur</strong> et executez :</p>
+        <pre><code>netsh advfirewall firewall add rule name="Falcon-Pad" dir=in action=allow protocol=TCP localport=8000</code></pre>
+        <p>Cela permet a votre tablette d'acceder a Falcon-Pad sur le reseau local.</p>
+      </div>
+      <div class="step">
         <h4>Lancer</h4>
         <p>Executez <code>FalconPad.exe</code>. La fenetre affiche vos URLs locale et reseau.</p>
       </div>
       <div class="step">
         <h4>Ouvrir sur Tablette</h4>
-        <p>Sur le navigateur de votre tablette/telephone, allez a l'<strong>URL Reseau</strong> affichee (ex: <code>http://192.168.1.32:8000</code>). Les deux appareils doivent etre sur le meme WiFi.</p>
+        <p>Sur le navigateur de votre tablette ou telephone, allez a l'<strong>URL Reseau</strong> affichee (ex: <code>http://192.168.1.32:8000</code>). Les deux appareils doivent etre sur le meme reseau WiFi.</p>
       </div>
       <div class="step">
         <h4>Volez !</h4>
@@ -133,7 +139,7 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Ca marche en multijoueur ?</div>
-        <div class="faq-a">Oui. Falcon-Pad fonctionne en solo et en multijoueur. En MP, les contacts ACMI (via TRTT) n'affichent que les allies pour eviter tout avantage deloyal.</div>
+        <div class="faq-a">Oui. Falcon-Pad fonctionne en solo et en multijoueur. Les contacts ACMI affichent tous les aéronefs visibles dans le flux TRTT — allies, ennemis et inconnus. Le contenu du flux est entierement controle par l'etat de desagregation BMS, pas par un filtre de distance.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Quelles tablettes/navigateurs sont supportes ?</div>
@@ -141,15 +147,19 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Ma tablette ne se connecte pas — que verifier ?</div>
-        <div class="faq-a">Verifiez que votre PC et votre tablette sont sur le meme reseau WiFi. Verifiez que le pare-feu Windows autorise les connexions sur le port 8000 (ou votre port configure). Essayez de desactiver le VPN si actif.</div>
+        <div class="faq-a">Verifiez que votre ordinateur et votre tablette sont sur le meme reseau WiFi. Ouvrez une invite de commandes en tant qu'Administrateur et executez :<br><br>
+        <code>netsh advfirewall firewall add rule name="Falcon-Pad" dir=in action=allow protocol=TCP localport=8000</code><br><br>
+        Si vous avez change le port dans les parametres, remplacez <code>8000</code> par votre port. Desactivez egalement le VPN si actif.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Les steerpoints ne s'affichent pas automatiquement</div>
         <div class="faq-a">Falcon-Pad lit les steerpoints depuis la SharedMemory BMS quand vous etes en 3D. Si BMS ne tourne pas, il scanne vos fichiers DTC .ini du repertoire BMS User/Config. Vous pouvez aussi uploader manuellement un fichier .ini via le bouton d'upload.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q">Comment activer les contacts ACMI (TRTT) ?</div>
-        <div class="faq-a">Dans votre User.cfg BMS, ajoutez <code>set g_bTacviewRealTime 1</code>. Le serveur TRTT tourne sur le port 42674 par defaut. Falcon-Pad se connecte automatiquement.</div>
+        <div class="faq-q">Comment activer les contacts aeriens (TRTT) ?</div>
+        <div class="faq-a">Ajoutez ces deux lignes dans votre fichier BMS <code>User/Config/Falcon BMS User.cfg</code> :<br><br>
+        <code>set g_bTacviewRealTime 1</code><br><br>
+        Falcon-Pad se connecte automatiquement au port 42674 au demarrage.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Ca fonctionne sur Linux ?</div>

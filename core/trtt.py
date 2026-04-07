@@ -7,7 +7,6 @@ ACMI contacts.  Runs in a background daemon thread.
 
 BMS config required:
     set g_bTacviewRealTime 1
-    set g_bTacviewRealTimeHost 1
 
 Public API:
     start()                   — launch background thread
@@ -298,8 +297,7 @@ def start() -> None:
     _running = True
     _thread = threading.Thread(target=_client_loop, daemon=True)
     _thread.start()
-    logger.info(f"TRTT client started → {HOST}:{PORT}")
-    logger.info("  (BMS User.cfg: set g_bTacviewRealTime 1)")
+    logger.info(f"TRTT client started → {HOST}:{PORT} (BMS User.cfg: set g_bTacviewRealTime 1)")
 
 
 def stop() -> None:
