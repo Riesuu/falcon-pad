@@ -12,7 +12,7 @@ AUTHOR  = "Riesu"
 CONTACT = "contact@falcon-charts.com"
 WEBSITE = "https://pad.falcon-charts.com"
 CHARTS  = "https://www.falcon-charts.com"
-GITHUB  = "https://github.com/riesu/falcon-pad"
+GITHUB  = "https://github.com/Riesuu/falcon-pad"
 LICENSE = "GNU GPL v3"
 BMS     = "Falcon BMS 4.38"
 
