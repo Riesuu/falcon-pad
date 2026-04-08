@@ -18,7 +18,7 @@ class TestBmsToLatlon:
 
     def test_korea_zero_invalid(self):
         """Coordonnées hors bbox (Tokyo) doivent être rejetées."""
-        # Tokyo ~35.7N, 139.7E est hors de la bbox Korea (lon_max=135)
+        # Tokyo ~35.7N, 139.7E est hors de la bbox Korea KTO (lon_max=133.78)
         assert not in_theater_bbox(35.7, 139.7)
 
     def test_korea_invert(self):
@@ -39,28 +39,28 @@ class TestSetActiveTheater:
     """Sélection et détection de théâtre."""
 
     def test_set_korea(self):
-        assert set_active_theater("Korea") is False  # déjà actif (autouse fixture)
+        assert set_active_theater("Korea KTO") is False  # déjà actif (autouse fixture)
 
     def test_set_balkans(self):
         changed = set_active_theater("Balkans")
         assert changed is True
         assert get_theater_name() == "Balkans"
-        # Remettre Korea
-        set_active_theater("Korea")
+        # Remettre Korea KTO
+        set_active_theater("Korea KTO")
 
     def test_set_unknown_returns_false(self):
         changed = set_active_theater("UnknownTheater_XYZ")
         assert changed is False
 
     def test_fuzzy_match(self):
-        """'Korea KTO' doit matcher Korea."""
-        set_active_theater("Korea")  # reset
-        changed = set_active_theater("Korea KTO")
-        # Soit change vers KTO, soit reste Korea — dans les deux cas pas d'erreur
-        assert get_theater_name() in ("Korea KTO", "Korea")
-        set_active_theater("Korea")
+        """'Korea' (ancien nom) doit fuzzy-matcher vers Korea KTO."""
+        set_active_theater("Korea KTO")  # reset
+        changed = set_active_theater("Korea")
+        # Fuzzy match vers Korea KTO — pas d'erreur
+        assert "korea" in get_theater_name().lower()
+        set_active_theater("Korea KTO")
 
     def test_all_theaters_registered(self):
         """Les théâtres documentés doivent tous être dans THEATER_DB."""
-        for name in ("korea", "balkans", "israel", "aegean", "iberia", "nordic"):
+        for name in ("korea kto", "balkans", "israel", "aegean", "hellas", "iberia", "nordic"):
             assert name in THEATER_DB, f"{name} absent de THEATER_DB"

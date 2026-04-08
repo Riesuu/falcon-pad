@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 _DIR = os.path.join(app_info.BUNDLE_DIR, "data", "airports")
 
 _FILES: dict = {
-    "korea":     "korea.json",
     "korea kto": "korea.json",
     "balkans":   "balkans.json",
     "israel":    "israel.json",

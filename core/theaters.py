@@ -53,21 +53,19 @@ def _reg(name: str, lon0: float, k0: float, FE: float, FN: float,
 # NOTE: FN values are theater-specific offsets; extracted from terrain .tdf/.hdr
 #       If you have a theater not listed, check its terrain header for the
 #       correct TMERC parameters and add an entry here.
-_reg("Korea",     lon0=127.5,  k0=0.9996, FE=512000.0, FN=-3749290.0,
-     bbox=(30.0, 46.0, 117.0, 137.0))
 _reg("Korea KTO", lon0=127.5,  k0=0.9996, FE=512000.0, FN=-3749290.0,
-     bbox=(30.0, 46.0, 117.0, 137.0))
-_reg("Balkans",   lon0=16.287, k0=0.9996, FE=500000.0, FN=-4118700.0,
+     bbox=(33.76, 42.94, 121.22, 133.78))
+_reg("Balkans",   lon0=16.287, k0=0.9996, FE=512000.0, FN=-4118700.0,
      bbox=(35.0, 50.0, 12.0,  32.0))
-_reg("Israel",    lon0=34.959, k0=0.9996, FE=508100.0, FN=-3028500.0,
+_reg("Israel",    lon0=34.959, k0=0.9996, FE=512000.0, FN=-3028500.0,
      bbox=(27.0, 37.0, 29.0,  42.0))
-_reg("Aegean",    lon0=24.0,   k0=0.9996, FE=500000.0, FN=0.0,
+_reg("Aegean",    lon0=24.0,   k0=0.9996, FE=512000.0, FN=0.0,
      bbox=(33.0, 43.0, 18.0,  32.0))
-_reg("Hellas",    lon0=24.903, k0=0.9996, FE=503600.0, FN=-3694000.0,
+_reg("Hellas",    lon0=24.903, k0=0.9996, FE=512000.0, FN=-3694000.0,
      bbox=(30.0, 44.0, 18.0,  33.0))
-_reg("Iberia",    lon0=-4.0,   k0=0.9996, FE=500000.0, FN=0.0,
+_reg("Iberia",    lon0=-4.0,   k0=0.9996, FE=512000.0, FN=0.0,
      bbox=(34.0, 45.0, -12.0,  5.0))
-_reg("Nordic",    lon0=18.0,   k0=0.9996, FE=500000.0, FN=0.0,
+_reg("Nordic",    lon0=18.0,   k0=0.9996, FE=512000.0, FN=0.0,
      bbox=(54.0, 72.0, 4.0,   36.0))
 
 
@@ -75,14 +73,14 @@ _reg("Nordic",    lon0=18.0,   k0=0.9996, FE=500000.0, FN=0.0,
 #  ACTIVE THEATER STATE
 # ═══════════════════════════════════════════════════════════════════════════
 
-_active_theater: TheaterParams = THEATER_DB["korea"]  # default before BMS loads
-_active_theater_name: str = "Korea"
+_active_theater: TheaterParams = THEATER_DB["korea kto"]  # default before BMS loads
+_active_theater_name: str = "Korea KTO"
 _theater_detected: bool = False   # True once BMS has explicitly set a theater
 _theater_lock = threading.Lock()
 
 
 def get_theater() -> TheaterParams:
-    """Return the currently active theater (never None; defaults to Korea)."""
+    """Return the currently active theater (never None; defaults to Korea KTO)."""
     with _theater_lock:
         return _active_theater
 
@@ -121,7 +119,7 @@ def set_active_theater(name: str) -> bool:
                 return True
             return False
 
-        # 2) Fuzzy substring match (e.g. "Korea 1.1" → "korea")
+        # 2) Fuzzy substring match (e.g. "Korea 1.1" → "korea kto")
         for db_key, params in THEATER_DB.items():
             if db_key in key or key in db_key:
                 if _active_theater_name.lower() != db_key:

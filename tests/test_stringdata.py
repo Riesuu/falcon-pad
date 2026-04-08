@@ -284,13 +284,13 @@ class TestDetectTheater:
         assert get_theater_name() == "Balkans"
         # Cleanup
         from core.theaters import set_active_theater
-        set_active_theater("Korea")
+        set_active_theater("Korea KTO")
         sd._last_thr_name = ""
 
     def test_no_change_if_same_theater(self):
-        blob, reader = _encode_strings_blob([(STRID_THR_NAME, "Korea")])
+        blob, reader = _encode_strings_blob([(STRID_THR_NAME, "Korea KTO")])
         strings = read_all_strings(0, make_reader(blob))
         from core import stringdata as sd
-        sd._last_thr_name = "Korea"
+        sd._last_thr_name = "Korea KTO"
         changed = detect_theater(strings)
         assert changed is False

@@ -63,5 +63,5 @@ OSAN_BMS_Y = 1_550_000.0  # East ft
 def set_korea_theater():
     """Force le théâtre Korea pour tous les tests."""
     from core.theaters import set_active_theater
-    set_active_theater("Korea")
+    set_active_theater("Korea KTO")
     yield

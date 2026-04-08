@@ -219,11 +219,11 @@ class TestTheaterThreadSafety:
 
     def setup_method(self):
         from core.theaters import set_active_theater
-        set_active_theater("Korea")
+        set_active_theater("Korea KTO")
 
     def teardown_method(self):
         from core.theaters import set_active_theater
-        set_active_theater("Korea")
+        set_active_theater("Korea KTO")
 
     def test_get_theater_returns_consistent_result_under_concurrent_writes(self):
         """No torn read: name and params stay consistent while threads write."""
@@ -232,14 +232,14 @@ class TestTheaterThreadSafety:
         stop = threading.Event()
 
         def writer():
-            theaters = ["Korea", "Balkans", "Israel", "Korea"]
+            theaters = ["Korea KTO", "Balkans", "Israel", "Korea KTO"]
             i = 0
             while not stop.is_set():
                 set_active_theater(theaters[i % len(theaters)])
                 i += 1
 
         def reader():
-            known = {t.lower() for t in ["Korea", "Korea KTO", "Balkans", "Israel",
+            known = {t.lower() for t in ["Korea KTO", "Balkans", "Israel",
                                           "Aegean", "Hellas", "Iberia", "Nordic"]}
             for _ in range(200):
                 name = get_theater_name()
