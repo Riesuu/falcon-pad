@@ -203,20 +203,30 @@ def detect_theater_from_coords(north_ft: float, east_ft: float) -> bool:
 def detect_theater_from_coords_multi(points: List[Tuple[float, float]]) -> bool:
     """
     Try every theater against all provided (north_ft, east_ft) points.
-    Score = (bbox_hits, -sum_of_distances_from_center).
-    Pick the theater with most hits; break ties by choosing the one whose
-    projected points cluster closest to the bbox center (tighter fit).
+    Score = (bbox_hits, airport_proximity_hits, -sum_of_distances_from_center).
+    Airport proximity breaks ties when multiple theaters have the same bbox hits
+    (e.g. KTO vs Hellas which share FE=512000 and similar FN values).
     Returns True if the active theater changed.
     """
+    from core.airports import load as _load_airports
+
+    _AP_TOLERANCE = 0.1  # ~0.1° ≈ 6 NM — generous match radius
+
     best_key: Optional[str] = None
-    best_hits = 0
-    best_dist = float("inf")
+    best_score = (0, 0, float("-inf"))  # (hits, ap_hits, -total_dist)
 
     for key, tp in THEATER_DB.items():
         hits = 0
+        ap_hits = 0
         total_dist = 0.0
         c_lat = (tp.bbox[0] + tp.bbox[1]) / 2
         c_lon = (tp.bbox[2] + tp.bbox[3]) / 2
+
+        try:
+            airports = _load_airports(tp.name)
+        except Exception:
+            airports = []
+
         for north_ft, east_ft in points:
             try:
                 lat, lon = _tmerc_to_latlon(north_ft, east_ft, tp)
@@ -224,16 +234,23 @@ def detect_theater_from_coords_multi(points: List[Tuple[float, float]]) -> bool:
                 if bb[0] <= lat <= bb[1] and bb[2] <= lon <= bb[3]:
                     hits += 1
                     total_dist += math.sqrt((lat - c_lat) ** 2 + (lon - c_lon) ** 2)
+                    # Airport proximity: strong signal for correct theater
+                    for ap in airports:
+                        if (abs(lat - ap["lat"]) < _AP_TOLERANCE and
+                                abs(lon - ap["lon"]) < _AP_TOLERANCE):
+                            ap_hits += 1
+                            break
             except Exception:
                 continue
-        if hits > best_hits or (hits == best_hits and hits > 0 and total_dist < best_dist):
-            best_hits = hits
-            best_dist = total_dist
+
+        score = (hits, ap_hits, -total_dist)
+        if score > best_score:
+            best_score = score
             best_key = key
 
-    if best_key and best_hits >= 2:
+    if best_key and best_score[0] >= 2:
         return set_active_theater(THEATER_DB[best_key].name)
-    if best_key and best_hits == 1:
+    if best_key and best_score[0] == 1:
         logger.warning(f"detect_theater_from_coords_multi: only 1 hit for '{best_key}', keeping current theater")
     else:
         logger.warning("detect_theater_from_coords_multi: no theater matched")
