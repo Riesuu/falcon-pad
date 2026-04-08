@@ -7,7 +7,7 @@ Change version/author/URLs here ONCE — propagates to Python, logs, Qt GUI, and
 """
 
 NAME    = "Falcon-Pad || Tactical Companion for BMS"
-VERSION = "0.3"
+VERSION = "0.3.1"
 AUTHOR  = "Riesu"
 CONTACT = "contact@falcon-charts.com"
 WEBSITE = "https://pad.falcon-charts.com"
