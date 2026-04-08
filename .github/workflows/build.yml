@@ -14,11 +14,11 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt pyinstaller
-      - run: pyinstaller FalconPad.spec
+      - run: pyinstaller Falcon-PAD.spec
       - uses: actions/upload-artifact@v4
         with:
           name: FalconPad-Windows
-          path: dist/FalconPad.exe
+          path: dist/Falcon-PAD.exe
 
   build-linux:
     runs-on: ubuntu-latest
@@ -28,12 +28,12 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt pyinstaller
-      - run: pyinstaller FalconPad.spec
-      - run: chmod +x dist/FalconPad
+      - run: pyinstaller Falcon-PAD.spec
+      - run: chmod +x dist/Falcon-PAD
       - uses: actions/upload-artifact@v4
         with:
           name: FalconPad-Linux
-          path: dist/FalconPad
+          path: dist/Falcon-PAD
 
   release:
     needs: [build-windows, build-linux]
@@ -43,10 +43,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
       - run: |
-          mv FalconPad-Windows/FalconPad.exe FalconPad-Windows.exe
-          mv FalconPad-Linux/FalconPad FalconPad-Linux
+          mv FalconPad-Windows/Falcon-PAD.exe Falcon-PAD-Windows.exe
+          mv FalconPad-Linux/Falcon-PAD Falcon-PAD-Linux
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            FalconPad-Windows.exe
-            FalconPad-Linux
+            Falcon-PAD-Windows.exe
+            Falcon-PAD-Linux
