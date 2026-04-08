@@ -240,7 +240,7 @@ class TestTheaterThreadSafety:
 
         def reader():
             known = {t.lower() for t in ["Korea KTO", "Balkans", "Israel",
-                                          "Aegean", "Hellas", "Iberia", "Nordic"]}
+                                          "Hellas"]}
             for _ in range(200):
                 name = get_theater_name()
                 tp   = get_theater()

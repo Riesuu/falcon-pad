@@ -24,9 +24,6 @@ _FILES: dict = {
     "korea kto": "korea.json",
     "balkans":   "balkans.json",
     "israel":    "israel.json",
-    "aegean":    "aegean.json",
-    "iberia":    "iberia.json",
-    "nordic":    "nordic.json",
     "hellas":    "hto.json",
 }
 

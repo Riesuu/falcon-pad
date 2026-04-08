@@ -112,9 +112,7 @@ class TestInTheaterBbox:
     @pytest.mark.parametrize("theater,lat,lon", [
         ("Balkans", 42.0, 20.0),
         ("Israel",  31.0, 35.0),
-        ("Aegean",  38.0, 24.0),
-        ("Iberia",  40.0, -3.0),
-        ("Nordic",  60.0, 18.0),
+        ("Hellas",  37.0, 25.0),
     ])
     def test_center_in_bbox(self, theater, lat, lon):
         set_active_theater(theater)

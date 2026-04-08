@@ -62,5 +62,5 @@ class TestSetActiveTheater:
 
     def test_all_theaters_registered(self):
         """Les théâtres documentés doivent tous être dans THEATER_DB."""
-        for name in ("korea kto", "balkans", "israel", "aegean", "hellas", "iberia", "nordic"):
+        for name in ("korea kto", "balkans", "israel", "hellas"):
             assert name in THEATER_DB, f"{name} absent de THEATER_DB"
