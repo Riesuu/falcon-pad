@@ -1,47 +1,740 @@
 [
-  {"icao":"RKTU","lat":36.71428,"lon":127.49155,"name":"Cheongju AB","side":"blue","tacan":"27X","freq":"128.85","ils":[{"rwy":"24R","freq":"111.7","crs":"240"},{"rwy":"06L","freq":"","crs":"060"}]},
-  {"icao":"RKTN","lat":35.89453,"lon":129.65928,"name":"Daegu AB","side":"blue","tacan":"125X","freq":"127.65","ils":[{"rwy":"13L","freq":"111.9","crs":"130"},{"rwy":"13R","freq":"108.7","crs":"130"},{"rwy":"31L","freq":"108.7","crs":"310"}]},
-  {"icao":"RKNN","lat":37.75458,"lon":128.94293,"name":"Gangneung AB","side":"blue","tacan":"56X","freq":"132.05","ils":[{"rwy":"26","freq":"111.5","crs":"260"}]},
-  {"icao":"RKPK","lat":35.18367,"lon":128.93348,"name":"Gimhae/Busan","side":"blue","tacan":"117X","freq":"126.65","ils":[{"rwy":"18R","freq":"108.5","crs":"180"},{"rwy":"36L","freq":"109.5","crs":"360"}]},
-  {"icao":"RKSS","lat":37.55438,"lon":127.79463,"name":"Gimpo Intl","side":"blue","tacan":"83X","freq":"126.35","ils":[{"rwy":"14L","freq":"109.9","crs":"140"},{"rwy":"14R","freq":"108.7","crs":"140"},{"rwy":"32L","freq":"108.3","crs":"320"},{"rwy":"32R","freq":"110.7","crs":"320"}]},
-  {"icao":"RKJK","lat":35.90495,"lon":126.61773,"name":"Gunsan AB","side":"blue","tacan":"75X","freq":"120.225","ils":[{"rwy":"18","freq":"110.3","crs":"183"},{"rwy":"36","freq":"110.3","crs":"003"}]},
-  {"icao":"RKJJ","lat":35.13193,"lon":126.80582,"name":"Gwangju AB","side":"blue","tacan":"91X","freq":"128.875","ils":[{"rwy":"04L","freq":"111.1","crs":"041"},{"rwy":"22R","freq":"111.1","crs":"221"}]},
-  {"icao":"RKSI","lat":37.47383,"lon":126.45138,"name":"Incheon Intl","side":"blue","tacan":"76X","freq":"128.45","ils":[{"rwy":"15L","freq":"111.9","crs":"150"},{"rwy":"15R","freq":"109.1","crs":"150"},{"rwy":"33L","freq":"109.3","crs":"330"},{"rwy":"33R","freq":"108.9","crs":"330"}]},
-  {"icao":"RKTI","lat":37.02832,"lon":127.88527,"name":"Jungwon AB","side":"blue","tacan":"5X","freq":"135.6","ils":[{"rwy":"18L","freq":"111.3","crs":"183"},{"rwy":"36R","freq":"111.3","crs":"003"}]},
-  {"icao":"RKJB","lat":35.00098,"lon":126.38652,"name":"Muan Intl","side":"blue","tacan":"47X","freq":"127.425","ils":[{"rwy":"01","freq":"111.9","crs":"011"},{"rwy":"19","freq":"108.9","crs":"191"}]},
-  {"icao":"RKSO","lat":37.08103,"lon":127.0231,"name":"Osan AB","side":"blue","tacan":"116X","freq":"132.125","ils":[{"rwy":"09L","freq":"111.3","crs":"092"},{"rwy":"27R","freq":"111.3","crs":"272"}]},
-  {"icao":"RKTH","lat":35.98538,"lon":129.42,"name":"Pohang AB","side":"blue","tacan":"33X","freq":"127.4","ils":[{"rwy":"10","freq":"110.9","crs":"100"}]},
-  {"icao":"RKSG","lat":36.96335,"lon":127.03122,"name":"Pyeongtaek AB","side":"blue","tacan":"19X","freq":"128.25","ils":[{"rwy":"32","freq":"108.75","crs":"320"}]},
-  {"icao":"RKPS","lat":35.08328,"lon":128.0663,"name":"Sacheon AB","side":"blue","tacan":"98X","freq":"126.625","ils":[{"rwy":"06L","freq":"111.5","crs":"061"},{"rwy":"24R","freq":"108.1","crs":"241"}]},
-  {"icao":"RKTP","lat":36.70572,"lon":126.48775,"name":"Seosan AB","side":"blue","tacan":"73X","freq":"130.3","ils":[{"rwy":"03R","freq":"111.5","crs":"032"},{"rwy":"21L","freq":"110.1","crs":"212"}]},
-  {"icao":"RKSM","lat":37.4487,"lon":127.10853,"name":"Seoul AB","side":"blue","tacan":"35X","freq":"126.4","ils":[{"rwy":"20","freq":"108.95","crs":"200"},{"rwy":"19","freq":"110.9","crs":"190"}]},
-  {"icao":"RKSW","lat":37.23133,"lon":127.01212,"name":"Suwon AB","side":"blue","tacan":"22X","freq":"126.425","ils":[{"rwy":"33R","freq":"108.5","crs":"330"}]},
-  {"icao":"RKNW","lat":37.4421,"lon":127.96645,"name":"Wonju AB","side":"blue","tacan":"53X","freq":"128.6","ils":[{"rwy":"04","freq":"110.2","crs":"040"}]},
-  {"icao":"RKNY","lat":38.06432,"lon":128.66742,"name":"Yangyang Intl","side":"blue","tacan":"43X","freq":"128.825","ils":[{"rwy":"33","freq":"109.3","crs":"330"}]},
-  {"icao":"RKTY","lat":36.62848,"lon":128.34268,"name":"Yecheon AB","side":"blue","tacan":"26X","freq":"135.8","ils":[{"rwy":"28","freq":"109.3","crs":"280"}]},
-  {"icao":"RJOA","lat":34.44375,"lon":132.9077,"name":"Hiroshima","side":"blue","tacan":"","freq":"127.25","ils":[{"rwy":"10","freq":"108.8","crs":"100"}]},
-  {"icao":"RJOI","lat":34.14532,"lon":132.23688,"name":"Iwakuni MCAS","side":"blue","tacan":"126X","freq":"128.4","ils":[{"rwy":"01","freq":"110.15","crs":"010"},{"rwy":"19","freq":"110.15","crs":"190"}]},
-  {"icao":"RJFF","lat":34.67647,"lon":131.79017,"name":"Iwami","side":"blue","tacan":"57X","freq":"127.2","ils":[{"rwy":"11","freq":"108.7","crs":"110"},{"rwy":"29","freq":"109.7","crs":"290"}]},
-  {"icao":"RJDT","lat":34.28512,"lon":129.33033,"name":"Tsushima","side":"blue","tacan":"64X","freq":"124.325","ils":[{"rwy":"32","freq":"108.7","crs":"320"}]},
-  {"icao":"RJDC","lat":33.93188,"lon":131.27798,"name":"Yamaguchi-Ube","side":"blue","tacan":"45X","freq":"118.025","ils":[{"rwy":"07","freq":"110.1","crs":"072"}]},
-  {"icao":"ZKPY","lat":39.22565,"lon":125.6674,"name":"Sunan (Pyongyang)","side":"red","tacan":"51X","freq":"124.8","ils":[{"rwy":"17","freq":"109.9","crs":"173"},{"rwy":"19","freq":"110.3","crs":"193"},{"rwy":"35","freq":"109.5","crs":"353"}]},
-  {"icao":"ZKWS","lat":39.1609,"lon":127.4782,"name":"Kalma (Wonsan)","side":"red","tacan":"54X","freq":"124.65","ils":[]},
-  {"icao":"ZKUJ","lat":40.15575,"lon":124.50192,"name":"Uiju","side":"red","tacan":"55X","freq":"123.3","ils":[{"rwy":"05","freq":"110.4","crs":"049"},{"rwy":"23","freq":"110.0","crs":"229"}]},
-  {"icao":"ZKTS","lat":40.00412,"lon":127.61133,"name":"Toksan","side":"red","tacan":"53X","freq":"123.0","ils":[{"rwy":"05","freq":"109.6","crs":"052"},{"rwy":"23","freq":"109.6","crs":"232"}]},
-  {"icao":"KP-0011","lat":39.01052,"lon":126.66025,"name":"Mirim","side":"red","tacan":"59X","freq":"123.45","ils":[]},
-  {"icao":"KP-0029","lat":41.90765,"lon":128.4101,"name":"Samjiyon","side":"red","tacan":"50X","freq":"125.0","ils":[]},
-  {"icao":"KP-0008","lat":39.74678,"lon":127.46927,"name":"Sondok","side":"red","tacan":"","freq":"123.7","ils":[]},
-  {"icao":"KP-0006","lat":39.90277,"lon":126.48987,"name":"T'aech'on","side":"red","tacan":"","freq":"124.7","ils":[]},
-  {"icao":"KP-0005","lat":38.1308,"lon":125.24592,"name":"Taetan","side":"red","tacan":"","freq":"124.9","ils":[]},
-  {"icao":"KP-0030","lat":39.92795,"lon":125.20678,"name":"Panghyon","side":"red","tacan":"","freq":"125.1","ils":[]},
-  {"icao":"KP-0032","lat":41.42923,"lon":129.64795,"name":"Orang","side":"red","tacan":"","freq":"123.2","ils":[]},
-  {"icao":"KP-0020","lat":38.65312,"lon":125.78083,"name":"Hwangju","side":"red","tacan":"","freq":"124.1","ils":[]},
-  {"icao":"KP-0018","lat":39.75035,"lon":125.89992,"name":"Kaech'on","side":"red","tacan":"","freq":"123.85","ils":[]},
-  {"icao":"KP-0015","lat":38.6898,"lon":126.60392,"name":"Koksan","side":"red","tacan":"","freq":"124.4","ils":[]},
-  {"icao":"KP-0019","lat":38.614,"lon":127.45168,"name":"Hyon-Ni","side":"red","tacan":"","freq":"124.325","ils":[]},
-  {"icao":"KP-0039","lat":38.4258,"lon":125.01892,"name":"Kwail","side":"red","tacan":"","freq":"125.3","ils":[]},
-  {"icao":"KP-0053","lat":41.1405,"lon":126.35742,"name":"Manp'o","side":"red","tacan":"","freq":"124.5","ils":[]},
-  {"icao":"KP-0059","lat":40.36017,"lon":128.71872,"name":"Iwon","side":"red","tacan":"","freq":"125.4","ils":[]},
-  {"icao":"KP-0023","lat":38.89598,"lon":125.23322,"name":"Onch'on","side":"red","tacan":"","freq":"125.2","ils":[]},
-  {"icao":"KP-0035","lat":40.68207,"lon":128.14963,"name":"Hwangsuwon","side":"red","tacan":"","freq":"123.55","ils":[]}
+  {
+    "icao": "RKTU",
+    "lat": 36.71428,
+    "lon": 127.49155,
+    "name": "Cheongju AB",
+    "side": "blue",
+    "tacan": "27X",
+    "freq": "128.85",
+    "ils": [
+      {
+        "rwy": "24R",
+        "freq": "111.7",
+        "crs": "240"
+      },
+      {
+        "rwy": "06L",
+        "freq": "",
+        "crs": "060"
+      }
+    ]
+  },
+  {
+    "icao": "RKTN",
+    "lat": 35.89453,
+    "lon": 129.65928,
+    "name": "Daegu AB",
+    "side": "blue",
+    "tacan": "125X",
+    "freq": "127.65",
+    "ils": [
+      {
+        "rwy": "13L",
+        "freq": "111.9",
+        "crs": "130"
+      },
+      {
+        "rwy": "13R",
+        "freq": "108.7",
+        "crs": "130"
+      },
+      {
+        "rwy": "31L",
+        "freq": "108.7",
+        "crs": "310"
+      }
+    ]
+  },
+  {
+    "icao": "RKNN",
+    "lat": 37.75458,
+    "lon": 128.94293,
+    "name": "Gangneung AB",
+    "side": "blue",
+    "tacan": "56X",
+    "freq": "132.05",
+    "ils": [
+      {
+        "rwy": "26",
+        "freq": "111.5",
+        "crs": "260"
+      }
+    ]
+  },
+  {
+    "icao": "RKPK",
+    "lat": 35.18367,
+    "lon": 128.93348,
+    "name": "Gimhae/Busan",
+    "side": "blue",
+    "tacan": "117X",
+    "freq": "126.65",
+    "ils": [
+      {
+        "rwy": "18R",
+        "freq": "108.5",
+        "crs": "180"
+      },
+      {
+        "rwy": "36L",
+        "freq": "109.5",
+        "crs": "360"
+      }
+    ]
+  },
+  {
+    "icao": "RKSS",
+    "lat": 37.55438,
+    "lon": 126.79463,
+    "name": "Gimpo Intl",
+    "side": "blue",
+    "tacan": "83X",
+    "freq": "126.35",
+    "ils": [
+      {
+        "rwy": "14L",
+        "freq": "109.9",
+        "crs": "140"
+      },
+      {
+        "rwy": "14R",
+        "freq": "108.7",
+        "crs": "140"
+      },
+      {
+        "rwy": "32L",
+        "freq": "108.3",
+        "crs": "320"
+      },
+      {
+        "rwy": "32R",
+        "freq": "110.7",
+        "crs": "320"
+      }
+    ]
+  },
+  {
+    "icao": "RKJK",
+    "lat": 35.90495,
+    "lon": 126.61773,
+    "name": "Gunsan AB",
+    "side": "blue",
+    "tacan": "75X",
+    "freq": "120.225",
+    "ils": [
+      {
+        "rwy": "18",
+        "freq": "110.3",
+        "crs": "183"
+      },
+      {
+        "rwy": "36",
+        "freq": "110.3",
+        "crs": "003"
+      }
+    ]
+  },
+  {
+    "icao": "RKJJ",
+    "lat": 35.13193,
+    "lon": 126.80582,
+    "name": "Gwangju AB",
+    "side": "blue",
+    "tacan": "91X",
+    "freq": "128.875",
+    "ils": [
+      {
+        "rwy": "04L",
+        "freq": "111.1",
+        "crs": "041"
+      },
+      {
+        "rwy": "22R",
+        "freq": "111.1",
+        "crs": "221"
+      }
+    ]
+  },
+  {
+    "icao": "RKSI",
+    "lat": 37.47383,
+    "lon": 126.45138,
+    "name": "Incheon Intl",
+    "side": "blue",
+    "tacan": "76X",
+    "freq": "128.45",
+    "ils": [
+      {
+        "rwy": "15L",
+        "freq": "111.9",
+        "crs": "150"
+      },
+      {
+        "rwy": "15R",
+        "freq": "109.1",
+        "crs": "150"
+      },
+      {
+        "rwy": "33L",
+        "freq": "109.3",
+        "crs": "330"
+      },
+      {
+        "rwy": "33R",
+        "freq": "108.9",
+        "crs": "330"
+      }
+    ]
+  },
+  {
+    "icao": "RKTI",
+    "lat": 37.02832,
+    "lon": 127.88527,
+    "name": "Jungwon AB",
+    "side": "blue",
+    "tacan": "5X",
+    "freq": "135.6",
+    "ils": [
+      {
+        "rwy": "18L",
+        "freq": "111.3",
+        "crs": "183"
+      },
+      {
+        "rwy": "36R",
+        "freq": "111.3",
+        "crs": "003"
+      }
+    ]
+  },
+  {
+    "icao": "RKJB",
+    "lat": 35.00098,
+    "lon": 126.38652,
+    "name": "Muan Intl",
+    "side": "blue",
+    "tacan": "47X",
+    "freq": "127.425",
+    "ils": [
+      {
+        "rwy": "01",
+        "freq": "111.9",
+        "crs": "011"
+      },
+      {
+        "rwy": "19",
+        "freq": "108.9",
+        "crs": "191"
+      }
+    ]
+  },
+  {
+    "icao": "RKSO",
+    "lat": 37.08103,
+    "lon": 127.0231,
+    "name": "Osan AB",
+    "side": "blue",
+    "tacan": "116X",
+    "freq": "132.125",
+    "ils": [
+      {
+        "rwy": "09L",
+        "freq": "111.3",
+        "crs": "092"
+      },
+      {
+        "rwy": "27R",
+        "freq": "111.3",
+        "crs": "272"
+      }
+    ]
+  },
+  {
+    "icao": "RKTH",
+    "lat": 35.98538,
+    "lon": 129.42,
+    "name": "Pohang AB",
+    "side": "blue",
+    "tacan": "33X",
+    "freq": "127.4",
+    "ils": [
+      {
+        "rwy": "10",
+        "freq": "110.9",
+        "crs": "100"
+      }
+    ]
+  },
+  {
+    "icao": "RKSG",
+    "lat": 36.96335,
+    "lon": 127.03122,
+    "name": "Pyeongtaek AB",
+    "side": "blue",
+    "tacan": "19X",
+    "freq": "128.25",
+    "ils": [
+      {
+        "rwy": "32",
+        "freq": "108.75",
+        "crs": "320"
+      }
+    ]
+  },
+  {
+    "icao": "RKPS",
+    "lat": 35.08328,
+    "lon": 128.0663,
+    "name": "Sacheon AB",
+    "side": "blue",
+    "tacan": "98X",
+    "freq": "126.625",
+    "ils": [
+      {
+        "rwy": "06L",
+        "freq": "111.5",
+        "crs": "061"
+      },
+      {
+        "rwy": "24R",
+        "freq": "108.1",
+        "crs": "241"
+      }
+    ]
+  },
+  {
+    "icao": "RKTP",
+    "lat": 36.70572,
+    "lon": 126.48775,
+    "name": "Seosan AB",
+    "side": "blue",
+    "tacan": "73X",
+    "freq": "130.3",
+    "ils": [
+      {
+        "rwy": "03R",
+        "freq": "111.5",
+        "crs": "032"
+      },
+      {
+        "rwy": "21L",
+        "freq": "110.1",
+        "crs": "212"
+      }
+    ]
+  },
+  {
+    "icao": "RKSM",
+    "lat": 37.4487,
+    "lon": 127.10853,
+    "name": "Seoul AB",
+    "side": "blue",
+    "tacan": "35X",
+    "freq": "126.4",
+    "ils": [
+      {
+        "rwy": "20",
+        "freq": "108.95",
+        "crs": "200"
+      },
+      {
+        "rwy": "19",
+        "freq": "110.9",
+        "crs": "190"
+      }
+    ]
+  },
+  {
+    "icao": "RKSW",
+    "lat": 37.23133,
+    "lon": 127.01212,
+    "name": "Suwon AB",
+    "side": "blue",
+    "tacan": "22X",
+    "freq": "126.425",
+    "ils": [
+      {
+        "rwy": "33R",
+        "freq": "108.5",
+        "crs": "330"
+      }
+    ]
+  },
+  {
+    "icao": "RKNW",
+    "lat": 37.4421,
+    "lon": 127.96645,
+    "name": "Wonju AB",
+    "side": "blue",
+    "tacan": "53X",
+    "freq": "128.6",
+    "ils": [
+      {
+        "rwy": "04",
+        "freq": "110.2",
+        "crs": "040"
+      }
+    ]
+  },
+  {
+    "icao": "RKNY",
+    "lat": 38.06432,
+    "lon": 128.66742,
+    "name": "Yangyang Intl",
+    "side": "blue",
+    "tacan": "43X",
+    "freq": "128.825",
+    "ils": [
+      {
+        "rwy": "33",
+        "freq": "109.3",
+        "crs": "330"
+      }
+    ]
+  },
+  {
+    "icao": "RKTY",
+    "lat": 36.62848,
+    "lon": 128.34268,
+    "name": "Yecheon AB",
+    "side": "blue",
+    "tacan": "26X",
+    "freq": "135.8",
+    "ils": [
+      {
+        "rwy": "28",
+        "freq": "109.3",
+        "crs": "280"
+      }
+    ]
+  },
+  {
+    "icao": "RJOA",
+    "lat": 34.44375,
+    "lon": 132.9077,
+    "name": "Hiroshima",
+    "side": "blue",
+    "tacan": "",
+    "freq": "127.25",
+    "ils": [
+      {
+        "rwy": "10",
+        "freq": "108.8",
+        "crs": "100"
+      }
+    ]
+  },
+  {
+    "icao": "RJOI",
+    "lat": 34.14532,
+    "lon": 132.23688,
+    "name": "Iwakuni MCAS",
+    "side": "blue",
+    "tacan": "126X",
+    "freq": "128.4",
+    "ils": [
+      {
+        "rwy": "01",
+        "freq": "110.15",
+        "crs": "010"
+      },
+      {
+        "rwy": "19",
+        "freq": "110.15",
+        "crs": "190"
+      }
+    ]
+  },
+  {
+    "icao": "RJFF",
+    "lat": 34.67647,
+    "lon": 131.79017,
+    "name": "Iwami",
+    "side": "blue",
+    "tacan": "57X",
+    "freq": "127.2",
+    "ils": [
+      {
+        "rwy": "11",
+        "freq": "108.7",
+        "crs": "110"
+      },
+      {
+        "rwy": "29",
+        "freq": "109.7",
+        "crs": "290"
+      }
+    ]
+  },
+  {
+    "icao": "RJDT",
+    "lat": 34.28512,
+    "lon": 129.33033,
+    "name": "Tsushima",
+    "side": "blue",
+    "tacan": "64X",
+    "freq": "124.325",
+    "ils": [
+      {
+        "rwy": "32",
+        "freq": "108.7",
+        "crs": "320"
+      }
+    ]
+  },
+  {
+    "icao": "RJDC",
+    "lat": 33.93188,
+    "lon": 131.27798,
+    "name": "Yamaguchi-Ube",
+    "side": "blue",
+    "tacan": "45X",
+    "freq": "118.025",
+    "ils": [
+      {
+        "rwy": "07",
+        "freq": "110.1",
+        "crs": "072"
+      }
+    ]
+  },
+  {
+    "icao": "ZKPY",
+    "lat": 39.22565,
+    "lon": 125.6674,
+    "name": "Sunan (Pyongyang)",
+    "side": "red",
+    "tacan": "51X",
+    "freq": "124.8",
+    "ils": [
+      {
+        "rwy": "17",
+        "freq": "109.9",
+        "crs": "173"
+      },
+      {
+        "rwy": "19",
+        "freq": "110.3",
+        "crs": "193"
+      },
+      {
+        "rwy": "35",
+        "freq": "109.5",
+        "crs": "353"
+      }
+    ]
+  },
+  {
+    "icao": "ZKWS",
+    "lat": 39.1609,
+    "lon": 127.4782,
+    "name": "Kalma (Wonsan)",
+    "side": "red",
+    "tacan": "54X",
+    "freq": "124.65",
+    "ils": []
+  },
+  {
+    "icao": "ZKUJ",
+    "lat": 40.15575,
+    "lon": 124.50192,
+    "name": "Uiju",
+    "side": "red",
+    "tacan": "55X",
+    "freq": "123.3",
+    "ils": [
+      {
+        "rwy": "05",
+        "freq": "110.4",
+        "crs": "049"
+      },
+      {
+        "rwy": "23",
+        "freq": "110.0",
+        "crs": "229"
+      }
+    ]
+  },
+  {
+    "icao": "ZKTS",
+    "lat": 40.00412,
+    "lon": 127.61133,
+    "name": "Toksan",
+    "side": "red",
+    "tacan": "53X",
+    "freq": "123.0",
+    "ils": [
+      {
+        "rwy": "05",
+        "freq": "109.6",
+        "crs": "052"
+      },
+      {
+        "rwy": "23",
+        "freq": "109.6",
+        "crs": "232"
+      }
+    ]
+  },
+  {
+    "icao": "KP-0011",
+    "lat": 39.01052,
+    "lon": 126.66025,
+    "name": "Mirim",
+    "side": "red",
+    "tacan": "59X",
+    "freq": "123.45",
+    "ils": []
+  },
+  {
+    "icao": "KP-0029",
+    "lat": 41.90765,
+    "lon": 128.4101,
+    "name": "Samjiyon",
+    "side": "red",
+    "tacan": "50X",
+    "freq": "125.0",
+    "ils": []
+  },
+  {
+    "icao": "KP-0008",
+    "lat": 39.74678,
+    "lon": 127.46927,
+    "name": "Sondok",
+    "side": "red",
+    "tacan": "",
+    "freq": "123.7",
+    "ils": []
+  },
+  {
+    "icao": "KP-0006",
+    "lat": 39.90277,
+    "lon": 126.48987,
+    "name": "T'aech'on",
+    "side": "red",
+    "tacan": "",
+    "freq": "124.7",
+    "ils": []
+  },
+  {
+    "icao": "KP-0005",
+    "lat": 38.1308,
+    "lon": 125.24592,
+    "name": "Taetan",
+    "side": "red",
+    "tacan": "",
+    "freq": "124.9",
+    "ils": []
+  },
+  {
+    "icao": "KP-0030",
+    "lat": 39.92795,
+    "lon": 125.20678,
+    "name": "Panghyon",
+    "side": "red",
+    "tacan": "",
+    "freq": "125.1",
+    "ils": []
+  },
+  {
+    "icao": "KP-0032",
+    "lat": 41.42923,
+    "lon": 129.64795,
+    "name": "Orang",
+    "side": "red",
+    "tacan": "",
+    "freq": "123.2",
+    "ils": []
+  },
+  {
+    "icao": "KP-0020",
+    "lat": 38.65312,
+    "lon": 125.78083,
+    "name": "Hwangju",
+    "side": "red",
+    "tacan": "",
+    "freq": "124.1",
+    "ils": []
+  },
+  {
+    "icao": "KP-0018",
+    "lat": 39.75035,
+    "lon": 125.89992,
+    "name": "Kaech'on",
+    "side": "red",
+    "tacan": "",
+    "freq": "123.85",
+    "ils": []
+  },
+  {
+    "icao": "KP-0015",
+    "lat": 38.6898,
+    "lon": 126.60392,
+    "name": "Koksan",
+    "side": "red",
+    "tacan": "",
+    "freq": "124.4",
+    "ils": []
+  },
+  {
+    "icao": "KP-0019",
+    "lat": 38.614,
+    "lon": 127.45168,
+    "name": "Hyon-Ni",
+    "side": "red",
+    "tacan": "",
+    "freq": "124.325",
+    "ils": []
+  },
+  {
+    "icao": "KP-0039",
+    "lat": 38.4258,
+    "lon": 125.01892,
+    "name": "Kwail",
+    "side": "red",
+    "tacan": "",
+    "freq": "125.3",
+    "ils": []
+  },
+  {
+    "icao": "KP-0053",
+    "lat": 41.1405,
+    "lon": 126.35742,
+    "name": "Manp'o",
+    "side": "red",
+    "tacan": "",
+    "freq": "124.5",
+    "ils": []
+  },
+  {
+    "icao": "KP-0059",
+    "lat": 40.36017,
+    "lon": 128.71872,
+    "name": "Iwon",
+    "side": "red",
+    "tacan": "",
+    "freq": "125.4",
+    "ils": []
+  },
+  {
+    "icao": "KP-0023",
+    "lat": 38.89598,
+    "lon": 125.23322,
+    "name": "Onch'on",
+    "side": "red",
+    "tacan": "",
+    "freq": "125.2",
+    "ils": []
+  },
+  {
+    "icao": "KP-0035",
+    "lat": 40.68207,
+    "lon": 128.14963,
+    "name": "Hwangsuwon",
+    "side": "red",
+    "tacan": "",
+    "freq": "123.55",
+    "ils": []
+  }
 ]

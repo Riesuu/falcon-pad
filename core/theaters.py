@@ -49,18 +49,18 @@ def _reg(name: str, lon0: float, k0: float, FE: float, FN: float,
     THEATER_DB[name.lower()] = TheaterParams(name, lon0, k0, FE, FN, bbox)
 
 
-# Sources: BMS terrain header files + community documentation
-# NOTE: FN values are theater-specific offsets; extracted from terrain .tdf/.hdr
-#       If you have a theater not listed, check its terrain header for the
-#       correct TMERC parameters and add an entry here.
-_reg("Korea KTO", lon0=127.5,  k0=0.9996, FE=512000.0, FN=-3749290.0,
-     bbox=(33.76, 42.94, 121.22, 133.78))
-_reg("Balkans",   lon0=16.287, k0=0.9996, FE=512000.0, FN=-4118700.0,
-     bbox=(35.0, 50.0, 12.0,  32.0))
-_reg("Israel",    lon0=34.959, k0=0.9996, FE=512000.0, FN=-3028500.0,
-     bbox=(27.0, 37.0, 29.0,  42.0))
-_reg("Hellas",    lon0=24.903, k0=0.9996, FE=512000.0, FN=-3694000.0,
-     bbox=(30.0, 44.0, 18.0,  33.0))
+# Sources: BMS Theater.txt projection strings (TerrData/<theater>/NewTerrain/Theater.txt)
+# FE=512000 for all 4.38 theaters (1024x1024km) — confirmed by oakdesign
+# lon0, FN extracted exactly from +proj=tmerc strings in each Theater.txt
+# bbox computed by projecting corners (0,0)→(max,max) through TMERC (per oakdesign)
+_reg("Korea KTO", lon0=127.5,    k0=0.9996, FE=512000.0, FN=-3749290.0,
+     bbox=(33.76, 42.94, 121.23, 133.77))
+_reg("Balkans",   lon0=16.4191,  k0=0.9996, FE=512000.0, FN=-4119200.0,
+     bbox=(37.08, 46.25, 9.78,   23.06))
+_reg("Israel",    lon0=35.0,     k0=0.9996, FE=512000.0, FN=-3028440.0,
+     bbox=(27.28, 36.48, 29.29,  40.71))
+_reg("Hellas",    lon0=25.0,     k0=0.9996, FE=512000.0, FN=-3693820.0,
+     bbox=(33.26, 42.44, 18.78,  31.22))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -124,7 +124,7 @@ def set_active_theater(name: str) -> bool:
                     return True
                 return False
 
-    logger.warning(f"THEATER unknown: '{raw}' — keeping {_active_theater_name}")
+        logger.warning(f"THEATER unknown: '{raw}' — keeping {_active_theater_name}")
     return False
 
 
@@ -180,7 +180,9 @@ def _tmerc_to_latlon(north_ft: float, east_ft: float,
 
 def bms_to_latlon(north_ft: float, east_ft: float) -> Tuple[float, float]:
     """Convert BMS coords → WGS-84 using the *active* theater projection."""
-    return _tmerc_to_latlon(north_ft, east_ft, _active_theater)
+    with _theater_lock:
+        tp = _active_theater
+    return _tmerc_to_latlon(north_ft, east_ft, tp)
 
 
 def bms_to_latlon_theater(north_ft: float, east_ft: float,
@@ -253,7 +255,8 @@ def detect_theater_from_coords_multi(points: List[Tuple[float, float]]) -> bool:
 
 def in_theater_bbox(lat: float, lon: float) -> bool:
     """True if (lat, lon) falls within the active theater's bounding box."""
-    bb = _active_theater.bbox
+    with _theater_lock:
+        bb = _active_theater.bbox
     return bb[0] <= lat <= bb[1] and bb[2] <= lon <= bb[3]
 
 
