@@ -267,8 +267,6 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#layerPanel')&&!e.target.closest('#layerBtn'))
     document.getElementById('layerPanel').classList.remove('open');
 
-  if(!e.target.closest('#calPanel')&&!_calMode)
-    document.getElementById('calPanel').style.display='none';
 });
 
 

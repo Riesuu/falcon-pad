@@ -282,52 +282,6 @@
 
 
 
-<!-- CALIBRATION PANEL -->
-<div id="calPanel" style="display:none;position:fixed;top:80px;left:60px;
-  background:rgba(4,8,18,.97);border:1px solid rgba(251,191,36,.25);
-  border-top:2px solid rgba(251,191,36,.4);border-radius:3px;
-  padding:12px 14px;z-index:2000;min-width:240px;backdrop-filter:blur(16px)">
-  <div style="font-family:system-ui,sans-serif;font-size:9px;font-weight:700;
-    color:#fbbf24;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">
-    ✎ Runway calibration</div>
-  <div style="font-family:'Consolas','Courier New',monospace;font-size:10px;color:#64748b;
-    margin-bottom:8px;line-height:1.5">
-    1. Select airbase<br>
-    2. Click "Calibrate"<br>
-    3. Click on the <span style="color:#fbbf24">actual threshold</span></div>
-  <select id="calIcaoSel" style="width:100%;background:rgba(255,255,255,.04);
-    border:1px solid rgba(255,255,255,.1);border-radius:2px;padding:5px 8px;
-    color:#e2e8f0;font-family:'Consolas','Courier New',monospace;font-size:11px;
-    margin-bottom:8px;outline:none"></select>
-  <div style="display:flex;gap:6px;flex-wrap:wrap">
-    <button onclick="startCalibration()"
-      style="flex:1;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);
-      border-radius:2px;padding:5px;color:#fbbf24;font-family:system-ui,sans-serif;
-      font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px">CALIBRATE</button>
-    <button onclick="resetCalibration()"
-      style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);
-      border-radius:2px;padding:5px 8px;color:#f87171;font-family:system-ui,sans-serif;
-      font-size:11px;cursor:pointer">RESET</button>
-    <button onclick="document.getElementById('calPanel').style.display='none'"
-      style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
-      border-radius:2px;padding:5px 8px;color:#64748b;font-family:system-ui,sans-serif;
-      font-size:11px;cursor:pointer">✕</button>
-  </div>
-  <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.05)">
-    <button onclick="resetAllCalibration()"
-      style="width:100%;background:transparent;border:1px solid rgba(239,68,68,.15);
-      border-radius:2px;padding:3px;color:#64748b;font-family:system-ui,sans-serif;
-      font-size:10px;cursor:pointer">Reset all bases</button>
-  </div>
-</div>
-<!-- STATUS CALIBRATION -->
-<div id="calStatus" style="display:none;position:fixed;top:40px;left:50%;
-  transform:translateX(-50%);background:rgba(251,191,36,.15);
-  border:1px solid rgba(251,191,36,.4);border-radius:3px;
-  padding:6px 16px;z-index:3000;font-family:system-ui,sans-serif;
-  font-size:13px;font-weight:700;color:#fbbf24;letter-spacing:1px;
-  pointer-events:none"></div>
-
 <!-- ═══════════════════════════════════════════════════════════════
      TAB PANELS
 ════════════════════════════════════════════════════════════════ -->
@@ -800,6 +754,7 @@
 <script src="/static/js/map-tools.js"></script>
 <script src="/static/js/map-notes.js"></script>
 <script src="/static/js/map-mission.js"></script>
+<script src="/static/js/runway-data.js"></script>
 <script src="/static/js/map-airports.js"></script>
 <script src="/static/js/map-contacts.js"></script>
 <script src="/static/js/map-init.js"></script>

@@ -197,7 +197,6 @@ async function loadUiPrefs(){
       _clearBullseye();
       document.getElementById('bullBtn')?.classList.remove('active');
     }
-    if(p.rwy_offsets){ try{ rwyOffsets = JSON.parse(p.rwy_offsets); }catch(e){} }
     if(p.annotations){ try{ _restoreNotes(JSON.parse(p.annotations)); }catch(e){} }
     if(_missionCache) _redrawMission();
   }catch(e){ console.error('[ui-prefs] error:',e); }
