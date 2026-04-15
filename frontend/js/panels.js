@@ -118,14 +118,9 @@ function _syncElemControls(p) {
 async function loadSettings() {
   try {
     const d = await(await fetch('/api/settings')).json();
-    document.getElementById('sp-port').value    = d.port         || 8000;
-    document.getElementById('sp-bcast').value   = d.broadcast_ms || 200;
-    // Sync element colors & sizes
     _syncElemControls(d);
   } catch(e) {
     console.error('[settings] load failed:', e);
-    const st = document.getElementById('sp-status');
-    if(st){ st.textContent='✗ Failed to load settings'; st.style.color='#ef4444'; st.classList.add('show'); }
   }
 }
 
@@ -137,47 +132,6 @@ function toggleSettings() {
 }
 
 
-
-async function saveSettings() {
-  const port     = parseInt(document.getElementById('sp-port').value);
-  const bcast    = parseInt(document.getElementById('sp-bcast').value);
-  const status   = document.getElementById('sp-status');
-  const portWarn = document.getElementById('sp-port-warn');
-
-  status.textContent = '⏳ Saving…';
-  status.classList.add('show');
-
-  try {
-    const r = await fetch('/api/settings', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        port:         isNaN(port)  ? null : port,
-        broadcast_ms: isNaN(bcast) ? null : bcast,
-      })
-    });
-    const d = await r.json();
-    if (d.ok) {
-      status.textContent = '✓ Saved — ' + d.changed.join(', ');
-      status.style.color = '#4ade80';
-      if (d.needs_restart) {
-        portWarn.classList.add('show');
-        status.textContent += ' — RESTART SCRIPT';
-        status.style.color = '#fbbf24';
-      }
-      setTimeout(() => {
-        status.classList.remove('show');
-        if (!d.needs_restart) toggleSettings();
-      }, 2200);
-    } else {
-      status.textContent = '✗ Error';
-      status.style.color = '#ef4444';
-    }
-  } catch(e) {
-    status.textContent = '✗ ' + e;
-    status.style.color = '#ef4444';
-  }
-}
 
 // Fermer settings si clic sur la carte
 document.getElementById('map').addEventListener('click', () => {

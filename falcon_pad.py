@@ -179,8 +179,10 @@ if __name__ == "__main__":
                 self._logo = QPixmap(_logo_path).scaledToHeight(
                     56, Qt.TransformationMode.SmoothTransformation)
             self._drag_pos = self._btn_rect = self._min_rect = None
+            self._set_rect = None
             self._local_rect = self._net_rect = None
             self._local_hover = self._net_hover = False
+            self._set_hover = False
             self._btn_hover = self._min_hover = self._bms_ok = self._acmi_ok = False
             self._timer = QTimer(self)
             self._timer.timeout.connect(self._poll_bms)
@@ -230,6 +232,18 @@ if __name__ == "__main__":
             p.drawRect(rx, ry, rw, rh)
             p.setPen(QPen(mc, 2))
             p.drawLine(rx+5, ry+rh//2, rx+rw-5, ry+rh//2)
+
+            # Settings button (gear) — right of minimize, borderless
+            sx = rx + rw + _t.SET_BTN_X_OFFSET
+            sy = _t.SET_BTN_Y
+            sw, sh = _t.SET_BTN_W, _t.SET_BTN_H
+            self._set_rect = (sx, sy, sw, sh)
+            if self._set_hover:
+                p.fillRect(sx, sy, sw, sh, self.ACCENT_DIM)
+            sc = self.ACCENT if self._set_hover else self.TXT_MID
+            p.setPen(QPen(sc))
+            p.setFont(QFont(_t.FONT_FAMILY, 14, QFont.Weight.Bold))
+            p.drawText(sx, sy - 1, sw, sh + 2, Qt.AlignmentFlag.AlignCenter, "\u2699")
 
             # Version + author (below minimize button)
             p.setPen(QPen(self.TXT_DIM))
@@ -335,8 +349,184 @@ if __name__ == "__main__":
                 import webbrowser; webbrowser.open(f"http://{SERVER_IP}:{SERVER_PORT}"); return
             if self._in_rect(mx, my, self._min_rect):
                 self._smooth_minimize(); return
+            if self._in_rect(mx, my, self._set_rect):
+                self._open_settings(); return
             if my < _t.HEADER_H:
                 self._drag_pos = e.globalPosition().toPoint()
+
+        def _open_settings(self):
+            from PySide6.QtWidgets import (QDialog, QSpinBox, QVBoxLayout,
+                                           QHBoxLayout, QPushButton, QLabel,
+                                           QFrame, QAbstractSpinBox)
+            dlg = QDialog(self)
+            dlg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+            dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            dlg.setFixedWidth(340)
+            drag_state: list = [None]
+
+            dlg.setStyleSheet(f"""
+                #root {{ background:{_t.BG}; border:1px solid {_t.ACCENT_DIM}; }}
+                #header {{ background:{_t.BG2}; border-bottom:1px solid {_t.ACCENT_DIM}; }}
+                #accentLine {{ background:{_t.ACCENT}; }}
+                #title {{ color:{_t.TXT_WHITE}; font-family:'{_t.FONT_FAMILY}';
+                          font-size:11px; font-weight:bold; letter-spacing:1px; }}
+                #closeBtn {{ background:transparent; color:{_t.TXT_DIM};
+                             border:none; font-size:14px; font-weight:bold;
+                             min-width:28px; max-width:28px; min-height:22px; }}
+                #closeBtn:hover {{ color:{_t.RED}; background:{_t.RED_DIM}; }}
+                QLabel#fieldLbl {{ color:{_t.TXT_DIM}; font-family:'{_t.FONT_FAMILY}';
+                                   font-size:8px; font-weight:bold; letter-spacing:1px;
+                                   padding:0; background:transparent; }}
+                QSpinBox {{ background:{_t.BG2}; color:{_t.TXT_WHITE};
+                            selection-background-color:{_t.ACCENT_DIM};
+                            selection-color:{_t.ACCENT};
+                            border:1px solid {_t.ACCENT_DIM}; border-radius:2px;
+                            padding:7px 10px; font-family:'{_t.FONT_MONO}';
+                            font-size:13px; }}
+                QSpinBox:focus {{ border:1px solid {_t.ACCENT}; }}
+                QPushButton {{ background:{_t.BG2}; color:{_t.TXT_MID};
+                               border:1px solid {_t.ACCENT_DIM}; border-radius:2px;
+                               padding:8px 20px; font-family:'{_t.FONT_FAMILY}';
+                               font-size:10px; font-weight:bold; letter-spacing:1px;
+                               min-width:80px; }}
+                QPushButton:hover {{ background:{_t.ACCENT_DIM}; color:{_t.ACCENT};
+                                     border:1px solid {_t.ACCENT}; }}
+                QPushButton#saveBtn {{ color:{_t.ACCENT}; border:1px solid {_t.ACCENT_DIM}; }}
+                QPushButton#saveBtn:hover {{ background:{_t.ACCENT_DIM};
+                                              border:1px solid {_t.ACCENT}; }}
+            """)
+
+            # Root frame (holds everything; styled background)
+            root = QFrame(dlg); root.setObjectName("root")
+            outer = QVBoxLayout(dlg); outer.setContentsMargins(0, 0, 0, 0)
+            outer.addWidget(root)
+            rootLay = QVBoxLayout(root)
+            rootLay.setContentsMargins(0, 0, 0, 0); rootLay.setSpacing(0)
+
+            # Accent top line
+            accent = QFrame(); accent.setObjectName("accentLine")
+            accent.setFixedHeight(_t.ACCENT_LINE_H)
+            rootLay.addWidget(accent)
+
+            # Header with title + close
+            header = QFrame(); header.setObjectName("header")
+            header.setFixedHeight(34)
+            hLay = QHBoxLayout(header)
+            hLay.setContentsMargins(16, 0, 4, 0); hLay.setSpacing(0)
+            title = QLabel("SETTINGS"); title.setObjectName("title")
+            close_btn = QPushButton("\u2715"); close_btn.setObjectName("closeBtn")
+            close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            hLay.addWidget(title); hLay.addStretch(1); hLay.addWidget(close_btn)
+            rootLay.addWidget(header)
+
+            # Drag handling on header
+            def _hdr_press(e):
+                if e.button() == Qt.MouseButton.LeftButton:
+                    drag_state[0] = e.globalPosition().toPoint() - dlg.frameGeometry().topLeft()
+            def _hdr_move(e):
+                if drag_state[0] is not None and e.buttons() == Qt.MouseButton.LeftButton:
+                    dlg.move(e.globalPosition().toPoint() - drag_state[0])
+            def _hdr_release(_e):
+                drag_state[0] = None
+            header.mousePressEvent   = _hdr_press
+            header.mouseMoveEvent    = _hdr_move
+            header.mouseReleaseEvent = _hdr_release
+
+            # Body
+            body = QFrame()
+            v = QVBoxLayout(body)
+            v.setContentsMargins(22, 18, 22, 18); v.setSpacing(6)
+
+            lbl1 = QLabel(f"LISTEN PORT  ({app_info.PORT_MIN}\u2013{app_info.PORT_MAX})")
+            lbl1.setObjectName("fieldLbl")
+            v.addWidget(lbl1)
+            port_sp = QSpinBox()
+            port_sp.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            port_sp.setRange(app_info.PORT_MIN, app_info.PORT_MAX)
+            port_sp.setValue(int(config.APP_CONFIG["port"]))
+            v.addWidget(port_sp)
+
+            v.addSpacing(8)
+            lbl2 = QLabel(f"BROADCAST INTERVAL  ({app_info.BROADCAST_MS_MIN}\u2013{app_info.BROADCAST_MS_MAX} MS)")
+            lbl2.setObjectName("fieldLbl")
+            v.addWidget(lbl2)
+            bc_sp = QSpinBox()
+            bc_sp.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            bc_sp.setRange(app_info.BROADCAST_MS_MIN, app_info.BROADCAST_MS_MAX)
+            bc_sp.setValue(int(config.APP_CONFIG["broadcast_ms"]))
+            v.addWidget(bc_sp)
+
+            v.addSpacing(14)
+            btns = QHBoxLayout(); btns.setSpacing(8)
+            cancel_btn = QPushButton("CANCEL")
+            ok_btn = QPushButton("SAVE"); ok_btn.setObjectName("saveBtn")
+            ok_btn.setDefault(True)
+            btns.addStretch(1); btns.addWidget(cancel_btn); btns.addWidget(ok_btn)
+            v.addLayout(btns)
+            rootLay.addWidget(body)
+
+            close_btn.clicked.connect(dlg.reject)
+            ok_btn.clicked.connect(dlg.accept)
+            cancel_btn.clicked.connect(dlg.reject)
+
+            # Center on parent
+            pg = self.frameGeometry()
+            dlg.adjustSize()
+            dlg.move(pg.center().x() - dlg.width()//2, pg.center().y() - dlg.height()//2)
+
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+            old_port = int(config.APP_CONFIG["port"])
+            new_port = port_sp.value()
+            new_bcast = bc_sp.value()
+            config.APP_CONFIG["port"] = new_port
+            config.APP_CONFIG["broadcast_ms"] = new_bcast
+            config.save(config.APP_CONFIG)
+            logger.info(f"Settings saved: port={new_port}, broadcast_ms={new_bcast}")
+            if new_port != old_port:
+                self._show_restart_toast(new_port)
+
+        def _show_restart_toast(self, new_port: int):
+            from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
+                                           QLabel, QFrame, QPushButton)
+            dlg = QDialog(self)
+            dlg.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+            dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            dlg.setStyleSheet(f"""
+                #root {{ background:{_t.BG}; border:1px solid {_t.ACCENT_DIM}; }}
+                #accentLine {{ background:{_t.ACCENT}; }}
+                QLabel {{ color:{_t.TXT_WHITE}; font-family:'{_t.FONT_FAMILY}';
+                          font-size:11px; background:transparent; }}
+                #subtitle {{ color:{_t.TXT_DIM}; font-size:9px; }}
+                QPushButton {{ background:{_t.BG2}; color:{_t.ACCENT};
+                               border:1px solid {_t.ACCENT_DIM}; border-radius:2px;
+                               padding:8px 24px; font-weight:bold; letter-spacing:1px;
+                               font-size:10px; }}
+                QPushButton:hover {{ background:{_t.ACCENT_DIM};
+                                     border:1px solid {_t.ACCENT}; }}
+            """)
+            root = QFrame(dlg); root.setObjectName("root")
+            outer = QVBoxLayout(dlg); outer.setContentsMargins(0, 0, 0, 0)
+            outer.addWidget(root)
+            rl = QVBoxLayout(root); rl.setContentsMargins(0, 0, 0, 0); rl.setSpacing(0)
+            line = QFrame(); line.setObjectName("accentLine")
+            line.setFixedHeight(_t.ACCENT_LINE_H); rl.addWidget(line)
+            inner = QVBoxLayout(); inner.setContentsMargins(28, 20, 28, 18); inner.setSpacing(6)
+            t1 = QLabel("RESTART REQUIRED")
+            t1.setStyleSheet(f"color:{_t.ACCENT};font-weight:bold;letter-spacing:1px;font-size:11px;")
+            t2 = QLabel(f"Port changed to {new_port}.")
+            t3 = QLabel("Restart Falcon-Pad to apply."); t3.setObjectName("subtitle")
+            inner.addWidget(t1); inner.addSpacing(4); inner.addWidget(t2); inner.addWidget(t3)
+            inner.addSpacing(14)
+            btn = QPushButton("OK"); btn.setDefault(True)
+            row = QHBoxLayout(); row.addStretch(1); row.addWidget(btn); row.addStretch(1)
+            inner.addLayout(row)
+            rl.addLayout(inner)
+            btn.clicked.connect(dlg.accept)
+            pg = self.frameGeometry()
+            dlg.adjustSize()
+            dlg.move(pg.center().x() - dlg.width()//2, pg.center().y() - dlg.height()//2)
+            dlg.exec()
 
         def mouseMoveEvent(self, e):
             if self._drag_pos and e.buttons() == Qt.MouseButton.LeftButton:
@@ -354,20 +544,25 @@ if __name__ == "__main__":
                 h2 = rx <= mx <= rx+rw and ry <= my <= ry+rh
                 if h2 != self._min_hover:
                     self._min_hover = h2; self.update()
+            if self._set_rect:
+                sx, sy, sw, sh = self._set_rect
+                h3 = sx <= mx <= sx+sw and sy <= my <= sy+sh
+                if h3 != self._set_hover:
+                    self._set_hover = h3; self.update()
             # URL hover state
             lh = self._in_rect(mx, my, self._local_rect)
             nh = self._in_rect(mx, my, self._net_rect)
             if lh != self._local_hover or nh != self._net_hover:
                 self._local_hover = lh; self._net_hover = nh; self.update()
-            over_url = lh or nh
-            self.setCursor(Qt.CursorShape.PointingHandCursor if over_url else Qt.CursorShape.ArrowCursor)
+            over_click = lh or nh or self._set_hover or self._min_hover or self._btn_hover
+            self.setCursor(Qt.CursorShape.PointingHandCursor if over_click else Qt.CursorShape.ArrowCursor)
 
         def mouseReleaseEvent(self, _e):
             self._drag_pos = None
 
         def leaveEvent(self, _e):
-            if self._btn_hover or self._min_hover:
-                self._btn_hover = False; self._min_hover = False; self.update()
+            if self._btn_hover or self._min_hover or self._set_hover:
+                self._btn_hover = False; self._min_hover = False; self._set_hover = False; self.update()
 
         def keyPressEvent(self, e):
             if e.key() == Qt.Key.Key_F4 and e.modifiers() == Qt.KeyboardModifier.AltModifier:

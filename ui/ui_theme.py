@@ -58,6 +58,12 @@ MIN_BTN_Y        = 10
 MIN_BTN_W        = 24
 MIN_BTN_H        = 18
 
+# ── Settings button (header, right of minimize) ───────────────────────────
+SET_BTN_Y        = 10
+SET_BTN_W        = 24
+SET_BTN_H        = 18
+SET_BTN_X_OFFSET = 6   # gap after minimize button
+
 # ── Eject button ───────────────────────────────────────────────────────────
 EJECT_BTN_W = 144
 EJECT_BTN_H = 28

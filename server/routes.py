@@ -138,10 +138,10 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             raise HTTPException(400, f"Parse error: {e}")
 
     # ── Settings ─────────────────────────────────────────────────
+    # Port and broadcast_ms are configured from the Qt desktop window.
+    # This endpoint only exposes read-only config plus theme changes.
     class SettingsModel(BaseModel):
-        port:         Optional[int] = None
-        broadcast_ms: Optional[int] = None
-        theme:        Optional[str] = None
+        theme: Optional[str] = None
 
     @app.get("/api/settings")
     async def settings_get():
@@ -150,24 +150,12 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     @app.post("/api/settings")
     async def settings_save(s: SettingsModel):
         changed: list = []
-        if s.port is not None and app_info.PORT_MIN <= s.port <= app_info.PORT_MAX and s.port != config.APP_CONFIG.get("port"):
-            import socket as _sock
-            with _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM) as _sk:
-                _sk.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
-                if _sk.connect_ex(("127.0.0.1", s.port)) == 0:
-                    raise HTTPException(400, f"Port {s.port} is already in use")
-            config.APP_CONFIG["port"] = s.port
-            changed.append("port")
-        if s.broadcast_ms is not None and app_info.BROADCAST_MS_MIN <= s.broadcast_ms <= app_info.BROADCAST_MS_MAX:
-            config.APP_CONFIG["broadcast_ms"] = s.broadcast_ms
-            changed.append("broadcast_ms")
         if s.theme is not None and s.theme in app_info.VALID_THEMES:
             config.APP_CONFIG["theme"] = s.theme
             changed.append("theme")
         config.save(config.APP_CONFIG)
-        needs_restart = "port" in changed
-        logger.info(f"Settings: {changed}" + (" — RESTART required (port)" if needs_restart else ""))
-        return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": config.APP_CONFIG}
+        logger.info(f"Settings: {changed}")
+        return {"ok": True, "changed": changed, "needs_restart": False, "config": config.APP_CONFIG}
 
     @app.get("/api/server/info")
     async def server_info():

@@ -168,20 +168,6 @@
     <button class="sp-close" onclick="toggleSettings()">✕</button>
   </div>
   <div class="sp-body">
-    <!-- Port -->
-    <div class="sp-row">
-      <label class="sp-label">LISTEN PORT</label>
-      <input class="sp-input" id="sp-port" type="number" min="1024" max="65535" placeholder="8000"/>
-      <span class="sp-hint">Valid range: 1024 – 65535. Restart required.</span>
-      <span class="sp-warn" id="sp-port-warn">⚠ Port changed — restart script to apply</span>
-    </div>
-    <div class="sp-divider"></div>
-    <!-- Broadcast interval -->
-    <div class="sp-row">
-      <label class="sp-label">BROADCAST INTERVAL</label>
-      <input class="sp-input" id="sp-bcast" type="number" min="50" max="2000" placeholder="200"/>
-      <span class="sp-hint">Position update rate (ms). 100 = smooth, 500 = eco.</span>
-    </div>
     <div class="sp-row">
       <label class="sp-label">MAP ELEMENT COLORS & SIZES</label>
 
@@ -254,10 +240,8 @@
     </div>
 
   </div>
-  <div class="sp-status" id="sp-status"></div>
   <div class="sp-footer">
-    <button class="sp-cancel" onclick="toggleSettings()">CANCEL</button>
-    <button class="sp-save"   onclick="saveSettings()">✓ SAVE</button>
+    <button class="sp-cancel" onclick="toggleSettings()">CLOSE</button>
   </div>
 </div>
 
