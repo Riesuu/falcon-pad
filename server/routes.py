@@ -19,17 +19,17 @@ from pydantic import BaseModel
 
 import app_info
 import config
-from core import airports, mission, trtt
+from core import airports, mission
 from ui import ui_prefs, ui_theme
 from core.theaters import (detect_theater_from_coords_multi,
-                           get_theater, get_theater_name, is_theater_detected,
-                           THEATER_DB)
+                           get_theater_name, is_theater_detected,
+                           theater_info_dict)
 
 logger = logging.getLogger(__name__)
 
 
 def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
-                    get_briefings_dir, try_float_fn, frontend_dir, server_ip, server_port):
+                    get_briefings_dir, frontend_dir, server_ip, server_port):
     """Register all API routes on the FastAPI app instance."""
 
     # ── WebSocket ────────────────────────────────────────────────
@@ -114,14 +114,9 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             _cfg = configparser.RawConfigParser()
             _cfg.optionxform = str  # type: ignore[assignment]
             _cfg.read_string(content)
-            if _cfg.has_section("STPT"):
-                _pts = [(float(_p[0]), float(_p[1]))
-                        for _, _v in _cfg["STPT"].items()
-                        for _p in [_v.split(",")]
-                        if len(_p) >= 2 and try_float_fn(_p[0]) and try_float_fn(_p[1])
-                        and abs(float(_p[0])) > 10 and abs(float(_p[1])) > 10]
-                if _pts and detect_theater_from_coords_multi(_pts):
-                    await broadcast_fn(ws_clients, theater_msg_fn())
+            _pts = mission.extract_stpt_coords(_cfg)
+            if _pts and detect_theater_from_coords_multi(_pts):
+                await broadcast_fn(ws_clients, theater_msg_fn())
             result = mission.set_from_upload(content, file.filename or "uploaded.ini")
             route   = result.get("route",   [])
             threats = result.get("threats", [])
@@ -138,10 +133,10 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
             raise HTTPException(400, f"Parse error: {e}")
 
     # ── Settings ─────────────────────────────────────────────────
+    # Port and broadcast_ms are configured from the Qt desktop window.
+    # This endpoint only exposes read-only config plus theme changes.
     class SettingsModel(BaseModel):
-        port:         Optional[int] = None
-        broadcast_ms: Optional[int] = None
-        theme:        Optional[str] = None
+        theme: Optional[str] = None
 
     @app.get("/api/settings")
     async def settings_get():
@@ -150,24 +145,12 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     @app.post("/api/settings")
     async def settings_save(s: SettingsModel):
         changed: list = []
-        if s.port is not None and app_info.PORT_MIN <= s.port <= app_info.PORT_MAX and s.port != config.APP_CONFIG.get("port"):
-            import socket as _sock
-            with _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM) as _sk:
-                _sk.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
-                if _sk.connect_ex(("127.0.0.1", s.port)) == 0:
-                    raise HTTPException(400, f"Port {s.port} is already in use")
-            config.APP_CONFIG["port"] = s.port
-            changed.append("port")
-        if s.broadcast_ms is not None and app_info.BROADCAST_MS_MIN <= s.broadcast_ms <= app_info.BROADCAST_MS_MAX:
-            config.APP_CONFIG["broadcast_ms"] = s.broadcast_ms
-            changed.append("broadcast_ms")
         if s.theme is not None and s.theme in app_info.VALID_THEMES:
             config.APP_CONFIG["theme"] = s.theme
             changed.append("theme")
         config.save(config.APP_CONFIG)
-        needs_restart = "port" in changed
-        logger.info(f"Settings: {changed}" + (" — RESTART required (port)" if needs_restart else ""))
-        return {"ok": True, "changed": changed, "needs_restart": needs_restart, "config": config.APP_CONFIG}
+        logger.info(f"Settings: {changed}")
+        return {"ok": True, "changed": changed, "needs_restart": False, "config": config.APP_CONFIG}
 
     @app.get("/api/server/info")
     async def server_info():
@@ -184,16 +167,7 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
     async def theater_info():
         if not is_theater_detected():
             return {}
-        tp = get_theater()
-        lat_min, lat_max, lon_min, lon_max = tp.bbox
-        c_lat = (lat_min + lat_max) / 2
-        c_lon = (lon_min + lon_max) / 2
-        span  = max(lat_max - lat_min, lon_max - lon_min)
-        zoom  = 6 if span > 20 else 7 if span > 15 else 8
-        return {"name": get_theater_name(),
-                "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
-                "bbox": {"lat_min": lat_min, "lat_max": lat_max,
-                         "lon_min": lon_min, "lon_max": lon_max}}
+        return theater_info_dict()
 
     # ── UI Preferences ───────────────────────────────────────────
     class UiPrefsModel(BaseModel):
@@ -369,9 +343,9 @@ def register_routes(app, bms, ws_clients, broadcast_fn, theater_msg_fn,
                     para_html.append("<br>")
                     continue
                 style = (p.style.name.lower() if p.style and p.style.name else "")
-                if   "heading 1" in style: para_html.append(f"<h1>{p.text}</h1>")
-                elif "heading 2" in style: para_html.append(f"<h2>{p.text}</h2>")
-                elif "heading 3" in style: para_html.append(f"<h3>{p.text}</h3>")
+                if   "heading 1" in style: para_html.append(f"<h1>{_html.escape(p.text)}</h1>")
+                elif "heading 2" in style: para_html.append(f"<h2>{_html.escape(p.text)}</h2>")
+                elif "heading 3" in style: para_html.append(f"<h3>{_html.escape(p.text)}</h3>")
                 else:
                     runs = ""
                     for r in p.runs:

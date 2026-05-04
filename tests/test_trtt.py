@@ -31,11 +31,18 @@ class TestParseColor:
 
     def test_other_colors_are_unknown(self):
         from core.trtt import _parse_color
-        assert _parse_color("Green")  == 3
         assert _parse_color("Violet") == 3
-        assert _parse_color("Orange") == 3
         assert _parse_color("Grey")   == 3
         assert _parse_color("")       == 3
+
+    def test_allied_colors(self):
+        from core.trtt import _parse_color
+        assert _parse_color("Green")  == 1
+        assert _parse_color("Cyan")   == 1
+
+    def test_enemy_colors(self):
+        from core.trtt import _parse_color
+        assert _parse_color("Orange") == 2
 
 
 class TestParseType:

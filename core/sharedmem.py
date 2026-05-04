@@ -22,7 +22,7 @@ import struct
 from typing import Dict, Optional
 
 import app_info
-from core.theaters import bms_to_latlon, in_theater_bbox, is_theater_detected
+from core.theaters import bms_to_latlon, in_theater_bbox
 
 logger = logging.getLogger(__name__)
 

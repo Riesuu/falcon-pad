@@ -36,6 +36,13 @@ def load(theater_name: str) -> list:
     if key in _cache:
         return _cache[key]
     filename = _FILES.get(key)
+    # Fuzzy match: allow substring matching (e.g. "Korea 1.1" → "korea kto")
+    if not filename and len(key) >= 3:
+        for fkey in _FILES:
+            if fkey in key or key in fkey:
+                filename = _FILES[fkey]
+                key = fkey
+                break
     if not filename:
         return []
     path = os.path.join(_DIR, filename)

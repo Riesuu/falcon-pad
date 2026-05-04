@@ -22,7 +22,7 @@ from core.stringdata import (detect_theater, get_bms_briefings_dir, get_bms_user
                              get_bullseye, get_campaign_dir, get_hsd_lines,
                              get_mk_markpoints, get_ppt_threats, get_steerpoints,
                              read_all_strings)
-from core.theaters import detect_theater_from_coords_multi, get_theater, get_theater_name
+from core.theaters import detect_theater_from_coords_multi, theater_info_dict
 
 logger = logging.getLogger(__name__)
 
@@ -50,26 +50,9 @@ async def broadcast(ws_clients, msg: str) -> None:
 
 
 def theater_msg() -> str:
-    tp = get_theater()
-    lat_min, lat_max, lon_min, lon_max = tp.bbox
-    c_lat = (lat_min + lat_max) / 2
-    c_lon = (lon_min + lon_max) / 2
-    span  = max(lat_max - lat_min, lon_max - lon_min)
-    zoom  = 6 if span > 20 else 7 if span > 15 else 8
-    return json.dumps({"type": "theater", "data": {
-        "name": get_theater_name(),
-        "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
-        "bbox": {"lat_min": lat_min, "lat_max": lat_max,
-                 "lon_min": lon_min, "lon_max": lon_max},
-    }})
+    return json.dumps({"type": "theater", "data": theater_info_dict()})
 
 
-def _try_float(s: str) -> bool:
-    try:
-        float(s)
-        return True
-    except (ValueError, TypeError):
-        return False
 
 
 # ── Main broadcast loop ──────────────────────────────────────────────────────
@@ -149,7 +132,10 @@ async def broadcast_loop(bms, ws_clients, safe_read) -> None:
                 await broadcast(ws_clients, json.dumps({"type": "aircraft", "data": pos}))
                 own_lat = pos.get("lat")
                 own_lon = pos.get("lon")
-                acmi_c = trtt.get_contacts()
+                # Fog of war: enabled in single-player only.
+                # In MP, BMS filters the Tacview stream itself (per oakdesign).
+                fow = (pos.get("pilots_online", 1) <= 1)
+                acmi_c = trtt.get_contacts(own_lat, own_lon, fow=fow)
                 if acmi_c:
                     await broadcast(ws_clients, json.dumps({"type": "acmi", "data": acmi_c}))
                 if bms.connected and ptr_str:
@@ -186,15 +172,9 @@ async def ini_watcher_loop(bms, ws_clients) -> None:
                         _cfg = configparser.RawConfigParser()
                         _cfg.optionxform = str  # type: ignore[assignment]
                         _cfg.read_string(_raw)
-                        if _cfg.has_section("STPT"):
-                            _pts = [(float(_p[0]), float(_p[1]))
-                                    for _, _v in _cfg["STPT"].items()
-                                    for _p in [_v.split(",")]
-                                    if len(_p) >= 2
-                                    and _try_float(_p[0]) and _try_float(_p[1])
-                                    and abs(float(_p[0])) > 10 and abs(float(_p[1])) > 10]
-                            if _pts and detect_theater_from_coords_multi(_pts) and ws_clients:
-                                await broadcast(ws_clients, theater_msg())
+                        _pts = mission.extract_stpt_coords(_cfg)
+                        if _pts and detect_theater_from_coords_multi(_pts) and ws_clients:
+                            await broadcast(ws_clients, theater_msg())
                     except Exception:
                         pass
                     result = mission.parse_ini_file(path)

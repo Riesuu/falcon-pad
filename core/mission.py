@@ -89,6 +89,24 @@ def ini_status() -> dict:
 #  STPT PARSING (shared between upload and file watcher)
 # ═══════════════════════════════════════════════════════════════════════════
 
+def extract_stpt_coords(cfg: configparser.RawConfigParser) -> List[Tuple[float, float]]:
+    """Extract raw (x, y) coordinate pairs from [STPT] section for theater detection."""
+    if not cfg.has_section("STPT"):
+        return []
+    pts: List[Tuple[float, float]] = []
+    for _, val in cfg["STPT"].items():
+        parts = val.split(",")
+        if len(parts) < 2:
+            continue
+        try:
+            x, y = float(parts[0]), float(parts[1])
+            if abs(x) > 10 and abs(y) > 10:
+                pts.append((x, y))
+        except (ValueError, TypeError):
+            continue
+    return pts
+
+
 def _parse_stpt_section(cfg: configparser.RawConfigParser) -> dict:
     """
     Parse [STPT] section from a ConfigParser.
@@ -370,9 +388,12 @@ def update_from_shm(route: list, threats: list) -> None:
     Only updates if data actually changed (avoids UI flicker).
     """
     global mission_data, _shm_mission_hash
-    h = f"{len(route)}:{len(threats)}"
-    if route:
-        h += f":{route[0]['lat']:.4f},{route[-1]['lat']:.4f}"
+    parts = [f"{len(route)}:{len(threats)}"]
+    for p in route:
+        parts.append(f"{p['lat']:.5f},{p['lon']:.5f}")
+    for t in threats:
+        parts.append(f"{t['lat']:.5f},{t['lon']:.5f}")
+    h = "|".join(parts)
     if h == _shm_mission_hash:
         return
     _shm_mission_hash = h

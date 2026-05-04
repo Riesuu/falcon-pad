@@ -30,11 +30,14 @@ function buildApPopup(ap) {
 }
 
 async function loadAirports() {
-  [...apIconMarkers, ...apLabelMarkers].forEach(m => { try { map.removeLayer(m); } catch(e) {} });
-  apIconMarkers.length = 0; apLabelMarkers.length = 0;
-  airportMarkers.length = 0; apNameMarkers.length = 0; apData = [];
   try {
     const aps = await (await fetch('/api/airports')).json();
+    // Don't clear existing airports if server returned empty (theater not yet detected)
+    if (!aps.length && apIconMarkers.length > 0) return;
+    // Clear old markers now that we have valid replacement data
+    [...apIconMarkers, ...apLabelMarkers].forEach(m => { try { map.removeLayer(m); } catch(e) {} });
+    apIconMarkers.length = 0; apLabelMarkers.length = 0;
+    airportMarkers.length = 0; apNameMarkers.length = 0; apData = [];
     apData = aps;
     const apNameOn = _apNameVisible;
     aps.forEach(ap => {

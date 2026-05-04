@@ -10,12 +10,10 @@ __pycache__/
 *.pyc
 *.egg-info/
 *.egg
-dist/
-build/
 .eggs/
 pip-wheel-metadata/
 MANIFEST
-.claude/
+
 # ── Environnements virtuels ───────────────────────────────────
 .venv/
 venv/
@@ -23,16 +21,17 @@ env/
 .env
 ENV/
 
-# ── PyInstaller (.exe) ────────────────────────────────────────
-*.spec
+# ── PyInstaller — sorties de build (le .spec est versionné) ──
+build/
+dist/
 *.exe
 *.exe.bak
 
 # ── Runtime — dossiers générés au démarrage ───────────────────
 logs/
-briefing/
 config/
-{logs,config,briefing}/
+personal/
+briefing/
 
 # ── Tests — artefacts ─────────────────────────────────────────
 .pytest_cache/
@@ -44,6 +43,7 @@ coverage.xml
 # ── Éditeurs / IDE ────────────────────────────────────────────
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~

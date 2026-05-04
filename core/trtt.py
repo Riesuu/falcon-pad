@@ -21,11 +21,10 @@ Copyright (C) 2026  Riesu — GNU GPL v3
 from __future__ import annotations
 
 import logging
-import math
 import socket
 import threading
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from core.theaters import in_theater_bbox
 
@@ -315,22 +314,37 @@ def is_connected() -> bool:
     return _connected
 
 
-def get_contacts() -> List[dict]:
-    """Return all non-stale air contacts from the TRTT stream."""
+def get_contacts(own_lat: Optional[float] = None,
+                  own_lon: Optional[float] = None,
+                  fow: bool = False) -> List[dict]:
+    """Return all non-stale air contacts from the TRTT stream, excluding ownship.
+
+    When `fow` is True (single-player), enemy and unknown contacts are filtered
+    out — only friendlies pass through. In multiplayer, BMS already filters the
+    Tacview stream itself (per oakdesign), so `fow` should be False there.
+    """
     now = time.time()
     with _lock:
         snapshot = list(_contacts.items())
 
     result: List[dict] = []
     for obj_id, c in snapshot:
-        # Stale check (>30s = destroyed/gone)
-        if now - c.get('_ts', 0) > 30.0:
+        # Stale check (destroyed/gone)
+        if now - c.get('_ts', 0) > app_info.TRTT_STALE_S:
             continue
         # Air only; drop ground/sea/weapons/navaids
         ct = c.get('type_name', 'other')
         if ct in ('ground', 'sea', 'weapon', 'navaid'):
             continue
-        if ct == 'other' and (now - c.get('_ts', 0)) > 10.0:
+        if ct == 'other' and (now - c.get('_ts', 0)) > app_info.TRTT_OTHER_STALE_S:
+            continue
+        # Exclude ownship by proximity
+        if own_lat is not None and own_lon is not None:
+            if (abs(c.get('lat', 0) - own_lat) < 0.002 and
+                    abs(c.get('lon', 0) - own_lon) < 0.002):
+                continue
+        # Fog of war: in SP, hide everything except friendlies
+        if fow and c.get('camp', 3) != 1:
             continue
         result.append({k: v for k, v in c.items() if k != '_ts'})
     return result
