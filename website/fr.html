@@ -26,11 +26,11 @@
 <!-- HERO -->
 <section class="hero">
   <img src="logo.png" alt="Falcon-Pad" class="hero-logo">
-  <div class="hero-version">v0.3 — Dernière version</div>
+  <div class="hero-version">v0.3.1 — Dernière version</div>
   <h1>Compagnon Tactique<br>pour <span>Falcon BMS 4.38</span></h1>
   <p>Carte en temps réel, steerpoints, checklists, briefings et contacts aériens, le tout sur votre tablette pendant le vol.</p>
   <div class="hero-btns">
-    <a href="https://github.com/Riesuu/falcon-pad/releases/download/0.3/Falcon-PAD.exe" class="btn btn-primary">
+    <a href="https://github.com/Riesuu/falcon-pad/releases/download/0.3.1/Falcon-PAD.exe" class="btn btn-primary">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
       Télécharger
     </a>
@@ -80,7 +80,12 @@
       <div class="feature">
         <div class="feature-icon">&#x2708;</div>
         <h3>Contacts ACMI</h3>
-        <p>Tous les aéronefs de la mission : alliés, ennemis et inconnus. Marqueurs codés par couleur : vert (allié), rouge (ennemi), ambre (inconnu). Indicatif, altitude, cap et vitesse affichés.</p>
+        <p>Aéronefs en direct depuis le flux Tacview. Marqueurs codés par couleur : vert (allié), rouge (ennemi), ambre (inconnu). Indicatif, altitude, cap et vitesse affichés.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f32b;</div>
+        <h3>Brouillard de Guerre (Solo)</h3>
+        <p><span class="badge-new">v0.3.1</span> En solo, seuls les alliés sont affichés — fini le god-mode. Les menaces PPT, points datalink et lignes HSD restent visibles. Le multijoueur conserve le filtrage que BMS applique lui-même au flux.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x2705;</div>
@@ -95,7 +100,7 @@
       <div class="feature">
         <div class="feature-icon">&#x1f310;</div>
         <h3>Multi-Théâtre</h3>
-        <p>KTO, Israël, Balkans, HTO. Théâtre détecté automatiquement au démarrage.</p>
+        <p>Korea KTO, Balkans, Israël, Hellas — les quatre théâtres BMS 4.38 supportés. Détection entièrement automatique, paramètres de projection TMERC extraits du <code>Theater.txt</code> de chaque théâtre.</p>
       </div>
     </div>
   </div>
@@ -108,8 +113,8 @@
     <p class="section-sub">Opérationnel en 2 minutes.</p>
     <div class="setup-steps">
       <div class="step">
-        <h4>Télécharger &amp; Extraire</h4>
-        <p>Téléchargez <code>FalconPad.exe</code> depuis <a href="https://github.com/Riesuu/falcon-pad/releases">GitHub Releases</a> et placez-le dans le dossier <code>Tools</code> de BMS.</p>
+        <h4>Télécharger</h4>
+        <p>Téléchargez <code>Falcon-PAD.exe</code> depuis <a href="https://github.com/Riesuu/falcon-pad/releases">GitHub Releases</a> et placez-le où vous voulez — par exemple dans le dossier <code>Tools</code> de BMS. Exécutable unique, pas d'installeur.</p>
       </div>
       <div class="step">
         <h4>Active le serveur en temps réel TacView</h4>
@@ -124,7 +129,7 @@
       </div>
       <div class="step">
         <h4>Lancer</h4>
-        <p>Exécutez <code>FalconPad.exe</code>. La fenêtre affiche vos URL locale et réseau.</p>
+        <p>Exécutez <code>Falcon-PAD.exe</code>. La fenêtre affiche vos URL locale et réseau. Au premier lancement, le pare-feu Windows peut demander une autorisation — cliquez sur <strong>Autoriser</strong>.</p>
       </div>
       <div class="step">
         <h4>Accès Distant</h4>
@@ -150,7 +155,11 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Ça fonctionne en multijoueur ?</div>
-        <div class="faq-a">Oui. Falcon-Pad fonctionne en solo et en multijoueur. Les contacts aériens affichent tous les appareils visibles dans le flux TRTT : alliés, ennemis et inconnus.</div>
+        <div class="faq-a">Oui — et depuis la v0.3.1, le comportement est désormais réaliste dans les deux modes. <strong>En multijoueur</strong>, BMS filtre lui-même le flux Tacview (en mode TvT), vous voyez donc ce que votre camp est censé voir. <strong>En solo</strong>, Falcon-Pad masque automatiquement les ennemis et inconnus — fini le god-mode. Les menaces PPT, points datalink et lignes HSD restent visibles, ce sont des données côté pilote.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Windows affiche "Windows a protégé votre ordinateur" — est-ce sûr ?</div>
+        <div class="faq-a">Oui. Falcon-PAD.exe n'est pas signé (pas de certificat de signature de code coûteux), donc Windows SmartScreen affiche un avertissement la première fois. Cliquez sur <strong>Informations complémentaires</strong> → <strong>Exécuter quand même</strong>. Le code source est entièrement public sur <a href="https://github.com/Riesuu/falcon-pad" target="_blank">GitHub</a> — vous pouvez l'inspecter ou le compiler vous-même.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Quelles tablettes et navigateurs sont compatibles ?</div>
@@ -174,7 +183,7 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Ça fonctionne sur Linux ?</div>
-        <div class="faq-a">BMS tourne sous WINE/Proton sur Linux. FalconPad.exe peut également fonctionner sous WINE aux côtés de BMS, car il utilise les mêmes APIs Windows SharedMemory.</div>
+        <div class="faq-a">Un binaire natif Linux est fourni dans les releases. Comme BMS lui-même tourne uniquement sous Windows, le cas typique reste de lancer BMS (et Falcon-PAD.exe) ensemble sous WINE/Proton — mêmes APIs SharedMemory, même comportement qu'en natif Windows.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Puis-je changer le port ?</div>

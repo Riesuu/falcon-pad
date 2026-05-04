@@ -26,11 +26,11 @@
 <!-- HERO -->
 <section class="hero">
   <img src="logo.png" alt="Falcon-Pad" class="hero-logo">
-  <div class="hero-version">v0.3 — Latest Release</div>
+  <div class="hero-version">v0.3.1 — Latest Release</div>
   <h1>Tactical Companion<br>for <span>Falcon BMS 4.38</span></h1>
   <p>Real-time map, steerpoints, checklists, briefings and aircraft contacts — all on your tablet while you fly.</p>
   <div class="hero-btns">
-    <a href="https://github.com/Riesuu/falcon-pad/releases/download/0.3/Falcon-PAD.exe" class="btn btn-primary">
+    <a href="https://github.com/Riesuu/falcon-pad/releases/download/0.3.1/Falcon-PAD.exe" class="btn btn-primary">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
       Download
     </a>
@@ -80,7 +80,12 @@
       <div class="feature">
         <div class="feature-icon">&#x2708;</div>
         <h3>ACMI Contacts</h3>
-        <p>All aircraft in the mission: friendly, enemy and unknown. Color-coded blips: green (ally), red (enemy), amber (unknown). Callsign, altitude, heading and speed labels.</p>
+        <p>Live aircraft from the Tacview stream. Color-coded blips: green (ally), red (enemy), amber (unknown). Callsign, altitude, heading and speed labels.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">&#x1f32b;</div>
+        <h3>Fog of War (Solo)</h3>
+        <p><span class="badge-new">v0.3.1</span> In single-player, only friendlies are shown — no more god-mode. PPT threats, datalink markpoints and HSD lines stay visible. Multiplayer keeps using whatever BMS itself filters.</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#x2705;</div>
@@ -95,7 +100,7 @@
       <div class="feature">
         <div class="feature-icon">&#x1f310;</div>
         <h3>Multi-Theater</h3>
-        <p>KTO, Israel, Balkans, HTO. Theater detected automatically at runtime.</p>
+        <p>Korea KTO, Balkans, Israel, Hellas — all four BMS 4.38 theaters supported. Detection is fully automatic, with TMERC projection parameters extracted from each theater's <code>Theater.txt</code>.</p>
       </div>
     </div>
   </div>
@@ -108,8 +113,8 @@
     <p class="section-sub">Up and running in 2 minutes.</p>
     <div class="setup-steps">
       <div class="step">
-        <h4>Download &amp; Extract</h4>
-        <p>Download <code>FalconPad.exe</code> from <a href="https://github.com/Riesuu/falcon-pad/releases">GitHub Releases</a> and place it in the BMS <code>Tools</code> folder.</p>
+        <h4>Download</h4>
+        <p>Download <code>Falcon-PAD.exe</code> from <a href="https://github.com/Riesuu/falcon-pad/releases">GitHub Releases</a> and place it anywhere — e.g. the BMS <code>Tools</code> folder. Single executable, no installer.</p>
       </div>
       <div class="step">
         <h4>Enables TacView realtime TCP server</h4>
@@ -124,7 +129,7 @@
       </div>
       <div class="step">
         <h4>Launch</h4>
-        <p>Run <code>FalconPad.exe</code>. The tray window shows your local and network URLs.</p>
+        <p>Run <code>Falcon-PAD.exe</code>. The tray window shows your local and network URLs. First launch may prompt the Windows firewall — click <strong>Allow</strong>.</p>
       </div>
       <div class="step">
         <h4>Remote Access</h4>
@@ -150,7 +155,11 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Does it work in multiplayer?</div>
-        <div class="faq-a">Yes. Falcon-Pad works in both single-player and multiplayer. Aircraft contacts show all aircraft visible in the TRTT stream — friendly, enemy and unknown.</div>
+        <div class="faq-a">Yes — and starting in v0.3.1, the behaviour is now realistic in both modes. <strong>In multiplayer</strong>, BMS itself filters the Tacview stream (TvT-aware), so you see what your team would see. <strong>In single-player</strong>, Falcon-Pad hides enemies and unknowns automatically — no more god-mode SA. PPT threats, datalink markpoints and HSD lines stay visible because they're pilot-side intel.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Windows shows "Windows protected your PC" — is it safe?</div>
+        <div class="faq-a">Yes. Falcon-PAD.exe is unsigned (no expensive code-signing certificate), so Windows SmartScreen warns the first time. Click <strong>More info</strong> → <strong>Run anyway</strong>. The source code is fully open on <a href="https://github.com/Riesuu/falcon-pad" target="_blank">GitHub</a> — you can inspect every line or build it yourself.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Which tablets/browsers are supported?</div>
@@ -174,7 +183,7 @@
       </div>
       <div class="faq-item">
         <div class="faq-q">Does it work on Linux?</div>
-        <div class="faq-a">BMS runs under WINE/Proton on Linux. FalconPad.exe can also run under WINE alongside BMS since it uses the same Windows SharedMemory APIs.</div>
+        <div class="faq-a">A native Linux build is provided in releases. Since BMS itself only runs on Windows, you'd typically run BMS (and Falcon-PAD.exe) together under WINE/Proton — same SharedMemory APIs, same behaviour as Windows.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Can I change the port?</div>
