@@ -15,12 +15,10 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt pyinstaller
       - run: pyinstaller Falcon-PAD.spec
-      - run: Compress-Archive -Path dist/Falcon-PAD/* -DestinationPath Falcon-PAD-Windows.zip
-        shell: pwsh
       - uses: actions/upload-artifact@v4
         with:
           name: FalconPad-Windows
-          path: Falcon-PAD-Windows.zip
+          path: dist/Falcon-PAD.exe
 
   build-linux:
     runs-on: ubuntu-latest
@@ -31,11 +29,11 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt pyinstaller
       - run: pyinstaller Falcon-PAD.spec
-      - run: tar -czf Falcon-PAD-Linux.tar.gz -C dist/Falcon-PAD .
+      - run: chmod +x dist/Falcon-PAD
       - uses: actions/upload-artifact@v4
         with:
           name: FalconPad-Linux
-          path: Falcon-PAD-Linux.tar.gz
+          path: dist/Falcon-PAD
 
   release:
     needs: [build-windows, build-linux]
@@ -47,5 +45,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            FalconPad-Windows/Falcon-PAD-Windows.zip
-            FalconPad-Linux/Falcon-PAD-Linux.tar.gz
+            FalconPad-Windows/Falcon-PAD.exe
+            FalconPad-Linux/Falcon-PAD
