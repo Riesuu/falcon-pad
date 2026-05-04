@@ -107,7 +107,7 @@ def set_active_theater(name: str) -> bool:
         if key in THEATER_DB:
             if _active_theater_name.lower() != key:
                 _active_theater = THEATER_DB[key]
-                _active_theater_name = raw
+                _active_theater_name = THEATER_DB[key].name
                 logger.info(f"THEATER set: {_active_theater_name}  "
                             f"(lon0={_active_theater.lon0}° bbox={_active_theater.bbox})")
                 return True
@@ -118,7 +118,7 @@ def set_active_theater(name: str) -> bool:
             if db_key in key or key in db_key:
                 if _active_theater_name.lower() != db_key:
                     _active_theater = params
-                    _active_theater_name = raw
+                    _active_theater_name = params.name
                     logger.info(f"THEATER set (fuzzy): '{raw}' → {db_key}  "
                                 f"(lon0={params.lon0}° bbox={params.bbox})")
                     return True
@@ -251,6 +251,24 @@ def detect_theater_from_coords_multi(points: List[Tuple[float, float]]) -> bool:
     else:
         logger.warning("detect_theater_from_coords_multi: no theater matched")
     return False
+
+
+def theater_info_dict() -> dict:
+    """Return center/zoom/bbox dict for the active theater."""
+    with _theater_lock:
+        tp = _active_theater
+        name = _active_theater_name
+    lat_min, lat_max, lon_min, lon_max = tp.bbox
+    c_lat = (lat_min + lat_max) / 2
+    c_lon = (lon_min + lon_max) / 2
+    span = max(lat_max - lat_min, lon_max - lon_min)
+    zoom = 6 if span > 20 else 7 if span > 15 else 8
+    return {
+        "name": name,
+        "center_lat": c_lat, "center_lon": c_lon, "zoom": zoom,
+        "bbox": {"lat_min": lat_min, "lat_max": lat_max,
+                 "lon_min": lon_min, "lon_max": lon_max},
+    }
 
 
 def in_theater_bbox(lat: float, lon: float) -> bool:

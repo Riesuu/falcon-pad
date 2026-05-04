@@ -39,6 +39,7 @@ function connectWS(){
     console.log('[ws] connected — resyncing...');
     if(typeof loadMission==='function') loadMission(true);
     if(typeof _initTheater==='function') _initTheater();
+    if(typeof loadAirports==='function') loadAirports();
   };
   ws.onclose=()=>setTimeout(connectWS,2000);
 }

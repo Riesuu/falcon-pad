@@ -20,7 +20,7 @@ from starlette.responses import Response as _StarResp
 import app_info
 import config
 from core import trtt
-from core.broadcast import broadcast_loop, ini_watcher_loop, broadcast, theater_msg, _try_float
+from core.broadcast import broadcast_loop, ini_watcher_loop, broadcast, theater_msg
 import core.broadcast as _bc
 from server.routes import register_routes
 from core.sharedmem import BMSSharedMemory, safe_read
@@ -50,6 +50,7 @@ ws_clients: List[WebSocket] = []
 def _is_local(ip: str) -> bool:
     return (ip in ("127.0.0.1", "::1", "localhost") or
             ip.startswith("10.") or ip.startswith("192.168.") or
+            ip.startswith("fe80:") or ip.startswith("fd") or
             (ip.startswith("172.") and
              any(ip.startswith(f"172.{i}.") for i in range(16, 32))))
 
@@ -96,7 +97,6 @@ register_routes(
     broadcast_fn=broadcast,
     theater_msg_fn=theater_msg,
     get_briefings_dir=lambda: _bc.bms_briefings_dir,
-    try_float_fn=_try_float,
     frontend_dir=app_info.FRONTEND_DIR,
     server_ip=SERVER_IP,
     server_port=SERVER_PORT,
@@ -561,8 +561,11 @@ if __name__ == "__main__":
             self._drag_pos = None
 
         def leaveEvent(self, _e):
-            if self._btn_hover or self._min_hover or self._set_hover:
-                self._btn_hover = False; self._min_hover = False; self._set_hover = False; self.update()
+            changed = self._btn_hover or self._min_hover or self._set_hover or self._local_hover or self._net_hover
+            self._btn_hover = False; self._min_hover = False; self._set_hover = False
+            self._local_hover = False; self._net_hover = False
+            if changed:
+                self.update()
 
         def keyPressEvent(self, e):
             if e.key() == Qt.Key.Key_F4 and e.modifiers() == Qt.KeyboardModifier.AltModifier:
@@ -587,7 +590,9 @@ if __name__ == "__main__":
         def _do_quit(self):
             self._timer.stop()
             self.close()
-            sys.exit(0)
+            qapp = QApplication.instance()
+            if qapp:
+                qapp.quit()
 
     _app = QApplication(sys.argv)
     _app.setApplicationName(app_info.SHORT)

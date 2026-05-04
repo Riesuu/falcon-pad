@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Riesuu/falcon-pad/releases"><img src="https://img.shields.io/badge/Download-v0.3-brightgreen?style=flat-square" alt="Download"/></a>
+  <a href="https://github.com/Riesuu/falcon-pad/releases"><img src="https://img.shields.io/badge/Download-v0.3.1-brightgreen?style=flat-square" alt="Download"/></a>
   <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python" alt="Python"/></a>
   <a href="https://fastapi.tiangolo.com"><img src="https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=flat-square&logo=fastapi" alt="FastAPI"/></a>
   <a href="https://www.benchmarksims.org"><img src="https://img.shields.io/badge/Falcon%20BMS-4.38-orange?style=flat-square" alt="BMS"/></a>

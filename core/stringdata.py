@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import re
 import struct
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional
 
 import app_info
 from core.theaters import (

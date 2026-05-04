@@ -32,6 +32,8 @@ TRTT_HANDSHAKE_TIMEOUT = 5.0
 TRTT_INITIAL_TIMEOUT   = 10.0
 TRTT_RECEIVE_TIMEOUT   = 30.0
 TRTT_RECONNECT_SLEEP   = 5
+TRTT_STALE_S           = 30.0
+TRTT_OTHER_STALE_S     = 10.0
 
 # ── BMS detection ────────────────────────────────────────────────────────────
 BMS_REGISTRY_BASE   = r"SOFTWARE\WOW6432Node\Benchmark Sims"
